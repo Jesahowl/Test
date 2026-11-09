@@ -1,0 +1,416 @@
+<title>Weekly Planner</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a week sheet — header with week nav and progress, then a 4×2 grid of day cards (Mon–Sun + Anytime), then the weekly routines list. */
+:root {
+  --paper: #f4f6f9;
+  --card: #ffffff;
+  --ink: #18202e;
+  --muted: #5d6779;
+  --line: #dde2ea;
+  --accent: #2f4fd8;
+  --accent-soft: #e6ebff;
+  --today: #fff1b8;
+  --done: #2e8b57;
+  --danger: #c23a3a;
+  --font-display: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #10141b; --card: #181e28; --ink: #e5e9f0; --muted: #98a2b4; --line: #2a3240;
+    --accent: #8fa2ff; --accent-soft: #232c4a; --today: #3b3418; --done: #5cc58a; --danger: #ef7d7d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #10141b; --card: #181e28; --ink: #e5e9f0; --muted: #98a2b4; --line: #2a3240;
+  --accent: #8fa2ff; --accent-soft: #232c4a; --today: #3b3418; --done: #5cc58a; --danger: #ef7d7d;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--paper); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.45;
+}
+.wrap {
+  max-width: 1180px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 56px;
+  display: grid; gap: 28px;
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Header */
+header { display: grid; gap: 16px; }
+.toprow { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(28px, 5vw, 40px); line-height: 1.05; margin: 4px 0 0; text-wrap: balance; letter-spacing: -0.01em; }
+.nav { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn {
+  border: 1px solid var(--line); background: var(--card); border-radius: 8px;
+  padding: 7px 12px; font-size: 14px; font-weight: 500;
+}
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--card); }
+.btn[disabled] { opacity: .5; cursor: default; }
+.progress { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.bar { flex: 1 1 220px; height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--done); transition: width .3s ease; }
+.progress-text { font-family: var(--font-mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.status { font-size: 13px; color: var(--muted); min-height: 1.2em; }
+
+/* Day grid */
+.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 960px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.day {
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 180px;
+}
+.day.is-today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.day-name { font-family: var(--font-display); font-weight: 600; font-size: 18px; }
+.day-date { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.today-pill { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; background: var(--today); color: var(--ink); padding: 2px 7px; border-radius: 99px; }
+ul.items { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; flex: 1; align-content: start; }
+.item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 8px; padding: 5px 4px; border-radius: 6px; }
+.item:hover { background: var(--paper); }
+.check {
+  width: 20px; height: 20px; margin-top: 1px; border-radius: 6px; border: 1.5px solid var(--muted);
+  background: transparent; display: grid; place-items: center; padding: 0;
+}
+.check svg { width: 13px; height: 13px; opacity: 0; }
+.item.done .check { background: var(--done); border-color: var(--done); }
+.item.done .check svg { opacity: 1; stroke: var(--card); }
+.text { overflow-wrap: anywhere; }
+.item.done .text { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--muted); }
+.tag { font-family: var(--font-mono); font-size: 11px; color: var(--accent); margin-left: 6px; white-space: nowrap; }
+.del { border: 0; background: transparent; color: var(--muted); padding: 0 4px; font-size: 18px; line-height: 1; opacity: 0; }
+.item:hover .del, .del:focus-visible { opacity: 1; }
+@media (hover: none) { .del { opacity: .6; } }
+.del:hover { color: var(--danger); }
+.empty { color: var(--muted); font-size: 13px; padding: 4px; }
+form.add { display: flex; gap: 6px; }
+form.add input {
+  flex: 1; min-width: 0; border: 1px dashed var(--line); background: transparent; border-radius: 8px; padding: 7px 10px; font-size: 14px;
+}
+form.add input:focus { border-style: solid; border-color: var(--accent); outline: none; }
+
+/* Routines */
+section.routines { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: grid; gap: 12px; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: 20px; margin: 0; }
+.hint { color: var(--muted); font-size: 14px; margin: 0; max-width: 62ch; }
+.rlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.rrow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.rrow:last-child { border-bottom: 0; }
+.rday { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+form.radd { display: flex; flex-wrap: wrap; gap: 8px; }
+form.radd input { flex: 1 1 220px; min-width: 0; border: 1px solid var(--line); background: var(--paper); border-radius: 8px; padding: 7px 10px; }
+form.radd select { border: 1px solid var(--line); background: var(--paper); border-radius: 8px; padding: 7px 10px; }
+
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  background: var(--ink); color: var(--paper); padding: 10px 16px; border-radius: 8px; font-size: 14px; max-width: calc(100% - 32px);
+}
+@media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="toprow">
+      <div>
+        <div class="eyebrow" id="weekCode">Week</div>
+        <h1 id="weekTitle">This week</h1>
+      </div>
+      <div class="nav">
+        <button class="btn" id="prevBtn" type="button" aria-label="Previous week">← Prev</button>
+        <button class="btn" id="todayBtn" type="button">This week</button>
+        <button class="btn" id="nextBtn" type="button" aria-label="Next week">Next →</button>
+        <button class="btn primary" id="carryBtn" type="button" title="Move every unfinished task to the same day next week">Carry unfinished to next week</button>
+      </div>
+    </div>
+    <div class="progress">
+      <div class="bar" role="progressbar" aria-label="Week progress" aria-valuemin="0" aria-valuemax="100" id="bar"><i id="barFill"></i></div>
+      <span class="progress-text" id="progressText">0 of 0 done</span>
+    </div>
+    <div class="status" id="status" aria-live="polite">Loading your week…</div>
+  </header>
+
+  <div class="grid" id="grid"></div>
+
+  <section class="routines" aria-labelledby="rTitle">
+    <h2 id="rTitle">Every week</h2>
+    <p class="hint">Routines show up on their day in every week, so you don't have to re-add them. Tick them off week by week.</p>
+    <ul class="rlist" id="rlist"></ul>
+    <form class="radd" id="raddForm">
+      <input id="raddText" type="text" placeholder="Add a weekly routine, e.g. Take out recycling" aria-label="Routine" maxlength="200">
+      <select id="raddDay" aria-label="Day"></select>
+      <button class="btn primary" type="submit">Add routine</button>
+    </form>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+  const DAYS = [
+    { k: "mon", n: "Monday" }, { k: "tue", n: "Tuesday" }, { k: "wed", n: "Wednesday" },
+    { k: "thu", n: "Thursday" }, { k: "fri", n: "Friday" }, { k: "sat", n: "Saturday" },
+    { k: "sun", n: "Sunday" }, { k: "any", n: "Anytime" }
+  ];
+  const DAY_NAME = Object.fromEntries(DAYS.map(d => [d.k, d.n]));
+  const $ = id => document.getElementById(id);
+  const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  // ---------- dates ----------
+  function mondayOf(d) { const m = new Date(d.getFullYear(), d.getMonth(), d.getDate()); m.setDate(m.getDate() - ((m.getDay() + 6) % 7)); return m; }
+  function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+  function isoWeek(d) {
+    const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const day = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - day);
+    const y = t.getUTCFullYear(); const w = Math.ceil(((t - Date.UTC(y, 0, 1)) / 864e5 + 1) / 7);
+    return { y, w, id: y + "-W" + String(w).padStart(2, "0") };
+  }
+  const fmt = d => MON[d.getMonth()] + " " + d.getDate();
+  const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+  // ---------- state ----------
+  const S = { week: mondayOf(new Date()), tasks: [], routines: [], weekDoc: {}, readOnly: false };
+  const weekId = () => isoWeek(S.week).id;
+
+  // ---------- storage adapters ----------
+  // Saved store (db capability) when available; otherwise this browser only.
+  function localAdapter() {
+    const KEY = "weekly-planner-v1";
+    let data = { tasks: {}, routines: {}, weeks: {} };
+    try { const raw = localStorage.getItem(KEY); if (raw) data = Object.assign(data, JSON.parse(raw)); } catch (e) {}
+    const subs = new Set();
+    const save = () => { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {} subs.forEach(f => f()); };
+    const uid = () => Math.random().toString(36).slice(2, 12);
+    return {
+      kind: "local",
+      watchWeek(wid, onTasks, onWeek) {
+        const f = () => { onTasks(Object.entries(data.tasks).filter(([, t]) => t.week === wid).map(([id, t]) => ({ id, ...t }))); onWeek(data.weeks[wid] || {}); };
+        subs.add(f); f(); return () => subs.delete(f);
+      },
+      watchRoutines(cb) { const f = () => cb(Object.entries(data.routines).map(([id, r]) => ({ id, ...r }))); subs.add(f); f(); return () => subs.delete(f); },
+      async addTask(t) { data.tasks[uid()] = t; save(); },
+      async updateTask(id, p) { Object.assign(data.tasks[id], p); save(); },
+      async deleteTask(id) { delete data.tasks[id]; save(); },
+      async addRoutine(r) { data.routines[uid()] = r; save(); },
+      async deleteRoutine(id) { delete data.routines[id]; save(); },
+      async setWeek(wid, body) { data.weeks[wid] = body; save(); }
+    };
+  }
+
+  function dbAdapter(db) {
+    const chains = {};
+    const serial = (key, fn) => (chains[key] = (chains[key] || Promise.resolve()).catch(() => {}).then(fn));
+    return {
+      kind: "db",
+      watchWeek(wid, onTasks, onWeek) {
+        armTimer();
+        const u1 = db.collection("tasks").where("week", "==", wid).onSnapshot(s => {
+          if (!s.metadata.fromCache) loaded();
+          onTasks(s.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, onSubError);
+        const u2 = db.doc("weeks/" + wid).onSnapshot(s => onWeek(s.exists ? s.data() : {}), onSubError);
+        return () => { u1(); u2(); };
+      },
+      watchRoutines(cb) {
+        return db.collection("routines").onSnapshot(s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), onSubError);
+      },
+      addTask: t => db.collection("tasks").add(t),
+      updateTask: (id, p) => serial("t" + id, () => db.doc("tasks/" + id).update(p)),
+      deleteTask: id => serial("t" + id, () => db.doc("tasks/" + id).delete()),
+      addRoutine: r => db.collection("routines").add(r),
+      deleteRoutine: id => db.doc("routines/" + id).delete(),
+      setWeek: (wid, body) => serial("w" + wid, () => db.doc("weeks/" + wid).set(body))
+    };
+  }
+
+  let store = null, unWeek = null, timer = null, gotFirst = false;
+  function armTimer() {
+    clearTimeout(timer); gotFirst = false;
+    timer = setTimeout(() => { if (!gotFirst) setStatus("Can't reach your saved tasks yet. They'll appear when the connection comes back."); }, 10000);
+  }
+  function loaded() { gotFirst = true; clearTimeout(timer); setStatus(baseStatus()); }
+  function onSubError(e) { clearTimeout(timer); setStatus("Your tasks stopped syncing. Reload the page to reconnect."); }
+  const baseStatus = () => store && store.kind === "local" ? "Saved in this browser only." : (S.readOnly ? "View only. You can't change this planner." : "");
+  function setStatus(t) { $("status").textContent = t; }
+
+  let toastT;
+  function toast(msg) { const el = $("toast"); el.textContent = msg; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (el.hidden = true), 3200); }
+  function guard(p) {
+    return Promise.resolve(p).catch(e => {
+      if (e && e.code === "invalid_argument") { S.readOnly = true; setStatus(baseStatus()); render(); toast("This planner is view only for you."); }
+      else if (e && e.code === "quota_exceeded") toast("The planner is full. Delete some old tasks to add more.");
+      else toast("Couldn't save that change. Check your connection and try again.");
+    });
+  }
+
+  // ---------- rendering ----------
+  const CHECK = '<svg viewBox="0 0 16 16" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>';
+
+  function itemEl({ text, done, routine, onToggle, onDelete }) {
+    const li = document.createElement("li");
+    li.className = "item" + (done ? " done" : "");
+    const cb = document.createElement("button");
+    cb.type = "button"; cb.className = "check"; cb.innerHTML = CHECK;
+    cb.setAttribute("aria-pressed", done ? "true" : "false");
+    cb.setAttribute("aria-label", (done ? "Mark not done: " : "Mark done: ") + text);
+    cb.disabled = S.readOnly; cb.onclick = onToggle;
+    const span = document.createElement("span"); span.className = "text"; span.textContent = text;
+    if (routine) { const t = document.createElement("span"); t.className = "tag"; t.textContent = "↻ weekly"; span.appendChild(t); }
+    li.append(cb, span);
+    if (onDelete && !S.readOnly) {
+      const del = document.createElement("button"); del.type = "button"; del.className = "del"; del.textContent = "×";
+      del.setAttribute("aria-label", "Delete: " + text); del.onclick = onDelete; li.appendChild(del);
+    } else li.appendChild(document.createElement("span"));
+    return li;
+  }
+
+  function render() {
+    const wk = isoWeek(S.week), wid = wk.id, end = addDays(S.week, 6), now = new Date();
+    const isThis = sameDay(S.week, mondayOf(now));
+    $("weekCode").textContent = "Week " + wk.w + " · " + wk.y;
+    $("weekTitle").textContent = (isThis ? "This week, " : "") + fmt(S.week) + " – " + fmt(end);
+    $("todayBtn").disabled = isThis;
+    $("carryBtn").disabled = S.readOnly;
+
+    const rDone = (S.weekDoc && S.weekDoc.routinesDone) || {};
+    let total = 0, done = 0;
+    const grid = $("grid");
+    const drafts = {}; grid.querySelectorAll("form.add input").forEach(i => { if (i.value) drafts[i.id] = i.value; });
+    grid.textContent = "";
+    DAYS.forEach((d, i) => {
+      const date = d.k === "any" ? null : addDays(S.week, i);
+      const card = document.createElement("article");
+      card.className = "day" + (date && sameDay(date, now) ? " is-today" : "");
+      const head = document.createElement("div"); head.className = "day-head";
+      const nm = document.createElement("span"); nm.className = "day-name"; nm.textContent = d.n;
+      const right = document.createElement("span");
+      if (date && sameDay(date, now)) { right.className = "today-pill"; right.textContent = "Today"; }
+      else { right.className = "day-date"; right.textContent = date ? fmt(date) : "this week"; }
+      head.append(nm, right);
+
+      const ul = document.createElement("ul"); ul.className = "items";
+      S.routines.filter(r => r.day === d.k).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)).forEach(r => {
+        const isDone = !!rDone[r.id]; total++; if (isDone) done++;
+        ul.appendChild(itemEl({ text: r.text, done: isDone, routine: true, onToggle: () => toggleRoutine(r.id) }));
+      });
+      S.tasks.filter(t => t.day === d.k).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)).forEach(t => {
+        total++; if (t.done) done++;
+        ul.appendChild(itemEl({
+          text: t.text, done: !!t.done,
+          onToggle: () => guard(store.updateTask(t.id, { done: !t.done })),
+          onDelete: () => guard(store.deleteTask(t.id))
+        }));
+      });
+      if (!ul.children.length) { const e = document.createElement("li"); e.className = "empty"; e.textContent = "Nothing planned."; ul.appendChild(e); }
+
+      card.append(head, ul);
+      if (!S.readOnly) {
+        const f = document.createElement("form"); f.className = "add";
+        const inp = document.createElement("input");
+        inp.type = "text"; inp.id = "add-" + d.k; inp.placeholder = "Add a task"; inp.maxLength = 200;
+        inp.setAttribute("aria-label", "Add a task for " + d.n);
+        if (drafts[inp.id]) inp.value = drafts[inp.id];
+        f.appendChild(inp);
+        f.onsubmit = ev => {
+          ev.preventDefault(); const text = inp.value.trim(); if (!text) return;
+          inp.value = ""; pendingFocus = inp.id;
+          guard(store.addTask({ week: wid, day: d.k, text, done: false, createdAt: Date.now() }));
+        };
+        card.appendChild(f);
+      }
+      grid.appendChild(card);
+    });
+    if (pendingFocus) { const el = $(pendingFocus); if (el) el.focus(); }
+
+    const pct = total ? Math.round(done / total * 100) : 0;
+    $("barFill").style.width = pct + "%";
+    $("bar").setAttribute("aria-valuenow", String(pct));
+    $("progressText").textContent = done + " of " + total + " done" + (total ? " · " + pct + "%" : "");
+
+    // routines list
+    const rl = $("rlist"); rl.textContent = "";
+    const order = Object.fromEntries(DAYS.map((d, i) => [d.k, i]));
+    const rs = [...S.routines].sort((a, b) => order[a.day] - order[b.day] || (a.createdAt || 0) - (b.createdAt || 0));
+    if (!rs.length) { const e = document.createElement("li"); e.className = "empty"; e.textContent = "No routines yet. Add things you do every week, like laundry or a weekly review."; rl.appendChild(e); }
+    rs.forEach(r => {
+      const li = document.createElement("li"); li.className = "rrow";
+      const t = document.createElement("span"); t.className = "text"; t.textContent = r.text;
+      const dd = document.createElement("span"); dd.className = "rday"; dd.textContent = DAY_NAME[r.day] || r.day;
+      li.append(t, dd);
+      if (!S.readOnly) {
+        const del = document.createElement("button"); del.type = "button"; del.className = "btn"; del.textContent = "Remove";
+        del.setAttribute("aria-label", "Remove routine: " + r.text);
+        del.onclick = () => guard(store.deleteRoutine(r.id));
+        li.appendChild(del);
+      } else li.appendChild(document.createElement("span"));
+      rl.appendChild(li);
+    });
+    $("raddForm").hidden = S.readOnly;
+  }
+  let pendingFocus = null;
+  document.addEventListener("focusin", e => { pendingFocus = e.target && e.target.id && e.target.id.startsWith("add-") ? e.target.id : null; });
+
+  function toggleRoutine(rid) {
+    const cur = Object.assign({}, (S.weekDoc && S.weekDoc.routinesDone) || {});
+    if (cur[rid]) delete cur[rid]; else cur[rid] = true;
+    S.weekDoc = Object.assign({}, S.weekDoc, { routinesDone: cur }); render();
+    guard(store.setWeek(weekId(), S.weekDoc));
+  }
+
+  // ---------- wiring ----------
+  function openWeek(monday) {
+    S.week = monday; S.tasks = []; S.weekDoc = {};
+    if (unWeek) unWeek();
+    render();
+    if (!store) return;
+    unWeek = store.watchWeek(weekId(), t => { S.tasks = t; render(); }, w => { S.weekDoc = w || {}; render(); });
+  }
+  $("prevBtn").onclick = () => openWeek(addDays(S.week, -7));
+  $("nextBtn").onclick = () => openWeek(addDays(S.week, 7));
+  $("todayBtn").onclick = () => openWeek(mondayOf(new Date()));
+  $("carryBtn").onclick = async () => {
+    const open = S.tasks.filter(t => !t.done);
+    if (!open.length) { toast("Nothing unfinished this week."); return; }
+    const next = isoWeek(addDays(S.week, 7)).id;
+    for (const t of open) await guard(store.updateTask(t.id, { week: next }));
+    toast("Moved " + open.length + " unfinished task" + (open.length === 1 ? "" : "s") + " to next week.");
+  };
+  DAYS.forEach(d => { const o = document.createElement("option"); o.value = d.k; o.textContent = d.n; $("raddDay").appendChild(o); });
+  $("raddForm").onsubmit = ev => {
+    ev.preventDefault(); const text = $("raddText").value.trim(); if (!text) return;
+    $("raddText").value = "";
+    guard(store.addRoutine({ text, day: $("raddDay").value, createdAt: Date.now() }));
+  };
+
+  render();
+  (async () => {
+    let db = null, user = null;
+    try { if (window.claude && window.claude.use) [db, user] = await Promise.all([window.claude.use("db"), window.claude.use("user")]); } catch (e) {}
+    if (db) {
+      store = dbAdapter(db);
+      try { if (user && (await user.can("data.write")) === false) S.readOnly = true; } catch (e) {}
+    } else {
+      store = localAdapter();
+      gotFirst = true;
+    }
+    store.watchRoutines(r => { S.routines = r; render(); });
+    openWeek(S.week);
+    if (store.kind === "local") setStatus(baseStatus());
+  })();
+})();
+</script>
