@@ -187,6 +187,26 @@ dialog#editor::backdrop { background: rgba(10, 14, 22, .45); }
 .ed-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
 .ed-actions > div { display: flex; flex-wrap: wrap; gap: 8px; }
 
+/* View tabs + Today view */
+.tabs { display: inline-flex; gap: 2px; padding: 3px; background: var(--line); border-radius: 10px; justify-self: start; }
+.tab { border: 0; background: transparent; padding: 6px 16px; border-radius: 8px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.tab[aria-selected="true"] { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px var(--shadow); }
+.today-view { display: grid; gap: 16px; max-width: 760px; width: 100%; }
+.today-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; gap: 10px; min-width: 0; }
+.today-card.main { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.today-card.overdue h3 { color: var(--danger); }
+.today-card .count { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.today-card .item { padding: 7px 2px; }
+.today-card .text { font-size: 16px; }
+.item.has-extra { grid-template-columns: 14px auto minmax(0, 1fr) auto auto; }
+.to-today { border: 1px solid var(--line); background: var(--card); border-radius: 6px; font-size: 12px; padding: 2px 8px; white-space: nowrap; color: var(--accent); }
+.to-today:hover { border-color: var(--accent); }
+.meta .late { color: var(--danger); }
+.all-clear { font-size: 14px; color: var(--done); margin: 0; }
+body.mode-today .week-only { display: none !important; }
+body.mode-week .today-only { display: none !important; }
+
 .toast {
   position: fixed; left: 50%; transform: translateX(-50%); z-index: 60;
   bottom: calc(16px + env(safe-area-inset-bottom, 0px));
@@ -197,12 +217,16 @@ dialog#editor::backdrop { background: rgba(10, 14, 22, .45); }
 
 <div class="wrap">
   <header>
+    <div class="tabs" role="tablist" aria-label="View">
+      <button class="tab" id="tabWeek" role="tab" type="button" aria-selected="true">Week</button>
+      <button class="tab" id="tabToday" role="tab" type="button" aria-selected="false">Today</button>
+    </div>
     <div class="toprow">
       <div>
         <div class="eyebrow" id="weekCode">Week</div>
         <h1 id="weekTitle">This week</h1>
       </div>
-      <div class="nav">
+      <div class="nav week-only">
         <button class="btn" id="prevBtn" type="button" aria-label="Previous week">← Prev</button>
         <button class="btn" id="todayBtn" type="button">This week</button>
         <button class="btn" id="nextBtn" type="button" aria-label="Next week">Next →</button>
@@ -213,13 +237,29 @@ dialog#editor::backdrop { background: rgba(10, 14, 22, .45); }
       <div class="bar" role="progressbar" aria-label="Week progress" aria-valuemin="0" aria-valuemax="100" id="bar"><i id="barFill"></i></div>
       <span class="progress-text" id="progressText">0 of 0 done</span>
     </div>
-    <p class="tip">Start a task with <kbd>!</kbd> to flag it and end with <kbd>@3pm</kbd> to set a time. Tap a task to add notes. Drag the dots to move it to another day.</p>
+    <p class="tip week-only">Start a task with <kbd>!</kbd> to flag it and end with <kbd>@3pm</kbd> to set a time. Tap a task to add notes. Drag the dots to move it to another day.</p>
     <div class="status" id="status" aria-live="polite">Loading your week…</div>
   </header>
 
-  <div class="grid" id="grid"></div>
+  <div class="grid week-only" id="grid"></div>
 
-  <section class="panel" aria-labelledby="sTitle">
+  <div class="today-view today-only" id="todayView">
+    <section class="today-card main" aria-labelledby="tdTitle">
+      <div class="card-head"><h2 id="tdTitle">Today</h2><span class="count" id="tdCount"></span></div>
+      <ul class="items" id="tdList"></ul>
+      <form class="add" id="tdAddForm"><input id="tdAdd" type="text" placeholder="Add a task for today" maxlength="200" aria-label="Add a task for today"></form>
+    </section>
+    <section class="today-card overdue" id="odCard" aria-labelledby="odTitle">
+      <div class="card-head"><h3 id="odTitle">Overdue from earlier this week</h3><span class="count" id="odCount"></span></div>
+      <ul class="items" id="odList"></ul>
+    </section>
+    <section class="today-card" id="anyCard" aria-labelledby="anyTitle">
+      <div class="card-head"><h3 id="anyTitle">Anytime this week</h3><span class="count" id="anyCount"></span></div>
+      <ul class="items" id="anyList"></ul>
+    </section>
+  </div>
+
+  <section class="panel week-only" aria-labelledby="sTitle">
     <h2 id="sTitle">Week summary</h2>
     <div class="stats" id="stats"></div>
     <div class="sum-cols">
@@ -237,7 +277,7 @@ dialog#editor::backdrop { background: rgba(10, 14, 22, .45); }
     </div>
   </section>
 
-  <section class="panel" aria-labelledby="rTitle">
+  <section class="panel week-only" aria-labelledby="rTitle">
     <h2 id="rTitle">Routines</h2>
     <p class="hint">Routines show up on their own in the weeks they're due, so you don't have to re-add them. Tick them off each time.</p>
     <ul class="rlist" id="rlist"></ul>
@@ -450,14 +490,14 @@ dialog#editor::backdrop { background: rgba(10, 14, 22, .45); }
     return out;
   }
 
-  function itemEl(e) {
+  function itemEl(e, opts = {}) {
     const li = document.createElement("li");
-    li.className = "item" + (e.done ? " done" : "") + (e.pri ? " pri" : "");
+    li.className = "item" + (e.done ? " done" : "") + (e.pri ? " pri" : "") + (opts.moveToday ? " has-extra" : "");
     const isTask = e.kind === "task";
 
     const handle = document.createElement("button");
     handle.type = "button"; handle.className = "handle"; handle.innerHTML = ICON_GRIP;
-    if (isTask && !S.readOnly) {
+    if (isTask && !S.readOnly && !opts.noDrag) {
       handle.setAttribute("aria-label", "Drag to another day: " + e.text);
       handle.addEventListener("pointerdown", ev => startDrag(ev, e.t, li));
       handle.addEventListener("click", ev => { if (!dragMoved) openEditor(e.t); });
@@ -476,6 +516,7 @@ dialog#editor::backdrop { background: rgba(10, 14, 22, .45); }
     const text = document.createElement("span"); text.className = "text"; text.textContent = e.text;
     body.appendChild(text);
     const meta = document.createElement("span"); meta.className = "meta";
+    if (opts.dayTag && isTask) { const s = document.createElement("span"); s.className = "late"; s.textContent = "was due " + DAY[e.t.day || "any"].n; meta.appendChild(s); }
     if (e.time) { const s = document.createElement("span"); s.className = "time"; s.textContent = fmtTime(e.time); meta.appendChild(s); }
     if (!isTask) { const s = document.createElement("span"); s.className = "rep"; s.textContent = "↻ " + (FREQ_LABEL[e.r.freq || "weekly"]); meta.appendChild(s); }
     if (isTask && e.t.notes) { const s = document.createElement("span"); s.textContent = "✎ notes"; meta.appendChild(s); }
@@ -483,6 +524,12 @@ dialog#editor::backdrop { background: rgba(10, 14, 22, .45); }
     if (meta.children.length) body.appendChild(meta);
 
     li.append(handle, cb, body);
+    if (opts.moveToday && isTask && !S.readOnly) {
+      const mv = document.createElement("button"); mv.type = "button"; mv.className = "to-today"; mv.textContent = "Move to today";
+      mv.setAttribute("aria-label", "Move to today: " + e.text);
+      mv.onclick = () => guard(store.updateTask(e.t.id, { day: todayKey() })).then(ok => ok && toast("Moved to today."));
+      li.appendChild(mv);
+    }
     if (isTask && !S.readOnly) {
       const fl = document.createElement("button");
       fl.type = "button"; fl.className = "flag"; fl.innerHTML = ICON_FLAG;
@@ -499,8 +546,14 @@ dialog#editor::backdrop { background: rgba(10, 14, 22, .45); }
     if (drag) { needsRender = true; return; }
     const wk = isoWeek(S.week), wid = wk.id, end = addDays(S.week, 6), now = new Date();
     const isThis = sameDay(S.week, mondayOf(now));
+    document.body.classList.toggle("mode-today", mode === "today");
+    document.body.classList.toggle("mode-week", mode !== "today");
+    $("tabWeek").setAttribute("aria-selected", String(mode !== "today"));
+    $("tabToday").setAttribute("aria-selected", String(mode === "today"));
     $("weekCode").textContent = "Week " + wk.w + " · " + wk.y;
-    $("weekTitle").textContent = (isThis ? "This week, " : "") + fmt(S.week) + " – " + fmt(end);
+    $("weekTitle").textContent = mode === "today"
+      ? "Today, " + DAY[todayKey()].n + " " + fmt(now)
+      : (isThis ? "This week, " : "") + fmt(S.week) + " – " + fmt(end);
     $("todayBtn").disabled = isThis;
     $("carryBtn").disabled = S.readOnly;
 
@@ -547,6 +600,7 @@ dialog#editor::backdrop { background: rgba(10, 14, 22, .45); }
 
     const all = Object.values(perDay).flat();
     const total = all.length, done = all.filter(e => e.done).length;
+    if (mode === "today") { renderToday(perDay); return; }
     const pct = total ? Math.round(done / total * 100) : 0;
     $("barFill").style.width = pct + "%";
     $("bar").setAttribute("aria-valuenow", String(pct));
@@ -554,6 +608,75 @@ dialog#editor::backdrop { background: rgba(10, 14, 22, .45); }
 
     renderSummary(perDay, all);
     renderRoutines();
+  }
+
+  // ---------- Today view ----------
+  let mode = "week";
+  const todayKey = () => WEEKDAYS[(new Date().getDay() + 6) % 7];
+  function setProgress(done, total, label) {
+    const pct = total ? Math.round(done / total * 100) : 0;
+    $("barFill").style.width = pct + "%";
+    $("bar").setAttribute("aria-valuenow", String(pct));
+    $("progressText").textContent = done + " of " + total + " " + label + (total ? " · " + pct + "%" : "");
+  }
+  function fillList(ul, entries, opts, emptyText) {
+    ul.textContent = "";
+    entries.forEach(e => ul.appendChild(itemEl(e, opts)));
+    if (!entries.length) { const li = document.createElement("li"); li.className = "empty"; li.textContent = emptyText; ul.appendChild(li); }
+  }
+  function renderToday(perDay) {
+    const tk = todayKey(), tIdx = DAY[tk].i;
+    // Today: in time order, untimed after, flagged first among equals.
+    const today = perDay[tk].slice().sort((a, b) =>
+      ((a.time ? 0 : 1) - (b.time ? 0 : 1)) || (a.time < b.time ? -1 : a.time > b.time ? 1 : 0) ||
+      (b.pri - a.pri) || ((a.kind === "routine" ? 0 : 1) - (b.kind === "routine" ? 0 : 1)) || (a.createdAt - b.createdAt));
+    const tDone = today.filter(e => e.done).length;
+    fillList($("tdList"), today, { noDrag: true }, "Nothing planned for today. Add something below.");
+    $("tdCount").textContent = tDone + " of " + today.length + " done";
+    $("tdTitle").textContent = "Today";
+
+    const overdue = WEEKDAYS.slice(0, tIdx).flatMap(k => perDay[k]).filter(e => e.kind === "task" && !e.done)
+      .sort((a, b) => (b.pri - a.pri) || (DAY[a.t.day].i - DAY[b.t.day].i) || (a.createdAt - b.createdAt));
+    $("odCard").hidden = !overdue.length;
+    fillList($("odList"), overdue, { noDrag: true, dayTag: true, moveToday: true }, "");
+    $("odCount").textContent = overdue.length ? overdue.length + " open" : "";
+
+    const anyOpen = perDay.any.filter(e => !e.done);
+    $("anyCard").hidden = !anyOpen.length;
+    fillList($("anyList"), anyOpen, { noDrag: true }, "");
+    $("anyCount").textContent = anyOpen.length ? anyOpen.length + " open" : "";
+
+    $("tdAddForm").hidden = S.readOnly;
+    setProgress(tDone, today.length, "done today");
+  }
+  function setMode(m) {
+    mode = m === "today" ? "today" : "week";
+    try { localStorage.setItem("weekly-planner-mode", mode); } catch (e) {}
+    const want = "#" + mode;
+    if (location.hash !== want) { try { history.replaceState(null, "", want); } catch (e) { location.hash = want; } }
+    const cur = mondayOf(new Date());
+    if (mode === "today" && !sameDay(S.week, cur)) openWeek(cur); else render();
+    window.scrollTo(0, 0);
+  }
+  $("tabWeek").onclick = () => setMode("week");
+  $("tabToday").onclick = () => setMode("today");
+  window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if ((h === "today" || h === "week") && h !== mode) setMode(h); });
+  $("tdAddForm").onsubmit = ev => {
+    ev.preventDefault(); const inp = $("tdAdd"); const q = parseQuick(inp.value); if (!q.text) return;
+    inp.value = "";
+    guard(store.addTask({ week: isoWeek(new Date()).id, day: todayKey(), text: q.text, done: false, priority: q.priority, time: q.time, notes: "", createdAt: Date.now() }));
+  };
+  // If the page stays open past midnight, roll Today forward when it's looked at again.
+  let lastDay = new Date().toDateString();
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden || new Date().toDateString() === lastDay) return;
+    lastDay = new Date().toDateString();
+    if (mode === "today") openWeek(mondayOf(new Date())); else render();
+  });
+  { // initial mode: link hash first, then last-used view
+    const h = location.hash.slice(1);
+    let saved = null; try { saved = localStorage.getItem("weekly-planner-mode"); } catch (e) {}
+    mode = (h === "today" || h === "week") ? h : (saved === "today" ? "today" : "week");
   }
 
   function renderSummary(perDay, all) {
