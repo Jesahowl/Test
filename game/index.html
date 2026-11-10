@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Untitled Strategy Game</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="map"></canvas>
+
+  <!-- Player HUD -->
+  <section id="hud" class="panel hidden">
+    <div class="hud-title"><span id="hud-swatch" class="swatch"></span><span id="hud-name"></span></div>
+    <div class="stat-row">
+      <div class="stat"><div class="label">Troops</div><div class="value" id="hud-troops">0</div><div class="sub" id="hud-max"></div></div>
+      <div class="stat"><div class="label">Growth</div><div class="value" id="hud-growth">0</div><div class="sub">per second</div></div>
+      <div class="stat"><div class="label">Land</div><div class="value" id="hud-land">0%</div><div class="sub">win at 80%</div></div>
+    </div>
+    <label class="ratio">
+      <span>Send <b id="ratio-value">50%</b> of troops</span>
+      <input id="ratio" type="range" min="5" max="100" step="5" value="50">
+    </label>
+    <div id="attacks"></div>
+  </section>
+
+  <!-- Leaderboard -->
+  <section id="leaderboard" class="panel hidden">
+    <h2>Nations</h2>
+    <ol id="lb-list"></ol>
+  </section>
+
+  <div id="log"></div>
+  <div id="hint" class="hidden"></div>
+  <div id="tooltip" class="hidden"></div>
+
+  <!-- Start screen -->
+  <div id="menu" class="overlay">
+    <div class="card">
+      <p class="eyebrow">Prototype · working title</p>
+      <h1>Untitled Strategy Game</h1>
+      <p class="lead">Grow your nation across the continent. Send troops into free land or into your neighbours, and take 80% of the map to win.</p>
+      <label class="field">Nation name
+        <input id="opt-name" maxlength="20" value="Your Nation" autocomplete="off">
+      </label>
+      <label class="field">AI opponents
+        <select id="opt-ai">
+          <option value="3">3</option>
+          <option value="5">5</option>
+          <option value="7" selected>7</option>
+          <option value="10">10</option>
+          <option value="13">13</option>
+        </select>
+      </label>
+      <button id="btn-start" class="primary">Start game</button>
+      <ul class="howto">
+        <li><b>Click</b> free land or a neighbouring nation to attack it</li>
+        <li><b>1–9, 0</b> or the slider set how many troops to send</li>
+        <li><b>Scroll</b> or pinch to zoom, <b>drag</b> to move the map</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- End screen -->
+  <div id="end" class="overlay hidden">
+    <div class="card">
+      <h1 id="end-title"></h1>
+      <p class="lead" id="end-text"></p>
+      <div class="buttons">
+        <button id="btn-watch" class="secondary">Keep watching</button>
+        <button id="btn-again" class="primary">New game</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/mapgen.js"></script>
+  <script src="js/sim.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
