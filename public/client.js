@@ -51,10 +51,14 @@
   let spectating = false;
   let specTarget = 0;
   let specFollow = true;
-  const SHARES = [0.25, 0.5, 0.75, 1];
+  const SHARES = [0.25, 0.5, 0.75, 1]; // presets on Z X C V
   const SHARE_KEYS = ['z', 'x', 'c', 'v'];
+  const SHARE_STEP = 0.05; // the send slider moves in 5% steps
   let sendShare = 1; // share of troops a right-click order sends (when no troops are selected)
-  try { sendShare = SHARES.includes(Number(localStorage.getItem('ts-share'))) ? Number(localStorage.getItem('ts-share')) : 1; } catch { /* ignore */ }
+  try {
+    const saved = Number(localStorage.getItem('ts-share'));
+    if (saved >= SHARE_STEP && saved <= 1) sendShare = saved;
+  } catch { /* ignore */ }
   let pendingOrder = null; // toast text waiting for the server to say how many troops moved
   const keys = new Set();
   const mouse = { sx: 0, sy: 0, wx: 0, wy: 0, rightDown: false, dragged: false, lastX: 0, lastY: 0 };
@@ -1434,7 +1438,8 @@
       if (tg) {
         const pos = targetPos(`${tg.k}:${tg.id}`);
         const mine = isMineTarget(tg);
-        const who = selUnits.size ? `${selUnits.size} selected` : sendShare < 1 ? `${Math.round(sendShare * 100)}% of troops` : 'all troops';
+        const n = shareCount(sendShare);
+        const who = selUnits.size ? `${selUnits.size} selected` : sendShare < 1 ? `${n} troop${n === 1 ? '' : 's'} (${Math.round(sendShare * 100)}%)` : 'all troops';
         const verb = mine ? 'defend' : tg.k === 'j' ? 'clear' : 'attack';
         const [hx, hy] = toScreen(pos.x, pos.y);
         label(`Right-click: ${who} ${verb}`, hx, hy - s * 2.4, 12, mine ? '#7ee787' : '#ffa198');
@@ -1556,22 +1561,55 @@
     }
     $('defend-home').onclick = () => orderAt({ k: 'c', id: myId }, 1);
 
-    const share = $('share');
-    SHARES.forEach((sh, i) => {
-      const b = document.createElement('button');
-      b.dataset.share = sh;
-      b.textContent = `${Math.round(sh * 100)}%`;
-      b.title = sh < 1
-        ? `Right-click orders send ${Math.round(sh * 100)}% of your troops; new waves keep their orders [${SHARE_KEYS[i].toUpperCase()}]`
-        : `Right-click orders send every troop, and new waves follow too [${SHARE_KEYS[i].toUpperCase()}]`;
-      b.onclick = () => setShare(sh);
-      share.appendChild(b);
-    });
+    // Send slider: what share of your troops a right-click order sends.
+    const slider = $('share-slider');
+    slider.min = SHARE_STEP * 100;
+    slider.max = 100;
+    slider.step = SHARE_STEP * 100;
+    slider.oninput = () => setShare(Number(slider.value) / 100);
+    slider.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setShare(sendShare + (e.deltaY < 0 ? SHARE_STEP : -SHARE_STEP));
+    }, { passive: false });
+    // Keep keyboard focus off the slider so game keys (A/D pan, numbers) still work.
+    slider.addEventListener('change', () => slider.blur());
+    slider.addEventListener('pointerup', () => slider.blur());
+    setShare(sendShare);
+  }
+
+  // How many troops a share-order would send right now (the server picks the same number).
+  function myTroopCount() {
+    let n = 0;
+    for (const u of units.values()) if (u.owner === myId) n++;
+    return n;
+  }
+  function shareCount(sh) {
+    const total = myTroopCount();
+    return total ? (sh >= 1 ? total : Math.max(1, Math.round(total * sh))) : 0;
   }
 
   function setShare(sh) {
-    sendShare = sh;
-    try { localStorage.setItem('ts-share', String(sh)); } catch { /* ignore */ }
+    sendShare = Math.min(1, Math.max(SHARE_STEP, Math.round(sh / SHARE_STEP) * SHARE_STEP));
+    try { localStorage.setItem('ts-share', String(sendShare)); } catch { /* ignore */ }
+    updateShareUi();
+  }
+
+  function updateShareUi() {
+    const slider = $('share-slider');
+    const pct = Math.round(sendShare * 100);
+    if (Number(slider.value) !== pct) slider.value = pct;
+    slider.style.setProperty('--fill', `${((pct - SHARE_STEP * 100) / (100 - SHARE_STEP * 100)) * 100}%`);
+    slider.classList.toggle('all', sendShare >= 1);
+    const total = myTroopCount();
+    const n = shareCount(sendShare);
+    $('share-pct').textContent = `${pct}%`;
+    $('share-count').innerHTML = sendShare >= 1
+      ? `<b>All ${total}</b> troop${total === 1 ? '' : 's'} + new waves`
+      : `<b>${n}</b> of ${total} troop${total === 1 ? '' : 's'}`;
+    slider.title = sendShare >= 1
+      ? 'Right-click orders send every troop, and new waves follow too (Z/X/C/V = 25/50/75/100%, wheel to adjust)'
+      : `Right-click orders send ${pct}% of your troops; new waves keep their orders (Z/X/C/V = 25/50/75/100%, wheel to adjust)`;
   }
 
   function toggleBuild(kind) {
@@ -1656,9 +1694,7 @@
 
   // Tower button, send-% buttons and the army panel.
   function updateTowerAndArmy(gold, perWave) {
-    for (const b of document.querySelectorAll('#share button')) {
-      b.classList.toggle('active', Number(b.dataset.share) === sendShare);
-    }
+    updateShareUi();
     const tb = $('tower-button');
     tb.classList.toggle('active', buildKind === 'tower');
     tb.classList.toggle('poor', gold < C.TOWERS.tower.cost);

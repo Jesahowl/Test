@@ -27,7 +27,10 @@
       <div class="divider"></div>
       <div class="side">
         <div id="wave-info"></div>
-        <div class="share-row"><span>Send</span><div id="share"></div></div>
+        <div class="share">
+          <div class="share-head"><span>Send</span><b id="share-pct"></b><span id="share-count"></span></div>
+          <input id="share-slider" type="range">
+        </div>
         <button id="defend-home" title="All troops and new waves defend your core [H]">🛡 Defend home [H]</button>
       </div>
     </div>
@@ -39,7 +42,7 @@
       <button class="close" title="Hide [?]">×</button>
       <b>Waves</b> your core sends troops every 20s · buy more per wave in the army panel (1-5, Shift = level up)<br>
       <b>Orders</b> right-click an enemy tower/core or a jungle camp to attack · right-click your tower/core to defend · H = all home<br>
-      <b>Send %</b> Z 25% · X 50% · C 75% · V 100% of your troops per order (100% also redirects new waves)<br>
+      <b>Send %</b> slider in the bar (or wheel over it) sets how many of your troops each order sends · Z/X/C/V = 25/50/75/100% (100% also redirects new waves)<br>
       <b>Select</b> click troops (Shift adds, Q = all) to command only them · Esc deselects<br>
       <b>Towers</b> B, then click your land (or up to 3 tiles past it) · click a tower: U upgrade, Del sell<br>
       <b>Camera</b> WASD / arrows / right-drag · wheel zoom · Space = home
