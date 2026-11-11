@@ -28,8 +28,8 @@
 
     MAX_CREEPS_PER_PLAYER: 60,
 
-    // Pathfinding: entering a structure tile costs (BASE + maxHp * PER_HP) extra tiles of walking.
-    // A 500 HP wall is worth a ~44 tile detour; seal a base completely and creeps break through.
+    // Pathfinding: entering a structure tile (core or beacon) costs (BASE + maxHp * PER_HP) extra
+    // tiles of walking, so creeps go around structures unless the detour is very long.
     PATH_STRUCT_BASE: 4,
     PATH_STRUCT_PER_HP: 0.08,
     PATH_RECOMPUTE_INTERVAL: 0.25, // seconds between flow-field rebuilds for the same target
@@ -37,30 +37,40 @@
     BOT_TARGET: 6, // bots fill the server up to this many players
     MAX_PLAYERS: 24,
 
-    TOWERS: {
+    // Mobile defenders. Each one guards an anchor (your core or one of your beacons): it patrols
+    // within the anchor's leash radius, chases enemy creeps that come near, and never leaves your land.
+    UNITS: {
       bolt: {
-        name: 'Bolt', key: '1', cost: 50, hp: 200, range: 5, damage: 14, rate: 2.5,
+        name: 'Bolt', key: '1', cost: 55, hp: 160, range: 4, damage: 14, rate: 2.5, speed: 2.8,
         color: '#4fc3f7', desc: 'Fast single-target shots',
       },
       frost: {
-        name: 'Frost', key: '2', cost: 70, hp: 180, range: 3.5, damage: 5, rate: 1,
+        name: 'Frost', key: '2', cost: 75, hp: 150, range: 3, damage: 5, rate: 1, speed: 2.4,
         aoe: true, slow: 0.45, slowTime: 1.5,
         color: '#b3e5fc', desc: 'Pulses damage and slows all nearby creeps',
       },
       mortar: {
-        name: 'Mortar', key: '3', cost: 110, hp: 220, range: 7, minRange: 1.5, damage: 45, rate: 0.5,
+        name: 'Mortar', key: '3', cost: 115, hp: 180, range: 6, minRange: 1.5, damage: 45, rate: 0.5, speed: 1.6,
         splash: 1.6,
         color: '#ff8a65', desc: 'Long-range splash, cannot hit close targets',
       },
+    },
+    MAX_UNITS: 14, // per player
+    UNIT_LEASH_CORE: 4.5, // patrol radius around the core
+    UNIT_LEASH_BEACON: 3.5, // patrol radius around a beacon
+    UNIT_REPATH: 0.4, // seconds between re-planning a chase path
+
+    // Fixed structures.
+    TOWERS: {
       beacon: {
-        name: 'Beacon', key: '4', cost: 90, hp: 260, claim: 5,
-        color: '#ffd54f', desc: 'Claims land around it: more income and build space',
-      },
-      wall: {
-        name: 'Wall', key: '5', cost: 15, hp: 500,
-        color: '#90a4ae', desc: 'Cheap blocker that creeps must chew through',
+        name: 'Beacon', key: '4', cost: 90, hp: 400, claim: 5,
+        color: '#ffd54f', desc: 'Claims land around it. Creeps attack beacons they pass - guard them!',
       },
     },
+
+    // Creeps divert to attack enemy beacons within this range, and fight enemy units they bump into.
+    CREEP_AGGRO_RANGE: 2.5,
+    CREEP_UNIT_REACH: 0.7,
 
     CREEPS: {
       grunt: {
@@ -73,14 +83,19 @@
       },
       brute: {
         name: 'Brute', key: 'C', cost: 45, hp: 260, speed: 1.2, damage: 35, bounty: 15, size: 0.42,
-        desc: 'Slow tank that smashes walls',
+        desc: 'Slow tank that hits hard',
       },
     },
   };
 
-  // Stats of a tower at a given level (levels scale damage, range, hp, claim).
+  // Definition of a unit or structure kind.
+  CONFIG.defOf = function (kind) {
+    return CONFIG.UNITS[kind] || CONFIG.TOWERS[kind];
+  };
+
+  // Stats of a unit or structure at a given level (levels scale damage, range, hp, claim).
   CONFIG.towerStats = function (kind, level) {
-    const d = CONFIG.TOWERS[kind];
+    const d = CONFIG.defOf(kind);
     const l = level - 1;
     return {
       hp: Math.round(d.hp * (1 + 0.5 * l)),
@@ -93,12 +108,12 @@
 
   // Cost to go from `level` to `level + 1`.
   CONFIG.upgradeCost = function (kind, level) {
-    return CONFIG.TOWERS[kind].cost * level;
+    return CONFIG.defOf(kind).cost * level;
   };
 
-  // Total gold invested in a tower of this level.
+  // Total gold invested in a unit or structure of this level.
   CONFIG.totalSpent = function (kind, level) {
-    return CONFIG.TOWERS[kind].cost * (1 + (level * (level - 1)) / 2);
+    return CONFIG.defOf(kind).cost * (1 + (level * (level - 1)) / 2);
   };
 
   CONFIG.sellValue = function (kind, level) {

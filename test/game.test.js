@@ -46,13 +46,26 @@ test('building is only allowed on your own empty land', () => {
   const a = g.addPlayer('A');
   const b = g.addPlayer('B');
   g.update(0.05);
+  a.gold = 1000;
   const tile = ownTile(g, a);
-  assert.strictEqual(g.build(a.id, tile.x, tile.y, 'bolt'), null);
+  assert.strictEqual(g.build(a.id, tile.x, tile.y, 'beacon'), null);
+  assert.match(g.build(a.id, tile.x, tile.y, 'beacon'), /occupied/);
   assert.match(g.build(a.id, tile.x, tile.y, 'bolt'), /occupied/);
+  assert.match(g.build(a.id, a.core.x, a.core.y, 'bolt'), /occupied/);
   assert.match(g.build(b.id, tile.x, tile.y, 'bolt'), /own land/);
   assert.match(g.build(a.id, b.core.x + 1, b.core.y, 'bolt'), /own land/);
   assert.match(g.build(a.id, -1, 0, 'bolt'), /bounds/);
   assert.match(g.build(a.id, 1.5, 0, 'bolt'), /bounds/);
+});
+
+test('walls no longer exist', () => {
+  const g = new Game({ botTarget: 0, rand: seeded(33) });
+  const a = g.addPlayer('A');
+  g.update(0.05);
+  const tile = ownTile(g, a);
+  assert.match(g.build(a.id, tile.x, tile.y, 'wall'), /Invalid/);
+  assert.strictEqual(C.TOWERS.wall, undefined);
+  assert.strictEqual(C.UNITS.wall, undefined);
 });
 
 test('beacons expand territory, selling them shrinks it again', () => {
@@ -75,18 +88,19 @@ test('beacons expand territory, selling them shrinks it again', () => {
   assert.ok(upgraded > before);
 });
 
-test('towers kill creeps and pay bounty', () => {
+test('units kill creeps and pay bounty', () => {
   const g = new Game({ botTarget: 0, rand: seeded(5) });
   const a = g.addPlayer('A');
   const b = g.addPlayer('B');
   g.update(0.05);
   a.gold = 1000;
   b.gold = 1000;
-  // Ring B's core with bolt towers
-  for (let i = 0; i < 6; i++) {
+  // A squad of bolts guarding B's core
+  for (let i = 0; i < 4; i++) {
     const tile = ownTile(g, b, 2);
-    g.build(b.id, tile.x, tile.y, 'bolt');
+    assert.strictEqual(g.build(b.id, tile.x, tile.y, 'bolt'), null);
   }
+  assert.strictEqual(g.units.size, 4);
   const goldBefore = b.gold;
   g.send(a.id, 'grunt', b.id);
   let killed = false;
@@ -94,7 +108,7 @@ test('towers kill creeps and pay bounty', () => {
     g.update(0.05);
     killed = b.kills > 0;
   }
-  assert.ok(killed, 'tower should kill the grunt');
+  assert.ok(killed, 'units should kill the grunt');
   assert.ok(b.gold > goldBefore);
 });
 
@@ -104,7 +118,7 @@ test('undefended core falls, killer gets bounty, base becomes ruins', () => {
   const b = g.addPlayer('B');
   g.update(0.05);
   const tile = ownTile(g, b, 3);
-  g.build(b.id, tile.x, tile.y, 'wall');
+  g.build(b.id, tile.x, tile.y, 'beacon');
   let death = null;
   g.onDeath = (p, info) => { death = { p, info }; };
   a.gold = 100000;
@@ -124,7 +138,8 @@ test('ruins can be captured once inside your land', () => {
   const a = g.addPlayer('A');
   g.update(0.05);
   const tile = ownTile(g, a);
-  g.build(a.id, tile.x, tile.y, 'bolt');
+  a.gold = 1000;
+  g.build(a.id, tile.x, tile.y, 'beacon');
   const t = [...g.towers.values()][0];
   // Simulate t being a ruin on A's land
   t.owner = 0;
@@ -155,12 +170,13 @@ test('long simulation with bots stays consistent', () => {
     }
   }
   assert.strictEqual(structures, g.towers.size);
-  assert.ok(g.towers.size > 10, `bots should build (towers: ${g.towers.size})`);
+  assert.ok(g.units.size > 10, `bots should buy units (units: ${g.units.size})`);
+  for (const u of g.units.values()) assert.ok(g.players.get(u.owner)?.alive, 'units of dead players are removed');
   assert.ok(g.players.size > 0);
   for (const p of g.players.values()) assert.ok(Number.isFinite(p.gold));
   const snap = g.snapshot();
   assert.doesNotThrow(() => JSON.stringify(snap));
-  console.log(`  8 min sim: ${g.players.size} players, ${g.towers.size} towers, ${g.creeps.size} creeps, ${deaths} deaths`);
+  console.log(`  8 min sim: ${g.players.size} players, ${g.towers.size} beacons, ${g.units.size} units, ${g.creeps.size} creeps, ${deaths} deaths`);
 });
 
 test('territory RLE encodes the full map', () => {

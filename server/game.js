@@ -1,7 +1,9 @@
 'use strict';
 
 // Authoritative game simulation for Territory Siege.
-// Units: positions are in tiles. A structure on tile (x, y) has its centre at (x + 0.5, y + 0.5).
+// Positions are in tiles. A structure on tile (x, y) has its centre at (x + 0.5, y + 0.5).
+// Structures (cores, beacons) sit on the grid; units (bolt, frost, mortar) move freely within
+// their owner's land, guarding an anchor (the core or a beacon).
 
 const C = require('../shared/config');
 const Path = require('../shared/pathfinding');
@@ -12,7 +14,11 @@ const BOT_NAMES = [
 ];
 
 const KIND_KEYS = Object.keys(C.TOWERS);
+const UNIT_KEYS = Object.keys(C.UNITS);
 const CREEP_KEYS = Object.keys(C.CREEPS);
+
+// 8-way neighbour offsets for unit path planning.
+const DIRS8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
 function dist(ax, ay, bx, by) {
   return Math.hypot(ax - bx, ay - by);
@@ -35,7 +41,8 @@ class Game {
     this.botTarget = opts.botTarget ?? C.BOT_TARGET;
 
     this.players = new Map();
-    this.towers = new Map();
+    this.towers = new Map(); // fixed structures (beacons)
+    this.units = new Map(); // mobile defenders
     this.creeps = new Map();
 
     // grid: 0 = empty, >0 = tower id, <0 = core of player -id
@@ -51,6 +58,12 @@ class Game {
     this.extra = new Int32Array(this.w * this.h); // per-tile path entry cost
     this.extraVersion = -1;
     this.fields = new Map(); // target player id -> { dist, version, at }
+
+    // Scratch buffers for unit BFS (stamp-based so they never need clearing).
+    this.bfsStamp = new Int32Array(this.w * this.h);
+    this.bfsParent = new Int32Array(this.w * this.h);
+    this.bfsQueue = new Int32Array(this.w * this.h);
+    this.bfsGen = 0;
 
     this.nextId = 1;
     this.time = 0;
@@ -146,6 +159,9 @@ class Game {
         t.ruinOf = p.name;
         t.ruinTime = this.time;
       }
+    }
+    for (const u of this.units.values()) {
+      if (u.owner === p.id) this.units.delete(u.id);
     }
     for (const c of this.creeps.values()) {
       if (c.owner === p.id) c.dead = true;
@@ -251,31 +267,56 @@ class Game {
 
   // ---------------------------------------------------------------- actions
 
-  build(pid, x, y, kind) {
+  // Place a beacon, or buy a unit. Units guard `anchorId` (a beacon id, or 0 for the core);
+  // without one they guard whichever of your anchors is nearest to where they were placed.
+  build(pid, x, y, kind, anchorId) {
     const p = this.players.get(pid);
-    const def = C.TOWERS[kind];
+    const def = C.defOf(kind);
     if (!p || !p.alive || !def) return 'Invalid build';
     if (!Number.isInteger(x) || !Number.isInteger(y) || !this.inBounds(x, y)) return 'Out of bounds';
     const k = this.idx(x, y);
     if (this.terr[k] !== pid) return 'You can only build on your own land';
     if (this.grid[k] !== 0) return 'Tile is occupied';
+    const isUnit = !!C.UNITS[kind];
+    if (isUnit) {
+      let count = 0;
+      for (const u of this.units.values()) if (u.owner === pid) count++;
+      if (count >= C.MAX_UNITS) return `Unit limit reached (${C.MAX_UNITS})`;
+    }
     if (p.gold < def.cost) return 'Not enough gold';
     p.gold -= def.cost;
     const id = this.nextId++;
     const stats = C.towerStats(kind, 1);
+    if (isUnit) {
+      const anchor = this.isValidAnchor(pid, anchorId) ? anchorId : this.nearestAnchor(p, x + 0.5, y + 0.5);
+      this.units.set(id, {
+        id, kind, owner: pid, x: x + 0.5, y: y + 0.5, level: 1, hp: stats.hp, maxHp: stats.hp, cd: 0,
+        anchor, path: [], dest: null, repathAt: 0, idleUntil: this.time + 0.5,
+      });
+      return null;
+    }
     this.towers.set(id, {
-      id, kind, x, y, owner: pid, level: 1, hp: stats.hp, maxHp: stats.hp, cd: 0, ruin: false,
+      id, kind, x, y, owner: pid, level: 1, hp: stats.hp, maxHp: stats.hp, ruin: false,
     });
     this.grid[k] = id;
     this.structVersion++;
-    if (kind === 'beacon') this.terrDirty = true;
+    this.terrDirty = true;
     return null;
   }
 
-  upgrade(pid, towerId) {
+  // A unit or a structure owned by pid.
+  ownedThing(pid, id) {
+    const t = this.towers.get(id);
+    if (t && t.owner === pid) return t;
+    const u = this.units.get(id);
+    if (u && u.owner === pid) return u;
+    return null;
+  }
+
+  upgrade(pid, id) {
     const p = this.players.get(pid);
-    const t = this.towers.get(towerId);
-    if (!p || !p.alive || !t || t.owner !== pid) return 'Invalid upgrade';
+    const t = this.ownedThing(pid, id);
+    if (!p || !p.alive || !t) return 'Invalid upgrade';
     if (t.level >= C.MAX_LEVEL) return 'Already max level';
     const cost = C.upgradeCost(t.kind, t.level);
     if (p.gold < cost) return 'Not enough gold';
@@ -284,18 +325,59 @@ class Game {
     const stats = C.towerStats(t.kind, t.level);
     t.hp += stats.hp - t.maxHp;
     t.maxHp = stats.hp;
-    this.structVersion++;
-    if (t.kind === 'beacon') this.terrDirty = true;
+    if (this.towers.has(t.id)) {
+      this.structVersion++;
+      this.terrDirty = true;
+    }
     return null;
   }
 
-  sell(pid, towerId) {
+  sell(pid, id) {
     const p = this.players.get(pid);
-    const t = this.towers.get(towerId);
-    if (!p || !p.alive || !t || t.owner !== pid) return 'Invalid sell';
+    const t = this.ownedThing(pid, id);
+    if (!p || !p.alive || !t) return 'Invalid sell';
     p.gold += C.sellValue(t.kind, t.level);
-    this.destroyTower(t, false);
+    if (this.units.has(t.id)) this.units.delete(t.id);
+    else this.destroyTower(t, false);
     return null;
+  }
+
+  // Send units to guard a beacon (anchorId) or the core (anchorId 0).
+  assign(pid, ids, anchorId) {
+    const p = this.players.get(pid);
+    if (!p || !p.alive || !Array.isArray(ids)) return 'Invalid assignment';
+    if (!this.isValidAnchor(pid, anchorId)) return 'Units can only guard your core or your beacons';
+    let n = 0;
+    for (const id of ids.slice(0, C.MAX_UNITS)) {
+      const u = this.units.get(id);
+      if (!u || u.owner !== pid) continue;
+      u.anchor = anchorId;
+      u.path = [];
+      u.dest = null;
+      u.idleUntil = 0;
+      n++;
+    }
+    return n ? null : 'No units selected';
+  }
+
+  isValidAnchor(pid, anchorId) {
+    if (anchorId === 0) return true;
+    const t = this.towers.get(anchorId);
+    return !!t && t.kind === 'beacon' && t.owner === pid;
+  }
+
+  nearestAnchor(p, x, y) {
+    let best = 0;
+    let bestD = dist(x, y, p.core.x + 0.5, p.core.y + 0.5);
+    for (const t of this.towers.values()) {
+      if (t.owner !== p.id || t.kind !== 'beacon') continue;
+      const d = dist(x, y, t.x + 0.5, t.y + 0.5);
+      if (d < bestD) {
+        bestD = d;
+        best = t.id;
+      }
+    }
+    return best;
   }
 
   capture(pid, towerId) {
@@ -401,6 +483,15 @@ class Game {
     if (t.hp <= 0) this.destroyTower(t, true);
   }
 
+  damageUnit(u, amount) {
+    u.hp -= amount;
+    this.fx.push({ k: 'hit', x: round2(u.x), y: round2(u.y) });
+    if (u.hp <= 0) {
+      this.units.delete(u.id);
+      this.fx.push({ k: 'boom', x: round2(u.x), y: round2(u.y), r: 0.6 });
+    }
+  }
+
   destroyTower(t, explode) {
     this.towers.delete(t.id);
     this.grid[this.idx(t.x, t.y)] = 0;
@@ -409,64 +500,209 @@ class Game {
     if (t.kind === 'beacon' && t.owner) this.terrDirty = true;
   }
 
-  updateTowers(dt) {
-    for (const t of this.towers.values()) {
-      if (!t.owner) continue;
-      const def = C.TOWERS[t.kind];
-      if (!def.damage) continue;
-      t.cd -= dt;
-      if (t.cd > 0) continue;
-      const s = C.towerStats(t.kind, t.level);
-      const cx = t.x + 0.5;
-      const cy = t.y + 0.5;
+  // ---------------------------------------------------------------- units
 
-      if (def.aoe) {
-        let fired = false;
-        for (const c of this.creeps.values()) {
-          if (c.dead || c.owner === t.owner) continue;
-          if (dist(cx, cy, c.x, c.y) > s.range) continue;
-          fired = true;
-          c.slowT = def.slowTime;
-          c.slowF = def.slow;
-          this.damageCreep(c, s.damage, t.owner);
-        }
-        if (fired) {
-          this.fx.push({ k: 'frost', x: cx, y: cy, r: s.range });
-          t.cd = 1 / s.rate;
-        }
-        continue;
+  // Where unit u is anchored: its beacon if still standing and owned, else its owner's core.
+  anchorOf(u) {
+    if (u.anchor) {
+      const t = this.towers.get(u.anchor);
+      if (t && t.owner === u.owner && t.kind === 'beacon') {
+        return { x: t.x + 0.5, y: t.y + 0.5, leash: C.UNIT_LEASH_BEACON };
       }
+      u.anchor = 0; // beacon lost: fall back to guarding the core
+    }
+    const p = this.players.get(u.owner);
+    return { x: p.core.x + 0.5, y: p.core.y + 0.5, leash: C.UNIT_LEASH_CORE };
+  }
 
+  walkable(k, owner) {
+    return this.terr[k] === owner && this.grid[k] === 0;
+  }
+
+  // Plan a path for u toward (gx, gy) over its owner's open land (BFS, no corner cutting past
+  // structures). If the point itself can't be reached, head for the reachable tile nearest to it.
+  planUnit(u, gx, gy) {
+    const w = this.w;
+    const gen = ++this.bfsGen;
+    const stamp = this.bfsStamp;
+    const parent = this.bfsParent;
+    const queue = this.bfsQueue;
+    const sx = Math.max(0, Math.min(w - 1, Math.floor(u.x)));
+    const sy = Math.max(0, Math.min(this.h - 1, Math.floor(u.y)));
+    const start = this.idx(sx, sy);
+    let head = 0;
+    let tail = 0;
+    queue[tail++] = start;
+    stamp[start] = gen;
+    parent[start] = -1;
+    let best = start;
+    let bestD = dist(sx + 0.5, sy + 0.5, gx, gy);
+    while (head < tail) {
+      const k = queue[head++];
+      const x = k % w;
+      const y = (k - x) / w;
+      for (const [dx, dy] of DIRS8) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (!this.inBounds(nx, ny)) continue;
+        const n = this.idx(nx, ny);
+        if (stamp[n] === gen || !this.walkable(n, u.owner)) continue;
+        if (dx && dy && (!this.walkable(this.idx(x + dx, y), u.owner) || !this.walkable(this.idx(x, y + dy), u.owner))) continue;
+        stamp[n] = gen;
+        parent[n] = k;
+        queue[tail++] = n;
+        const d = dist(nx + 0.5, ny + 0.5, gx, gy);
+        if (d < bestD) {
+          bestD = d;
+          best = n;
+        }
+      }
+    }
+    const path = [];
+    for (let k = best; k !== start && k !== -1; k = parent[k]) path.push(k);
+    path.reverse();
+    const bx = best % w;
+    const by = (best - bx) / w;
+    const exact = Math.floor(gx) === bx && Math.floor(gy) === by;
+    u.path = path;
+    u.dest = exact ? { x: gx, y: gy } : { x: bx + 0.5, y: by + 0.5 };
+    // Stranded outside our land (territory shrank) with nowhere to walk: head straight home.
+    if (!path.length && !this.walkable(start, u.owner)) {
+      const a = this.anchorOf(u);
+      u.dest = { x: a.x, y: a.y };
+    }
+  }
+
+  // Advance u along its path. Returns true when it arrives at its destination.
+  moveUnit(u, dt, speed) {
+    let budget = speed * dt;
+    while (budget > 0) {
+      let tx;
+      let ty;
+      if (u.path.length) {
+        tx = (u.path[0] % this.w) + 0.5;
+        ty = Math.floor(u.path[0] / this.w) + 0.5;
+      } else if (u.dest) {
+        tx = u.dest.x;
+        ty = u.dest.y;
+      } else {
+        return false;
+      }
+      const dx = tx - u.x;
+      const dy = ty - u.y;
+      const d = Math.hypot(dx, dy);
+      if (d <= budget) {
+        u.x = tx;
+        u.y = ty;
+        budget -= d;
+        if (u.path.length) u.path.shift();
+        else {
+          u.dest = null;
+          return true;
+        }
+      } else {
+        u.x += (dx / d) * budget;
+        u.y += (dy / d) * budget;
+        budget = 0;
+      }
+    }
+    return false;
+  }
+
+  unitFire(u, target, s, def) {
+    u.cd = 1 / s.rate;
+    if (def.aoe) {
+      for (const c of this.creeps.values()) {
+        if (c.dead || c.owner === u.owner || dist(u.x, u.y, c.x, c.y) > s.range) continue;
+        c.slowT = def.slowTime;
+        c.slowF = def.slow;
+        this.damageCreep(c, s.damage, u.owner);
+      }
+      this.fx.push({ k: 'frost', x: round2(u.x), y: round2(u.y), r: s.range });
+    } else if (def.splash) {
+      for (const c of this.creeps.values()) {
+        if (c.dead || c.owner === u.owner) continue;
+        if (dist(target.x, target.y, c.x, c.y) <= def.splash) this.damageCreep(c, s.damage, u.owner);
+      }
+      this.fx.push({ k: 'shell', x1: round2(u.x), y1: round2(u.y), x2: round2(target.x), y2: round2(target.y), r: def.splash });
+    } else {
+      this.damageCreep(target, s.damage, u.owner);
+      this.fx.push({ k: 'bolt', x1: round2(u.x), y1: round2(u.y), x2: round2(target.x), y2: round2(target.y), o: u.owner });
+    }
+  }
+
+  updateUnits(dt) {
+    for (const u of this.units.values()) {
+      const def = C.UNITS[u.kind];
+      const s = C.towerStats(u.kind, u.level);
+      const a = this.anchorOf(u);
+      u.cd -= dt;
+
+      // Engage the nearest enemy creep that threatens our patch: anywhere we could reach and shoot
+      // without straying past the leash.
       let target = null;
       let bestD = Infinity;
       for (const c of this.creeps.values()) {
-        if (c.dead || c.owner === t.owner) continue;
-        const d = dist(cx, cy, c.x, c.y);
-        if (d > s.range || d < (def.minRange || 0)) continue;
+        if (c.dead || c.owner === u.owner) continue;
+        if (dist(a.x, a.y, c.x, c.y) > a.leash + s.range) continue;
+        const d = dist(u.x, u.y, c.x, c.y);
         if (d < bestD) {
           bestD = d;
           target = c;
         }
       }
-      if (!target) continue;
-      t.cd = 1 / s.rate;
 
-      if (def.splash) {
-        for (const c of this.creeps.values()) {
-          if (c.dead || c.owner === t.owner) continue;
-          if (dist(target.x, target.y, c.x, c.y) <= def.splash) this.damageCreep(c, s.damage, t.owner);
+      if (target) {
+        const minRange = def.minRange || 0;
+        if (bestD <= s.range && bestD >= minRange) {
+          // In range: stand and shoot.
+          u.path = [];
+          u.dest = null;
+          if (u.cd <= 0) this.unitFire(u, target, s, def);
+          continue;
         }
-        this.fx.push({ k: 'shell', x1: cx, y1: cy, x2: round2(target.x), y2: round2(target.y), r: def.splash });
-      } else {
-        this.damageCreep(target, s.damage, t.owner);
-        this.fx.push({ k: 'bolt', x1: cx, y1: cy, x2: round2(target.x), y2: round2(target.y), o: t.owner });
+        // Close the distance (or back off, for a mortar that's too close), staying on the leash.
+        let gx = target.x;
+        let gy = target.y;
+        if (bestD < minRange) {
+          const k = (minRange + 0.5) / Math.max(bestD, 0.01);
+          gx = target.x + (u.x - target.x) * k;
+          gy = target.y + (u.y - target.y) * k;
+        }
+        const da = dist(a.x, a.y, gx, gy);
+        if (da > a.leash) {
+          gx = a.x + ((gx - a.x) / da) * a.leash;
+          gy = a.y + ((gy - a.y) / da) * a.leash;
+        }
+        if (this.time >= u.repathAt || !u.dest) {
+          this.planUnit(u, gx, gy);
+          u.repathAt = this.time + C.UNIT_REPATH;
+        }
+        this.moveUnit(u, dt, def.speed);
+        continue;
       }
+
+      // No threat: patrol around the anchor.
+      if (u.dest) {
+        if (this.moveUnit(u, dt, def.speed)) u.idleUntil = this.time + 0.8 + this.rand() * 2;
+        continue;
+      }
+      const k = this.idx(Math.floor(u.x), Math.floor(u.y));
+      if (dist(u.x, u.y, a.x, a.y) > a.leash + 0.75 || !this.inBounds(Math.floor(u.x), Math.floor(u.y)) || this.terr[k] !== u.owner) {
+        this.planUnit(u, a.x, a.y); // wandered off (reassigned, or land shrank): go home
+        continue;
+      }
+      if (this.time < u.idleUntil) continue;
+      const ang = this.rand() * Math.PI * 2;
+      const r = a.leash * Math.sqrt(this.rand());
+      this.planUnit(u, a.x + Math.cos(ang) * r, a.y + Math.sin(ang) * r);
+      u.idleUntil = this.time + 0.5;
     }
   }
 
   // ---------------------------------------------------------------- pathfinding
 
-  // Per-tile extra cost of walking into a tile. Live towers and cores are costly; ruins are rubble.
+  // Per-tile extra cost of walking into a tile. Beacons and cores are costly; ruins are rubble.
   getExtra() {
     if (this.extraVersion === this.structVersion) return this.extra;
     const extra = this.extra;
@@ -538,6 +774,50 @@ class Game {
         if (c.atkCd <= 0) {
           c.atkCd = 1;
           this.damageCore(target, def.damage, c.owner);
+        }
+        continue;
+      }
+
+      // Brawl with any enemy unit we bump into: units body-block creeps.
+      let foe = null;
+      let foeD = C.CREEP_UNIT_REACH;
+      for (const u of this.units.values()) {
+        if (u.owner === c.owner) continue;
+        const d = dist(u.x, u.y, c.x, c.y);
+        if (d < foeD) {
+          foeD = d;
+          foe = u;
+        }
+      }
+      if (foe) {
+        if (c.atkCd <= 0) {
+          c.atkCd = 1;
+          this.damageUnit(foe, def.damage);
+        }
+        continue;
+      }
+
+      // Divert to wreck an enemy beacon we pass near.
+      let beacon = null;
+      let beaconD = C.CREEP_AGGRO_RANGE;
+      for (const t of this.towers.values()) {
+        if (!t.owner || t.owner === c.owner) continue;
+        const d = dist(t.x + 0.5, t.y + 0.5, c.x, c.y);
+        if (d < beaconD) {
+          beaconD = d;
+          beacon = t;
+        }
+      }
+      if (beacon) {
+        if (beaconD < 0.95) {
+          if (c.atkCd <= 0) {
+            c.atkCd = 1;
+            this.damageTower(beacon, def.damage);
+          }
+        } else {
+          const step = Math.min(beaconD - 0.9, speed * dt);
+          c.x += ((beacon.x + 0.5 - c.x) / beaconD) * step;
+          c.y += ((beacon.y + 0.5 - c.y) / beaconD) * step;
         }
         continue;
       }
@@ -619,10 +899,9 @@ class Game {
 
   botThink(p) {
     const age = this.time - p.spawnTime;
-    const mine = [...this.towers.values()].filter((t) => t.owner === p.id);
-    const beacons = mine.filter((t) => t.kind === 'beacon');
+    const beacons = [...this.towers.values()].filter((t) => t.owner === p.id);
+    const units = [...this.units.values()].filter((u) => u.owner === p.id);
     const enemy = this.nearestEnemy(p.core.x, p.core.y, p.id);
-    const toward = enemy ? enemy.core : null;
     const roll = this.rand();
 
     // Expand
@@ -646,21 +925,29 @@ class Game {
     }
 
     // Upgrade when rich
-    if (p.gold > 260 && mine.length && roll < 0.5) {
-      const t = mine[Math.floor(this.rand() * mine.length)];
-      this.upgrade(p.id, t.id);
+    const owned = [...units, ...beacons];
+    if (p.gold > 260 && owned.length && roll < 0.5) {
+      this.upgrade(p.id, owned[Math.floor(this.rand() * owned.length)].id);
       return;
     }
 
-    // Defend
-    const defenders = mine.length - beacons.length;
-    if (p.gold >= 50 && defenders < Math.min(24, 5 + age / 25)) {
+    // Defend: buy a unit for whichever anchor is most under-guarded (the core counts double).
+    if (p.gold >= 55 && units.length < Math.min(C.MAX_UNITS, 3 + age / 40)) {
       const r = this.rand();
-      const kind = r < 0.45 ? 'bolt' : r < 0.65 ? 'frost' : r < 0.85 ? 'mortar' : 'wall';
-      if (p.gold < C.TOWERS[kind].cost) return;
-      const base = beacons.length && this.rand() < 0.3 ? beacons[Math.floor(this.rand() * beacons.length)] : p.core;
-      const tile = this.botPickTile(p, base.x, base.y, 1.5, 3.5, this.rand() < 0.5 ? toward : null);
-      if (tile) this.build(p.id, tile.x, tile.y, kind);
+      const kind = r < 0.5 ? 'bolt' : r < 0.75 ? 'frost' : 'mortar';
+      if (p.gold < C.UNITS[kind].cost) return;
+      const anchors = [{ id: 0, x: p.core.x, y: p.core.y, w: 2 }, ...beacons.map((t) => ({ id: t.id, x: t.x, y: t.y, w: 1 }))];
+      let pick = anchors[0];
+      let pickLoad = Infinity;
+      for (const an of anchors) {
+        const load = units.filter((u) => u.anchor === an.id).length / an.w + this.rand() * 0.1;
+        if (load < pickLoad) {
+          pickLoad = load;
+          pick = an;
+        }
+      }
+      const tile = this.botPickTile(p, pick.x, pick.y, 1, 2.5, null);
+      if (tile) this.build(p.id, tile.x, tile.y, kind, pick.id);
     }
   }
 
@@ -679,7 +966,7 @@ class Game {
     }
 
     this.updateBots();
-    this.updateTowers(dt);
+    this.updateUnits(dt);
     this.updateCreeps(dt);
 
     for (const t of this.towers.values()) {
@@ -700,11 +987,15 @@ class Game {
     for (const t of this.towers.values()) {
       towers.push([t.id, KIND_KEYS.indexOf(t.kind), t.x, t.y, t.owner, t.level, Math.round(t.hp), t.maxHp, t.ruinOf || '']);
     }
+    const units = [];
+    for (const u of this.units.values()) {
+      units.push([u.id, UNIT_KEYS.indexOf(u.kind), round2(u.x), round2(u.y), u.owner, u.level, Math.round(u.hp), u.maxHp, u.anchor]);
+    }
     const creeps = [];
     for (const c of this.creeps.values()) {
       creeps.push([c.id, CREEP_KEYS.indexOf(c.kind), round2(c.x), round2(c.y), c.owner, round2(c.hp / c.maxHp)]);
     }
-    const snap = { players, towers, creeps, fx: this.fx, feed: this.feed };
+    const snap = { players, towers, units, creeps, fx: this.fx, feed: this.feed };
     this.fx = [];
     this.feed = [];
     return snap;
@@ -712,6 +1003,7 @@ class Game {
 }
 
 Game.KIND_KEYS = KIND_KEYS;
+Game.UNIT_KEYS = UNIT_KEYS;
 Game.CREEP_KEYS = CREEP_KEYS;
 
 module.exports = Game;

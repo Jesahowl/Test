@@ -41,7 +41,7 @@ function createServer({ port = 3000, botTarget } = {}) {
     });
   });
 
-  const wss = new WebSocketServer({ server, maxPayload: 1024 });
+  const wss = new WebSocketServer({ server, maxPayload: 2048 });
 
   function send(client, obj) {
     if (client.ws.readyState === client.ws.OPEN) client.ws.send(JSON.stringify(obj));
@@ -89,6 +89,9 @@ function createServer({ port = 3000, botTarget } = {}) {
           break;
         case 'sell':
           err = game.sell(client.pid, msg.id);
+          break;
+        case 'assign':
+          err = game.assign(client.pid, msg.ids, Number.isInteger(msg.anchor) ? msg.anchor : -1);
           break;
         case 'capture':
           err = game.capture(client.pid, msg.id);

@@ -1,10 +1,11 @@
-/* global TD_CONFIG, TD_PATH */
+/* global TD_CONFIG */
 (() => {
   'use strict';
 
   const C = TD_CONFIG;
-  const Path = TD_PATH;
   const KIND_KEYS = Object.keys(C.TOWERS);
+  const UNIT_KEYS = Object.keys(C.UNITS);
+  const BUY_KEYS = [...UNIT_KEYS, ...KIND_KEYS]; // build-bar order
   const CREEP_KEYS = Object.keys(C.CREEPS);
   const TPX = 2; // minimap territory canvas pixels per tile
   const SMOOTH_WINDOW = 2; // outline points averaged on each side when smoothing territory
@@ -23,7 +24,8 @@
   let me = null; // { id, gold, nextWave }
   let lastName = '';
   const players = new Map(); // id -> { id, name, hue, x, y, hp, maxHp, territory, kills, isBot }
-  let towers = new Map(); // id -> tower
+  let towers = new Map(); // id -> structure (beacon / ruin)
+  let units = new Map(); // id -> unit (with rx/ry render positions)
   let creeps = new Map(); // id -> creep (with rx/ry render positions)
   let effects = [];
   const feed = [];
@@ -38,7 +40,8 @@
   const cam = { x: C.MAP_W / 2, y: C.MAP_H / 2, zoom: 1 };
   const BASE_SCALE = 28;
   let buildKind = null;
-  let selectedId = null;
+  let selectedId = null; // selected structure
+  const selUnits = new Set(); // selected unit ids
   let attackTarget = null;
   let centerOnMe = false;
   const keys = new Set();
@@ -82,7 +85,7 @@
         myId = msg.id;
         centerOnMe = true;
         attackTarget = null;
-        selectedId = null;
+        clearSelection();
         buildKind = null;
         $('menu').classList.add('hidden');
         $('death').classList.add('hidden');
@@ -125,6 +128,15 @@
     }
     towers = nt;
     if (selectedId && !towers.has(selectedId)) selectedId = null;
+
+    const nu = new Map();
+    for (const a of msg.units) {
+      const old = units.get(a[0]);
+      nu.set(a[0], { id: a[0], kind: UNIT_KEYS[a[1]], x: a[2], y: a[3], owner: a[4], level: a[5], hp: a[6], maxHp: a[7], anchor: a[8],
+        rx: old ? old.rx : a[2], ry: old ? old.ry : a[3] });
+    }
+    units = nu;
+    for (const id of selUnits) if (!units.has(id)) selUnits.delete(id);
 
     const nc = new Map();
     for (const a of msg.creeps) {
@@ -382,7 +394,7 @@
         ctx.closePath();
         ctx.fill();
         break;
-      default: // wall
+      default: // generic block
         ctx.fillRect(x - r * 0.9, y - r * 0.9, r * 1.8, r * 1.8);
         ctx.strokeStyle = 'rgba(0,0,0,0.3)';
         ctx.lineWidth = 1;
@@ -432,6 +444,40 @@
         ctx.lineWidth = 2;
         ctx.strokeRect(x - s / 2, y - s / 2, s, s);
       }
+    }
+  }
+
+  function drawUnits(dt) {
+    const s = scale();
+    const r = s * 0.36;
+    const k = Math.min(1, dt * 14);
+    for (const u of units.values()) {
+      u.rx += (u.x - u.rx) * k;
+      u.ry += (u.y - u.ry) * k;
+      const [x, y] = toScreen(u.rx, u.ry);
+      if (x < -s || y < -s || x > canvas.width + s || y > canvas.height + s) continue;
+      if (selUnits.has(u.id)) {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, r * 1.45, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.fillStyle = colorOf(u.owner, 30, 0.9);
+      ctx.beginPath();
+      ctx.arc(x, y, r * 1.05, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = colorOf(u.owner, 60);
+      ctx.lineWidth = Math.max(1.5, s * 0.07);
+      ctx.stroke();
+      drawTowerShape(u.kind, x, y, r, C.UNITS[u.kind].color);
+      for (let i = 0; i < u.level; i++) {
+        ctx.fillStyle = '#ffd54f';
+        ctx.beginPath();
+        ctx.arc(x - r * 0.5 + i * r * 0.5, y + r * 1.1, Math.max(1.5, s * 0.055), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      hpBar(x, y - r * 1.6, s * 0.7, u.hp / u.maxHp);
     }
   }
 
@@ -626,102 +672,46 @@
     ctx.stroke();
   }
 
-  // ------------------------------------------------------------------ path preview
-  // While building, show the routes neutral waves (which spawn ~20 tiles out in a random
-  // direction) would take to your core, including the effect of the structure under the cursor.
-  const preview = { key: '', at: 0, paths: [], len: 0, baseLen: 0 };
-  const PREVIEW_DIRS = 12;
+  // Where a unit guards: { x, y, leash } for anchor id (beacon) or 0 (core) of player pid.
+  function anchorPos(pid, anchorId) {
+    const t = anchorId && towers.get(anchorId);
+    if (t && t.owner === pid) return { x: t.x + 0.5, y: t.y + 0.5, leash: C.UNIT_LEASH_BEACON };
+    const p = players.get(pid);
+    return p ? { x: p.x + 0.5, y: p.y + 0.5, leash: C.UNIT_LEASH_CORE } : null;
+  }
 
-  function pathExtra() {
-    const extra = new Int32Array(C.MAP_W * C.MAP_H);
+  function myAnchors() {
+    const list = [{ id: 0, ...anchorPos(myId, 0) }];
     for (const t of towers.values()) {
-      if (t.owner) extra[t.y * C.MAP_W + t.x] = Path.structureCost(C, t.maxHp);
+      if (t.owner === myId) list.push({ id: t.id, ...anchorPos(myId, t.id) });
     }
-    for (const p of players.values()) extra[p.y * C.MAP_W + p.x] = Path.structureCost(C, p.maxHp);
-    return extra;
+    return list;
   }
 
-  function routes(extra, core) {
-    const goal = core.y * C.MAP_W + core.x;
-    const dist = Path.computeField(C.MAP_W, C.MAP_H, extra, goal);
-    const paths = [];
-    let total = 0;
-    for (let i = 0; i < PREVIEW_DIRS; i++) {
-      const a = (Math.PI * 2 * i) / PREVIEW_DIRS;
-      const sx = Math.max(1, Math.min(C.MAP_W - 2, Math.round(core.x + Math.cos(a) * C.NEUTRAL_SPAWN_DIST)));
-      const sy = Math.max(1, Math.min(C.MAP_H - 2, Math.round(core.y + Math.sin(a) * C.NEUTRAL_SPAWN_DIST)));
-      const path = Path.tracePath(dist, C.MAP_W, C.MAP_H, extra, sy * C.MAP_W + sx, goal);
-      paths.push(path);
-      total += path.length - 1;
-    }
-    return { paths, len: total / PREVIEW_DIRS };
+  // Which of my anchors (core = 0, or a beacon id) is under world point (wx, wy), or null.
+  function anchorAt(wx, wy) {
+    const me2 = players.get(myId);
+    if (me2 && Math.hypot(me2.x + 0.5 - wx, me2.y + 0.5 - wy) < 1.1) return 0;
+    const tid = grid.get(`${Math.floor(wx)},${Math.floor(wy)}`);
+    const t = tid && towers.get(tid);
+    return t && t.owner === myId ? t.id : null;
   }
 
-  function updatePreview(now) {
-    const core = myId && players.get(myId);
-    if (!buildKind || !core) {
-      preview.paths = [];
-      preview.key = '';
-      return;
-    }
-    const tx = Math.floor(mouse.wx);
-    const ty = Math.floor(mouse.wy);
-    const ok = canBuildAt(tx, ty);
-    const key = `${buildKind}:${ok ? `${tx},${ty}` : '-'}`;
-    if (key === preview.key && now - preview.at < 400) return;
-    preview.key = key;
-    preview.at = now;
-    const extra = pathExtra();
-    const base = routes(extra, core);
-    preview.baseLen = base.len;
-    if (ok) {
-      extra[ty * C.MAP_W + tx] = Path.structureCost(C, C.towerStats(buildKind, 1).hp);
-      const withGhost = routes(extra, core);
-      preview.paths = withGhost.paths;
-      preview.len = withGhost.len;
-    } else {
-      preview.paths = base.paths;
-      preview.len = base.len;
-    }
-  }
-
-  function drawPreview() {
-    if (!preview.paths.length) return;
-    const s = scale();
+  function drawLeash(a, color, dashed) {
+    const [x, y] = toScreen(a.x, a.y);
     ctx.save();
-    ctx.lineWidth = Math.max(1.5, s * 0.08);
-    ctx.lineJoin = 'round';
-    ctx.setLineDash([s * 0.25, s * 0.2]);
-    ctx.lineDashOffset = -performance.now() / 40; // marching ants toward the core
-    ctx.strokeStyle = 'rgba(255, 120, 90, 0.55)';
-    for (const path of preview.paths) {
-      ctx.beginPath();
-      for (let i = 0; i < path.length; i++) {
-        const [x, y] = toScreen((path[i] % C.MAP_W) + 0.5, Math.floor(path[i] / C.MAP_W) + 0.5);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-    }
-    ctx.setLineDash([]);
-    ctx.fillStyle = 'rgba(255, 120, 90, 0.8)';
-    for (const path of preview.paths) {
-      const [x, y] = toScreen((path[0] % C.MAP_W) + 0.5, Math.floor(path[0] / C.MAP_W) + 0.5);
-      ctx.beginPath();
-      ctx.arc(x, y, Math.max(3, s * 0.15), 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // Route length readout next to the cursor.
-    const delta = preview.len - preview.baseLen;
-    const text = `route ${preview.len.toFixed(1)} tiles${Math.abs(delta) >= 0.05 ? ` (${delta > 0 ? '+' : ''}${delta.toFixed(1)})` : ''}`;
-    ctx.font = 'bold 12px system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
-    ctx.strokeText(text, mouse.sx + 16, mouse.sy + 24);
-    ctx.fillStyle = delta > 0.05 ? '#7ee787' : '#e6edf3';
-    ctx.fillText(text, mouse.sx + 16, mouse.sy + 24);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    if (dashed) ctx.setLineDash([6, 5]);
+    ctx.beginPath();
+    ctx.arc(x, y, a.leash * scale(), 0, Math.PI * 2);
+    ctx.stroke();
     ctx.restore();
+  }
+
+  function clearSelection() {
+    selectedId = null;
+    selUnits.clear();
   }
 
   function drawOverlay() {
@@ -730,7 +720,42 @@
       const t = towers.get(selectedId);
       if (t && t.owner) {
         const st = C.towerStats(t.kind, t.level);
-        drawRange(t.x + 0.5, t.y + 0.5, st.range || st.claim, 'rgba(255,255,255,A)');
+        drawRange(t.x + 0.5, t.y + 0.5, st.claim, 'rgba(255,255,255,A)');
+        if (t.owner === myId) drawLeash(anchorPos(myId, t.id), 'rgba(126,231,135,0.8)', true);
+      }
+    }
+    // Selected units: their range, the patch they guard, and a tether back to it.
+    const shownAnchors = new Set();
+    for (const id of selUnits) {
+      const u = units.get(id);
+      if (!u) continue;
+      const a = anchorPos(u.owner, u.anchor);
+      if (!a) continue;
+      if (selUnits.size <= 4) drawRange(u.rx, u.ry, C.towerStats(u.kind, u.level).range, 'rgba(255,255,255,A)');
+      if (!shownAnchors.has(u.anchor)) {
+        shownAnchors.add(u.anchor);
+        drawLeash(a, 'rgba(126,231,135,0.85)', true);
+      }
+      const [ux, uy] = toScreen(u.rx, u.ry);
+      const [ax, ay] = toScreen(a.x, a.y);
+      ctx.strokeStyle = 'rgba(126,231,135,0.35)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(ux, uy);
+      ctx.lineTo(ax, ay);
+      ctx.stroke();
+    }
+    // Hovering an anchor with units selected: preview the reassignment.
+    if (selUnits.size && !buildKind && myId) {
+      const hover = anchorAt(mouse.wx, mouse.wy);
+      if (hover !== null) {
+        const a = anchorPos(myId, hover);
+        drawLeash(a, 'rgba(255,213,79,0.95)', false);
+        ctx.font = 'bold 12px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ffd54f';
+        const [hx, hy] = toScreen(a.x, a.y - a.leash);
+        ctx.fillText(`Click to guard this ${hover ? 'beacon' : 'core'}`, hx, hy - 6);
       }
     }
     if (buildKind && myId) {
@@ -738,10 +763,30 @@
       const ty = Math.floor(mouse.wy);
       const ok = canBuildAt(tx, ty);
       const st = C.towerStats(buildKind, 1);
+      const isUnit = !!C.UNITS[buildKind];
+      if (isUnit) {
+        // Show every patch a unit can guard, and which one this unit would join.
+        const anchors = myAnchors();
+        let near = anchors[0];
+        for (const a of anchors) {
+          if (Math.hypot(a.x - tx - 0.5, a.y - ty - 0.5) < Math.hypot(near.x - tx - 0.5, near.y - ty - 0.5)) near = a;
+        }
+        for (const a of anchors) drawLeash(a, a === near && ok ? 'rgba(126,231,135,0.9)' : 'rgba(255,255,255,0.25)', true);
+        if (ok) {
+          const [gx, gy] = toScreen(tx + 0.5, ty + 0.5);
+          const [ax, ay] = toScreen(near.x, near.y);
+          ctx.strokeStyle = 'rgba(126,231,135,0.6)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(gx, gy);
+          ctx.lineTo(ax, ay);
+          ctx.stroke();
+        }
+      }
       drawRange(tx + 0.5, ty + 0.5, st.range || st.claim, ok ? 'rgba(88,166,255,A)' : 'rgba(248,81,73,A)');
       const [x, y] = toScreen(tx + 0.5, ty + 0.5);
       ctx.globalAlpha = 0.6;
-      drawTowerShape(buildKind, x, y, s * 0.45, ok ? C.TOWERS[buildKind].color : '#f85149');
+      drawTowerShape(buildKind, x, y, s * (isUnit ? 0.36 : 0.45), ok ? C.defOf(buildKind).color : '#f85149');
       ctx.globalAlpha = 1;
       ctx.strokeStyle = ok ? '#58a6ff' : '#f85149';
       ctx.lineWidth = 2;
@@ -759,6 +804,10 @@
     for (const c of creeps.values()) {
       mctx.fillStyle = colorOf(c.owner, 60);
       mctx.fillRect(c.x * sx - 0.5, c.y * sy - 0.5, 1.5, 1.5);
+    }
+    for (const u of units.values()) {
+      mctx.fillStyle = u.owner === myId ? '#ffffff' : colorOf(u.owner, 75);
+      mctx.fillRect(u.x * sx - 0.75, u.y * sy - 0.75, 1.5, 1.5);
     }
     for (const p of players.values()) {
       mctx.fillStyle = p.id === myId ? '#fff' : colorOf(p.id, 60);
@@ -783,8 +832,8 @@
   // ------------------------------------------------------------------ HUD
   function buildBar() {
     const bb = $('build-buttons');
-    for (const kind of KIND_KEYS) {
-      const d = C.TOWERS[kind];
+    for (const kind of BUY_KEYS) {
+      const d = C.defOf(kind);
       const b = document.createElement('button');
       b.dataset.kind = kind;
       b.title = `${d.name} - ${d.desc}`;
@@ -807,7 +856,7 @@
 
   function toggleBuild(kind) {
     buildKind = buildKind === kind ? null : kind;
-    selectedId = null;
+    clearSelection();
   }
 
   function sendCreeps(kind, count) {
@@ -826,6 +875,7 @@
     $('stats').innerHTML = `
       <div class="gold">${gold}g</div>
       <div>+${C.income(p.territory).toFixed(1)}g/s <span class="muted">· land ${p.territory}</span></div>
+      <div class="muted">Units ${[...units.values()].filter((u) => u.owner === myId).length}/${C.MAX_UNITS}</div>
       <div class="muted">Rank #${rank} of ${players.size} · kills ${p.kills}</div>
       <div class="muted">Next neutral wave in ${Math.max(0, me.nextWave)}s</div>
       <div>Core ${p.hp}/${p.maxHp}</div>
@@ -836,7 +886,7 @@
 
     for (const b of document.querySelectorAll('#build-buttons button')) {
       b.classList.toggle('active', b.dataset.kind === buildKind);
-      b.classList.toggle('poor', gold < C.TOWERS[b.dataset.kind].cost);
+      b.classList.toggle('poor', gold < C.defOf(b.dataset.kind).cost);
     }
     for (const b of document.querySelectorAll('#send-buttons button')) {
       b.classList.toggle('poor', gold < C.CREEPS[b.dataset.creep].cost);
@@ -851,8 +901,55 @@
     updateSelectionPanel(gold);
   }
 
+  function guardName(anchorId) {
+    if (!anchorId) return 'your core';
+    const t = towers.get(anchorId);
+    return t ? `beacon (lvl ${t.level})` : 'your core';
+  }
+
+  function updateUnitPanel(panel, gold) {
+    const list = [...selUnits].map((id) => units.get(id)).filter(Boolean);
+    const key = `u:${list.map((u) => `${u.id}.${u.level}`).join(',')}`;
+    if (panel.dataset.key !== key) {
+      panel.dataset.key = key;
+      if (list.length === 1) {
+        const u = list[0];
+        const d = C.UNITS[u.kind];
+        const st = C.towerStats(u.kind, u.level);
+        const maxed = u.level >= C.MAX_LEVEL;
+        panel.innerHTML = `<h4>${d.name} · level ${u.level}</h4><div id="sel-info"></div>
+          <div>Damage ${st.damage.toFixed(0)} · Range ${st.range} · ${st.rate}/s</div>
+          <div>Guarding <b id="sel-guard"></b></div>
+          <div class="muted">Click one of your beacons or your core to reassign</div>
+          <div class="btns">
+            <button id="sel-up">${maxed ? 'Max level' : `Upgrade (${C.upgradeCost(u.kind, u.level)}g) [U]`}</button>
+            <button id="sel-sell">Sell +${C.sellValue(u.kind, u.level)}g</button>
+          </div>`;
+        $('sel-up').onclick = () => sendMsg({ t: 'upgrade', id: u.id });
+        $('sel-sell').onclick = () => sendMsg({ t: 'sell', id: u.id });
+      } else {
+        const counts = {};
+        for (const u of list) counts[C.UNITS[u.kind].name] = (counts[C.UNITS[u.kind].name] || 0) + 1;
+        panel.innerHTML = `<h4>${list.length} units selected</h4>
+          <div>${Object.entries(counts).map(([n, c]) => `${c}× ${n}`).join(' · ')}</div>
+          <div class="muted">Click one of your beacons or your core to send them all to guard it</div>`;
+      }
+    }
+    if (list.length === 1) {
+      const u = list[0];
+      $('sel-info').textContent = `HP ${u.hp}/${u.maxHp}`;
+      $('sel-guard').textContent = guardName(u.anchor);
+      $('sel-up').disabled = u.level >= C.MAX_LEVEL || gold < C.upgradeCost(u.kind, u.level);
+    }
+  }
+
   function updateSelectionPanel(gold) {
     const panel = $('selection');
+    if (selUnits.size) {
+      panel.classList.remove('hidden');
+      updateUnitPanel(panel, gold);
+      return;
+    }
     const t = selectedId && towers.get(selectedId);
     if (!t) {
       panel.classList.add('hidden');
@@ -877,6 +974,8 @@
         const lines = [];
         if (st.damage) lines.push(`Damage ${st.damage.toFixed(0)} · Range ${st.range} · ${st.rate}/s`);
         if (st.claim) lines.push(`Claims radius ${st.claim}`);
+        const guards = [...units.values()].filter((u) => u.owner === myId && u.anchor === t.id).length;
+        lines.push(`Guarded by ${guards} unit${guards === 1 ? '' : 's'}`);
         const maxed = t.level >= C.MAX_LEVEL;
         panel.innerHTML = `<h4>${d.name} · level ${t.level}</h4><div id="sel-info"></div><div>${lines.join('<br>')}</div>
           <div class="btns">
@@ -973,16 +1072,50 @@
       return;
     }
 
+    // Units selected + clicked one of my anchors: send them to guard it.
+    if (selUnits.size) {
+      const anchor = anchorAt(mouse.wx, mouse.wy);
+      if (anchor !== null) {
+        sendMsg({ t: 'assign', ids: [...selUnits], anchor });
+        toast(`${selUnits.size} unit${selUnits.size === 1 ? '' : 's'} now guarding ${guardName(anchor)}`);
+        return;
+      }
+    }
+
+    // Clicked one of my units?
+    let hit = null;
+    let hitD = 0.6;
+    for (const u of units.values()) {
+      if (u.owner !== myId) continue;
+      const d = Math.hypot(u.rx - mouse.wx, u.ry - mouse.wy);
+      if (d < hitD) {
+        hitD = d;
+        hit = u;
+      }
+    }
+    if (hit) {
+      selectedId = null;
+      if (e.shiftKey) {
+        if (selUnits.has(hit.id)) selUnits.delete(hit.id);
+        else selUnits.add(hit.id);
+      } else {
+        selUnits.clear();
+        selUnits.add(hit.id);
+      }
+      return;
+    }
+
     // Clicked a core?
     for (const p of players.values()) {
       if (Math.hypot(p.x + 0.5 - mouse.wx, p.y + 0.5 - mouse.wy) < 1.1) {
         if (p.id !== myId) attackTarget = attackTarget === p.id ? null : p.id;
-        selectedId = null;
+        clearSelection();
         return;
       }
     }
     const tid = grid.get(`${tx},${ty}`);
     const t = tid && towers.get(tid);
+    clearSelection();
     selectedId = t && (t.owner === myId || !t.owner) ? t.id : null;
   });
 
@@ -991,7 +1124,7 @@
       mouse.rightDown = false;
       if (!mouse.dragged) {
         buildKind = null;
-        selectedId = null;
+        clearSelection();
       }
     }
   });
@@ -1028,15 +1161,22 @@
     const k = e.key.toLowerCase();
     keys.add(k);
     if (!myId) return;
-    for (const kind of KIND_KEYS) {
-      if (e.key === C.TOWERS[kind].key) toggleBuild(kind);
+    for (const kind of BUY_KEYS) {
+      if (e.key === C.defOf(kind).key) toggleBuild(kind);
     }
     for (const kind of CREEP_KEYS) {
       if (k === C.CREEPS[kind].key.toLowerCase()) sendCreeps(kind, e.shiftKey ? 5 : 1);
     }
     if (k === 'escape') {
       buildKind = null;
+      clearSelection();
+    }
+    if (k === 'q') {
+      // Select all my units.
+      buildKind = null;
       selectedId = null;
+      selUnits.clear();
+      for (const u of units.values()) if (u.owner === myId) selUnits.add(u.id);
     }
     if (k === ' ') {
       e.preventDefault();
@@ -1046,10 +1186,11 @@
         cam.y = p.y + 0.5;
       }
     }
-    if (k === 'u' && selectedId) sendMsg({ t: 'upgrade', id: selectedId });
-    if ((k === 'delete' || k === 'backspace') && selectedId) {
-      const t = towers.get(selectedId);
-      if (t && t.owner === myId) sendMsg({ t: 'sell', id: selectedId });
+    const single = selUnits.size === 1 ? [...selUnits][0] : selectedId;
+    if (k === 'u' && single) sendMsg({ t: 'upgrade', id: single });
+    if ((k === 'delete' || k === 'backspace') && single) {
+      const t = towers.get(single) || units.get(single);
+      if (t && t.owner === myId) sendMsg({ t: 'sell', id: single });
     }
   });
   window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
@@ -1081,11 +1222,10 @@
     updateMouseWorld();
 
     drawBackground();
-    updatePreview(now);
-    drawPreview();
     drawOverlay();
     drawTowers();
     drawCreeps(dt);
+    drawUnits(dt);
     drawCores();
     drawEffects(now);
     if (myId) drawMinimap();
