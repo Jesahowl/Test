@@ -87,6 +87,9 @@ test/              node:test suite (game logic + server smoke test)
 - **Pathfinding.** One flow field per targeted core (Dijkstra from the core outward, binary heap, 8-way moves).
   Every creep heading to that core just steps downhill, so cost doesn't grow with creep count. Fields
   are rebuilt lazily when structures change, at most every 0.25s per target.
+- **Territory rendering.** Region outlines are traced along tile edges, smoothed (moving average + Chaikin
+  corner cutting) and drawn as vector paths, so borders are curved and crisp at any zoom. The tile grid
+  still decides ownership; the build-cursor highlight shows exactly which tile you're on.
 - **Bots** expand, build defences (facing their nearest rival), upgrade, and periodically launch attacks.
 
 ## Ideas for next steps

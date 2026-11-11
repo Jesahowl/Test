@@ -206,7 +206,8 @@ class Game {
           const y = s.y + dy;
           if (!this.inBounds(x, y)) continue;
           const d = Math.hypot(dx, dy);
-          if (d > s.r + 0.01) continue;
+          // +0.25 rounds the claim off (no lone one-tile spikes at the four compass points).
+          if (d > s.r + 0.25) continue;
           // Cores hold their nearby land more strongly than beacons.
           const eff = d * s.weight;
           const k = this.idx(x, y);
