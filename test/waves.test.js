@@ -188,3 +188,38 @@ test('the standing order rolls on to the next structure when its tower is taken'
   g.damageTower(t2, 1e9, a.id);
   assert.deepStrictEqual(a.order, { type: 'attack', target: { k: 'c', id: b.id } });
 });
+
+test('send a percentage: that share of troops, keeping the mix, nearest first', () => {
+  const { g, a, b } = duel(13);
+  const t = outpost(g, b);
+  const near = troops(g, a, 'archer', 4, t.x - 6, t.y + 0.5);
+  const far = troops(g, a, 'archer', 4, a.core.x + 0.5, a.core.y + 1);
+  const guards = troops(g, a, 'guard', 4, a.core.x + 0.5, a.core.y - 1);
+  const standing = { ...a.order };
+  assert.strictEqual(g.order(a.id, null, { k: 't', id: t.id }, 0.5), null);
+  assert.strictEqual(g.lastOrderCount, 6);
+  const sent = [...near, ...far, ...guards].filter((u) => u.attack);
+  assert.strictEqual(sent.length, 6);
+  assert.strictEqual(sent.filter((u) => u.kind === 'guard').length, 2, 'half the guards');
+  assert.strictEqual(sent.filter((u) => u.kind === 'archer').length, 4, 'half the archers');
+  assert.ok(near.every((u) => u.attack), 'the archers nearest the target go first');
+  assert.deepStrictEqual(a.order, standing, 'new waves keep their standing order');
+
+  // Sending another 50% picks from the troops that aren't already on it.
+  assert.strictEqual(g.order(a.id, null, { k: 't', id: t.id }, 0.5), null);
+  assert.strictEqual([...near, ...far, ...guards].filter((u) => u.attack).length, 12);
+
+  // 25% home again, and 100% still means everyone plus new waves.
+  assert.strictEqual(g.order(a.id, null, { k: 'c', id: a.id }, 0.25), null);
+  assert.strictEqual([...near, ...far, ...guards].filter((u) => !u.attack).length, 3);
+  assert.strictEqual(g.order(a.id, null, { k: 't', id: t.id }, 1), null);
+  assert.strictEqual(a.order.type, 'attack');
+});
+
+test('a percentage of a tiny army still sends at least one troop', () => {
+  const { g, a, b } = duel(14);
+  troops(g, a, 'archer', 1, a.core.x + 0.5, a.core.y + 1);
+  assert.strictEqual(g.order(a.id, null, { k: 'c', id: b.id }, 0.25), null);
+  assert.strictEqual(g.lastOrderCount, 1);
+  assert.match(g.order(a.id, null, { k: 'c', id: b.id }, 0.25), /No troops available/);
+});

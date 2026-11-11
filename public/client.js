@@ -45,6 +45,11 @@
   let selectedId = null; // selected tower / ruin
   const selUnits = new Set(); // selected troop ids
   let centerOnMe = false;
+  const SHARES = [0.25, 0.5, 0.75, 1];
+  const SHARE_KEYS = ['z', 'x', 'c', 'v'];
+  let sendShare = 1; // share of troops a right-click order sends (when no troops are selected)
+  try { sendShare = SHARES.includes(Number(localStorage.getItem('ts-share'))) ? Number(localStorage.getItem('ts-share')) : 1; } catch { /* ignore */ }
+  let pendingOrder = null; // toast text waiting for the server to say how many troops moved
   const keys = new Set();
   const mouse = { sx: 0, sy: 0, wx: 0, wy: 0, rightDown: false, dragged: false, lastX: 0, lastY: 0 };
 
@@ -98,6 +103,11 @@
         break;
       case 'err':
         toast(msg.m);
+        pendingOrder = null;
+        break;
+      case 'ordered':
+        if (pendingOrder) toast(pendingOrder(msg.n), true);
+        pendingOrder = null;
         break;
     }
   }
@@ -955,7 +965,7 @@
       if (tg) {
         const pos = targetPos(`${tg.k}:${tg.id}`);
         const mine = isMineTarget(tg);
-        const who = selUnits.size ? `${selUnits.size} selected` : 'all troops';
+        const who = selUnits.size ? `${selUnits.size} selected` : sendShare < 1 ? `${Math.round(sendShare * 100)}% of troops` : 'all troops';
         const verb = mine ? 'defend' : tg.k === 'j' ? 'clear' : 'attack';
         const [hx, hy] = toScreen(pos.x, pos.y);
         label(`Right-click: ${who} ${verb}`, hx, hy - s * 2.4, 12, mine ? '#7ee787' : '#ffa198');
@@ -1075,7 +1085,24 @@
       card.querySelector('.up').onclick = () => sendMsg({ t: 'army', op: 'level', kind });
       army.appendChild(card);
     }
-    $('defend-home').onclick = () => orderAt({ k: 'c', id: myId });
+    $('defend-home').onclick = () => orderAt({ k: 'c', id: myId }, 1);
+
+    const share = $('share');
+    SHARES.forEach((sh, i) => {
+      const b = document.createElement('button');
+      b.dataset.share = sh;
+      b.textContent = `${Math.round(sh * 100)}%`;
+      b.title = sh < 1
+        ? `Right-click orders send ${Math.round(sh * 100)}% of your troops; new waves keep their orders [${SHARE_KEYS[i].toUpperCase()}]`
+        : `Right-click orders send every troop, and new waves follow too [${SHARE_KEYS[i].toUpperCase()}]`;
+      b.onclick = () => setShare(sh);
+      share.appendChild(b);
+    });
+  }
+
+  function setShare(sh) {
+    sendShare = sh;
+    try { localStorage.setItem('ts-share', String(sh)); } catch { /* ignore */ }
   }
 
   function toggleBuild(kind) {
@@ -1083,13 +1110,19 @@
     clearSelection();
   }
 
-  function orderAt(tg) {
+  // Order troops at a target: the selected troops, else `share` of all troops (100% = everyone + new waves).
+  function orderAt(tg, share = sendShare) {
     if (!myId || !tg) return;
     const ids = selUnits.size ? [...selUnits] : null;
-    sendMsg({ t: 'order', ids, target: tg });
-    const mine = isMineTarget(tg);
-    const who = ids ? `${ids.length} troop${ids.length === 1 ? '' : 's'}` : 'All troops and new waves';
-    toast(`${who}: ${mine ? 'defending' : tg.k === 'j' ? 'clearing' : 'attacking'} ${targetName(`${tg.k}:${tg.id}`)}`, true);
+    sendMsg({ t: 'order', ids, target: tg, share: ids ? 1 : share });
+    const verb = isMineTarget(tg) ? 'defending' : tg.k === 'j' ? 'clearing' : 'attacking';
+    const what = targetName(`${tg.k}:${tg.id}`);
+    pendingOrder = (n) => {
+      const troopsTxt = `${n} troop${n === 1 ? '' : 's'}`;
+      if (ids) return `${troopsTxt}: ${verb} ${what}`;
+      if (share < 1) return `${troopsTxt} (${Math.round(share * 100)}%): ${verb} ${what}`;
+      return `All ${troopsTxt} and new waves: ${verb} ${what}`;
+    };
   }
 
   let hudTimer = 0;
@@ -1120,6 +1153,9 @@
     $('leaderboard').innerHTML = '<h3>Leaderboard · land</h3>' + sorted.slice(0, 10).map((q, i) =>
       `<div class="row${q.id === myId ? ' me' : ''}"><span>${i + 1}.</span><span class="dot" style="background:${colorOf(q.id, 55)}"></span><span class="n">${escapeHtml(q.name)}${q.isBot ? ' 🤖' : ''}</span><span>${q.territory}</span></div>`).join('');
 
+    for (const b of document.querySelectorAll('#share button')) {
+      b.classList.toggle('active', Number(b.dataset.share) === sendShare);
+    }
     const tb = $('tower-button');
     tb.classList.toggle('active', buildKind === 'tower');
     tb.classList.toggle('poor', gold < C.TOWERS.tower.cost);
@@ -1386,7 +1422,9 @@
       selUnits.clear();
       for (const u of units.values()) if (u.owner === myId) selUnits.add(u.id);
     }
-    if (k === 'h') orderAt({ k: 'c', id: myId });
+    if (k === 'h') orderAt({ k: 'c', id: myId }, 1);
+    const si = SHARE_KEYS.indexOf(k);
+    if (si >= 0) setShare(SHARES[si]);
     if (k === ' ') {
       e.preventDefault();
       const p = players.get(myId);

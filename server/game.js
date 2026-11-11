@@ -437,25 +437,78 @@ class Game {
     return 'Invalid target';
   }
 
-  // Order troops. With ids, only those troops; without, every troop you have plus all future waves.
-  order(pid, ids, target) {
+  // Order troops.
+  // - ids: exactly those troops.
+  // - otherwise, share (0..1] of your troops: 1 (default) means every troop plus all future waves;
+  //   less than 1 sends that fraction of your current troops (keeping the army's mix of types, nearest
+  //   to the target first) and leaves the standing order for new waves alone.
+  // Returns null on success or an error string; this.lastOrderCount says how many troops moved.
+  order(pid, ids, target, share = 1) {
+    this.lastOrderCount = 0;
     const p = this.players.get(pid);
     if (!p || !p.alive) return 'Invalid order';
     const ord = this.makeOrder(pid, target);
     if (typeof ord === 'string') return ord;
-    if (!Array.isArray(ids) || !ids.length) {
+    let chosen;
+    if (Array.isArray(ids) && ids.length) {
+      chosen = ids.slice(0, C.MAX_UNITS).map((id) => this.units.get(id)).filter((u) => u && u.owner === pid);
+      if (!chosen.length) return 'No troops selected';
+    } else if (!(share < 1)) {
       p.order = ord;
-      for (const u of this.units.values()) if (u.owner === pid) this.applyOrder(u, ord);
-      return null;
+      chosen = [...this.units.values()].filter((u) => u.owner === pid);
+    } else {
+      chosen = this.pickShare(pid, ord, Math.max(0.01, share));
+      if (!chosen.length) return 'No troops available to send';
     }
-    let n = 0;
-    for (const id of ids.slice(0, C.MAX_UNITS)) {
-      const u = this.units.get(id);
-      if (!u || u.owner !== pid) continue;
-      this.applyOrder(u, ord);
-      n++;
+    for (const u of chosen) this.applyOrder(u, ord);
+    this.lastOrderCount = chosen.length;
+    return null;
+  }
+
+  // Pick `share` of pid's troops for an order: troops not already following it, each type taken in
+  // proportion so the group keeps the army's mix, nearest to the order's destination first.
+  pickShare(pid, ord, share) {
+    const mine = [...this.units.values()].filter((u) => u.owner === pid);
+    const want = Math.max(1, Math.round(mine.length * share));
+    const dest = this.orderPos(pid, ord);
+    const already = (u) => (ord.type === 'defend'
+      ? !u.attack && u.anchor === ord.anchor
+      : u.attack && u.attack.k === ord.target.k && u.attack.id === ord.target.id);
+    const free = mine.filter((u) => !already(u));
+    const byDist = (u1, u2) => dist(u1.x, u1.y, dest.x, dest.y) - dist(u2.x, u2.y, dest.x, dest.y);
+    const picked = [];
+    const leftovers = [];
+    for (const kind of UNIT_KEYS) {
+      const ofKind = free.filter((u) => u.kind === kind).sort(byDist);
+      const take = Math.round(ofKind.length * share);
+      picked.push(...ofKind.slice(0, take));
+      leftovers.push(...ofKind.slice(take));
     }
-    return n ? null : 'No troops selected';
+    // Rounding per type can miss the total: top up (or trim) with the nearest remaining troops.
+    leftovers.sort(byDist);
+    while (picked.length < want && leftovers.length) picked.push(leftovers.shift());
+    picked.sort(byDist);
+    return picked.slice(0, want);
+  }
+
+  // Where an order sends troops.
+  orderPos(pid, ord) {
+    if (ord.type === 'defend') {
+      const t = ord.anchor && this.towers.get(ord.anchor);
+      const p = this.players.get(pid);
+      return t ? { x: t.x + 0.5, y: t.y + 0.5 } : { x: p.core.x + 0.5, y: p.core.y + 0.5 };
+    }
+    const { k, id } = ord.target;
+    if (k === 't') {
+      const t = this.towers.get(id);
+      return { x: t.x + 0.5, y: t.y + 0.5 };
+    }
+    if (k === 'c') {
+      const p = this.players.get(id);
+      return { x: p.core.x + 0.5, y: p.core.y + 0.5 };
+    }
+    const camp = this.camps[id];
+    return { x: camp.x + 0.5, y: camp.y + 0.5 };
   }
 
   applyOrder(u, ord) {

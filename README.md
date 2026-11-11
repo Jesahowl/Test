@@ -22,7 +22,7 @@ AI bots fill the server up to 6 players, so it's playable alone too.
 | | |
 |---|---|
 | **Waves** | Your core sends out a free wave every 20s, built from your **army plan**. Start: 2 Guards + 2 Archers. Spend gold to add troops to every wave, or level a troop type up. |
-| **Orders** | **Right-click** an enemy tower or core to send all your troops (and every future wave) to attack it. Right-click one of your own towers or your core to defend there. Select specific troops first (click, Shift-click, `Q` = all) to command only them. `H` brings everyone home. |
+| **Orders** | **Right-click** an enemy tower or core to attack it, or one of your own towers or your core to defend there. Who goes depends on the **Send %** setting: at 100% every troop goes and every future wave follows; at 25/50/75% only that share of your current troops goes (nearest to the target first, keeping your army's mix of types) and new waves keep their orders, so you can split your forces. Select specific troops first (click, Shift-click, `Q` = all) to command exactly those. `H` brings everyone home. |
 | **The push** | Troops march across the map (pathfinding around structures), fight whatever they meet, then hit the target. When a tower falls, the push rolls on to that player's next tower, then their core. |
 | **Towers** | Claim land and shoot enemy troops. Your core shoots too. Place them on your land, or **leapfrog** up to 3 tiles past your border onto unclaimed ground. |
 | **Taking towers** | Destroy them (they become ruins, +120g), or **capture** them: troops standing near an enemy tower with none of its owner's troops around flip it in ~10s (faster with more troops). Captured towers keep their land, and the attackers stay on as their garrison. |
@@ -51,6 +51,7 @@ A wave holds at most 12 troops.
 | Key | Action |
 |---|---|
 | Right-click target | Order troops: attack an enemy tower/core/camp, or defend your own tower/core |
+| `Z` `X` `C` `V` | Send % for orders: 25% / 50% / 75% / 100% (also buttons in the bar) |
 | Left-click | Select a troop (`Shift` adds), or a tower / ruin |
 | `Q` / `Esc` | Select all troops / clear selection |
 | `H` | All troops and new waves defend your core |
@@ -74,7 +75,7 @@ public/                canvas client (index.html, client.js, style.css)
 test/                  node:test suite (game rules, waves & orders, jungle, pathfinding, server smoke test)
 ```
 
-- **Authoritative server.** Clients only send intents (`build`, `upgrade`, `sell`, `capture`, `army`, `order`). The server validates everything.
+- **Authoritative server.** Clients only send intents (`build`, `upgrade`, `sell`, `capture`, `army`, `order` with optional `ids` or `share`). The server validates everything.
 - **State sync.** Shared state (players, towers, troops, monsters, camps, effects) is broadcast every tick as compact arrays; each player
   also gets their own gold, army plan, standing order and wave timer. Territory is sent run-length encoded, only when it changes.
 - **Territory.** Each tile belongs to whichever core/tower claims it most strongly; cores hold nearby land twice as strongly.
