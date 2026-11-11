@@ -178,29 +178,69 @@ class Game {
     return !!p && this.time - p.spawnTime < C.SPAWN_SHIELD;
   }
 
+  // A core has fallen (or its player left). The player is out of the game. If another player
+  // destroyed it, they take the spoils: all the victim's gold (plus a bounty), every troop the
+  // victim still had standing, and a new tower where the core stood, garrisoned by those troops.
+  // The victim's other towers become ruins.
   killPlayer(p, killerId, leftGame = false) {
     if (!p.alive) return;
     p.alive = false;
-    this.grid[this.idx(p.core.x, p.core.y)] = 0;
+    const coreIdx = this.idx(p.core.x, p.core.y);
+    this.grid[coreIdx] = 0;
     this.fx.push({ k: 'coreDown', x: p.core.x + 0.5, y: p.core.y + 0.5 });
+
+    const killer = killerId ? this.players.get(killerId) : null;
+    const conquered = !!(killer && killer.alive && killer.id !== p.id);
 
     for (const t of this.towers.values()) {
       if (t.owner === p.id) this.ruinTower(t, p.name);
     }
+
+    // The core site becomes a tower for the conqueror.
+    let site = null;
+    if (conquered) {
+      const id = this.nextId++;
+      const stats = C.towerStats('tower', 1);
+      site = {
+        isTower: true, id, kind: 'tower', x: p.core.x, y: p.core.y, owner: killer.id, level: 1,
+        hp: stats.hp, maxHp: stats.hp, cd: 0, ruin: false, cap: 0, capBy: 0,
+      };
+      this.towers.set(id, site);
+      this.grid[coreIdx] = id;
+      this.fx.push({ k: 'capture', x: p.core.x + 0.5, y: p.core.y + 0.5, o: killer.id });
+    }
+
+    // Surviving troops defect to the conqueror and garrison the new tower; otherwise they vanish.
+    let troopsTaken = 0;
     for (const u of this.units.values()) {
-      if (u.owner === p.id) this.units.delete(u.id);
+      if (u.owner !== p.id) continue;
+      if (!conquered) {
+        this.units.delete(u.id);
+        continue;
+      }
+      u.owner = killer.id;
+      u.attack = null;
+      u.anchor = site.id;
+      u.path = [];
+      u.dest = null;
+      u.repathAt = 0;
+      u.idleUntil = 0;
+      troopsTaken++;
     }
     for (const c of this.creeps.values()) {
       if (c.angry === p.id) c.angry = 0;
     }
 
-    const killer = killerId ? this.players.get(killerId) : null;
-    let bounty = 0;
-    if (killer && killer.alive && killer.id !== p.id) {
-      bounty = C.CORE_KILL_BOUNTY + Math.floor(p.gold * 0.5);
+    let goldTaken = 0;
+    if (conquered) {
+      goldTaken = Math.floor(p.gold);
+      const bounty = C.CORE_KILL_BOUNTY + goldTaken;
       killer.gold += bounty;
       killer.coresDestroyed++;
-      this.pushFeed(`${killer.name} destroyed ${p.name}'s core (+${bounty}g)`);
+      p.gold = 0;
+      // Waves that were pushing on this player head home instead of wandering off.
+      if (killer.order.type === 'attack' && !this.orderValid(killer.id, killer.order)) killer.order = { type: 'defend', anchor: 0 };
+      this.pushFeed(`${killer.name} destroyed ${p.name}'s core: +${bounty}g, ${troopsTaken} troop${troopsTaken === 1 ? '' : 's'} and a new tower`);
     } else if (leftGame) {
       this.pushFeed(`${p.name} left - their base lies in ruins`);
     } else {
@@ -213,7 +253,10 @@ class Game {
 
     if (this.onDeath && !leftGame) {
       this.onDeath(p, {
-        killer: killer && killer.id !== p.id ? killer.name : null,
+        killer: conquered ? killer.name : null,
+        killerId: conquered ? killer.id : 0,
+        troopsTaken,
+        goldTaken,
         survived: Math.round(this.time - p.spawnTime),
         peakTerritory: p.peakTerritory,
         kills: p.kills,

@@ -30,7 +30,7 @@ AI bots fill the server up to 6 players, so it's playable alone too.
 | **Home turf** | Troops on their own land heal 2% HP/s and deal +30% damage, so defending is cheaper than attacking. |
 | **Army size** | You can have 1 troop alive per 10 tiles of land (min 10, max 30). Waves stop spawning at the cap. |
 | **Spawn protection** | For 90s after spawning your core and towers can't be damaged. |
-| **Losing** | If your core falls you're out (the killer gets 250g + half your gold). Your towers become ruins. Respawn instantly with a new base. |
+| **Losing** | If your core falls you're **out of the game**. Whoever destroyed it takes the spoils: **all your gold** (plus a 250g bounty), **every troop you still had standing**, and your core site, which becomes **one of their towers** garrisoned by your former troops. Your other towers become ruins. You can then **spectate** (follow any player with Tab, free camera with WASD, Space to follow again) or **start a new game** with a fresh base. If you disconnect instead, your troops vanish and nobody gets anything. |
 
 ### Troops
 

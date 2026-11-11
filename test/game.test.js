@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const C = require('../shared/config');
-const { Game, seeded, duel, edgeTile, outpost, run } = require('./helpers');
+const { Game, seeded, duel, edgeTile, outpost, troops, run } = require('./helpers');
 
 test('a new player gets a core, gold, land and a starting army plan', () => {
   const g = new Game({ botTarget: 0, rand: seeded(1) });
@@ -69,24 +69,54 @@ test('spawn protection keeps a new core and its towers from taking damage', () =
   assert.strictEqual(b.core.hp, C.CORE_HP - 500);
 });
 
-test('a destroyed core pays a bounty and leaves ruins that can be bought back', () => {
+test('the conqueror takes the gold, the surviving troops and the core site', () => {
   const { g, a, b } = duel(6);
   const t = outpost(g, b);
+  const loyal = troops(g, b, 'archer', 3, b.core.x + 0.5, b.core.y + 2);
   let death = null;
   g.onDeath = (p, info) => { death = { p, info }; };
+  b.gold = 777;
   const gold = a.gold;
+  const site = { x: b.core.x, y: b.core.y };
   g.damageCore(b, C.CORE_HP, a.id);
+
   assert.ok(death);
   assert.strictEqual(death.info.killer, 'A');
-  assert.ok(!g.players.has(b.id));
-  assert.ok(a.gold >= gold + C.CORE_KILL_BOUNTY);
-  assert.ok(t.ruin);
-  assert.strictEqual(t.owner, 0);
-  assert.match(g.capture(a.id, t.id), /inside your land/);
-  // Pretend A's land grows over the ruin.
+  assert.strictEqual(death.info.killerId, a.id);
+  assert.strictEqual(death.info.troopsTaken, 3);
+  assert.strictEqual(death.info.goldTaken, 777);
+  assert.ok(!g.players.has(b.id), 'the victim is out of the game');
+  assert.strictEqual(a.gold, gold + C.CORE_KILL_BOUNTY + 777, 'all of their gold plus the bounty');
+
+  const newTower = g.towers.get(g.grid[g.idx(site.x, site.y)]);
+  assert.ok(newTower, 'the core site is now a tower');
+  assert.strictEqual(newTower.owner, a.id);
+  assert.ok(!newTower.ruin);
+  for (const u of loyal) {
+    assert.ok(g.units.has(u.id));
+    assert.strictEqual(u.owner, a.id, 'troops defect');
+    assert.strictEqual(u.anchor, newTower.id, 'and garrison the new tower');
+    assert.strictEqual(u.attack, null);
+  }
+  assert.ok(t.ruin, 'other towers become ruins');
+  g.update(0.05);
+  assert.strictEqual(g.terr[g.idx(site.x, site.y)], a.id, 'the site claims land for the conqueror');
+
+  // Ruins can still be bought back once your land reaches them.
   g.terr[g.idx(t.x, t.y)] = a.id;
   assert.strictEqual(g.capture(a.id, t.id), null);
   assert.strictEqual(t.owner, a.id);
+});
+
+test('a player who leaves takes nothing with them and leaves no spoils', () => {
+  const { g, a, b } = duel(16);
+  troops(g, b, 'archer', 2, b.core.x + 0.5, b.core.y + 2);
+  const gold = a.gold;
+  g.removePlayer(b.id);
+  assert.ok(!g.players.has(b.id));
+  assert.strictEqual([...g.units.values()].filter((u) => u.owner === b.id).length, 0);
+  assert.strictEqual(g.grid[g.idx(b.core.x, b.core.y)], 0);
+  assert.strictEqual(a.gold, gold);
 });
 
 test('territory RLE encodes the full map', () => {

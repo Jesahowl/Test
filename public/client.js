@@ -45,6 +45,10 @@
   let selectedId = null; // selected tower / ruin
   const selUnits = new Set(); // selected troop ids
   let centerOnMe = false;
+  // Spectating after your core falls: free camera that can follow a player.
+  let spectating = false;
+  let specTarget = 0;
+  let specFollow = true;
   const SHARES = [0.25, 0.5, 0.75, 1];
   const SHARE_KEYS = ['z', 'x', 'c', 'v'];
   let sendShare = 1; // share of troops a right-click order sends (when no troops are selected)
@@ -88,6 +92,7 @@
         applyState(msg);
         break;
       case 'welcome':
+        stopSpectating();
         myId = msg.id;
         centerOnMe = true;
         clearSelection();
@@ -1127,6 +1132,20 @@
 
   let hudTimer = 0;
   function updateHud() {
+    if (spectating) {
+      updateBoards();
+      const t = players.get(specTarget);
+      const bar = $('spec-bar');
+      const key = `${t ? t.name : ''}:${specFollow}`;
+      if (bar.dataset.key !== key) {
+        bar.dataset.key = key;
+        bar.innerHTML = `<span>👁 Spectating${t ? ` <b>${escapeHtml(t.name)}</b>` : ''}${t && !specFollow ? ' <span class="muted">(free camera)</span>' : ''}</span>
+          <span class="muted">Tab: next player · Space: follow · WASD: move</span>
+          <button id="spec-new">New game</button>`;
+        $('spec-new').onclick = () => sendMsg({ t: 'join', name: lastName });
+      }
+      return;
+    }
     if (!myId) return;
     const p = players.get(myId);
     if (!p || !me) return;
@@ -1150,9 +1169,24 @@
       ? `<span class="atk">⚔ Waves attacking ${escapeHtml(targetName(o.target))}</span>`
       : `<span class="def">🛡 Waves defending ${escapeHtml(targetName(o.target))}</span>`;
 
-    $('leaderboard').innerHTML = '<h3>Leaderboard · land</h3>' + sorted.slice(0, 10).map((q, i) =>
-      `<div class="row${q.id === myId ? ' me' : ''}"><span>${i + 1}.</span><span class="dot" style="background:${colorOf(q.id, 55)}"></span><span class="n">${escapeHtml(q.name)}${q.isBot ? ' 🤖' : ''}</span><span>${q.territory}</span></div>`).join('');
+    updateBoards();
+    updateTowerAndArmy(gold, perWave);
+    updateSelectionPanel(gold);
+  }
 
+  // Leaderboard and kill feed (shown to players and spectators).
+  function updateBoards() {
+    const sorted = [...players.values()].sort((a, b) => b.territory - a.territory);
+    const focus = spectating ? specTarget : myId;
+    $('leaderboard').innerHTML = '<h3>Leaderboard · land</h3>' + sorted.slice(0, 10).map((q, i) =>
+      `<div class="row${q.id === focus ? ' me' : ''}"><span>${i + 1}.</span><span class="dot" style="background:${colorOf(q.id, 55)}"></span><span class="n">${escapeHtml(q.name)}${q.isBot ? ' 🤖' : ''}</span><span>${q.territory}</span></div>`).join('');
+    const now = performance.now();
+    $('feed').innerHTML = feed.filter((f) => now - f.born < 9000).map((f) =>
+      `<div style="opacity:${Math.min(1, (9000 - (now - f.born)) / 1500)}">${escapeHtml(f.text)}</div>`).join('');
+  }
+
+  // Tower button, send-% buttons and the army panel.
+  function updateTowerAndArmy(gold, perWave) {
     for (const b of document.querySelectorAll('#share button')) {
       b.classList.toggle('active', Number(b.dataset.share) === sendShare);
     }
@@ -1177,12 +1211,6 @@
       up.disabled = lvl >= C.MAX_LEVEL || gold < upCost;
       card.querySelector('.rem').disabled = n === 0 || perWave <= 1;
     }
-
-    const now = performance.now();
-    $('feed').innerHTML = feed.filter((f) => now - f.born < 9000).map((f) =>
-      `<div style="opacity:${Math.min(1, (9000 - (now - f.born)) / 1500)}">${escapeHtml(f.text)}</div>`).join('');
-
-    updateSelectionPanel(gold);
   }
 
   function updateSelectionPanel(gold) {
@@ -1280,7 +1308,11 @@
   function showDeath(info) {
     $('hud').classList.add('hidden');
     $('death').classList.remove('hidden');
+    lastKiller = info.killerId || 0;
     $('death-by').textContent = info.killer ? `Destroyed by ${info.killer}` : 'Your core fell';
+    $('death-spoils').textContent = info.killer
+      ? `${info.killer} took your ${info.goldTaken}g, ${info.troopsTaken} surviving troop${info.troopsTaken === 1 ? '' : 's'}, and turned your core into a tower.`
+      : '';
     const mins = Math.floor(info.survived / 60);
     const secs = String(info.survived % 60).padStart(2, '0');
     $('death-stats').innerHTML = `
@@ -1288,6 +1320,33 @@
       <div><b>${info.peakTerritory}</b><span>peak land</span></div>
       <div><b>${info.kills}</b><span>kills</span></div>
       <div><b>${info.towersDestroyed || 0} / ${info.coresDestroyed}</b><span>towers / cores destroyed</span></div>`;
+  }
+
+  let lastKiller = 0;
+
+  function startSpectating() {
+    spectating = true;
+    clearSelection();
+    buildKind = null;
+    specTarget = players.has(lastKiller) ? lastKiller : 0;
+    specFollow = true;
+    $('death').classList.add('hidden');
+    $('hud').classList.remove('hidden');
+    $('hud').classList.add('spectating');
+  }
+
+  function stopSpectating() {
+    spectating = false;
+    $('hud').classList.remove('spectating');
+  }
+
+  // Follow the next player on the leaderboard (Tab).
+  function specNext() {
+    const list = [...players.values()].sort((a, b) => b.territory - a.territory);
+    if (!list.length) return;
+    const i = list.findIndex((p) => p.id === specTarget);
+    specTarget = list[(i + 1) % list.length].id;
+    specFollow = true;
   }
 
   function join() {
@@ -1392,6 +1451,7 @@
   }, { passive: false });
 
   function moveCamFromMinimap(e) {
+    specFollow = false;
     const rect = mini.getBoundingClientRect();
     cam.x = ((e.clientX - rect.left) / rect.width) * C.MAP_W;
     cam.y = ((e.clientY - rect.top) / rect.height) * C.MAP_H;
@@ -1410,6 +1470,17 @@
     }
     const k = e.key.toLowerCase();
     keys.add(k);
+    if (spectating) {
+      if (k === 'tab') {
+        e.preventDefault();
+        specNext();
+      }
+      if (k === ' ') {
+        e.preventDefault();
+        specFollow = true;
+      }
+      return;
+    }
     if (!myId) return;
     if (k === 'b') toggleBuild('tower');
     if (k === 'escape') {
@@ -1469,6 +1540,7 @@
 
   $('play').onclick = join;
   $('again').onclick = () => sendMsg({ t: 'join', name: lastName });
+  $('spectate').onclick = startSpectating;
 
   // ------------------------------------------------------------------ main loop
   let last = performance.now();
@@ -1477,11 +1549,22 @@
     last = now;
 
     const pan = (18 / cam.zoom) * dt;
-    if (myId) {
+    if (myId || spectating) {
+      const before = cam.x + cam.y;
       if (keys.has('w') || keys.has('arrowup')) cam.y -= pan;
       if (keys.has('s') || keys.has('arrowdown')) cam.y += pan;
       if (keys.has('a') || keys.has('arrowleft')) cam.x -= pan;
       if (keys.has('d') || keys.has('arrowright')) cam.x += pan;
+      if (spectating) {
+        if (cam.x + cam.y !== before || (mouse.rightDown && mouse.dragged)) specFollow = false;
+        if (!players.has(specTarget)) specNext(); // followed player is gone: pick the leader
+        const t = players.get(specTarget);
+        if (t && specFollow) {
+          const k = Math.min(1, dt * 4);
+          cam.x += (t.x + 0.5 - cam.x) * k;
+          cam.y += (t.y + 0.5 - cam.y) * k;
+        }
+      }
     } else {
       // Slow drift across the live map behind the menu.
       cam.x = C.MAP_W / 2 + Math.cos(now / 20000) * C.MAP_W * 0.25;
@@ -1499,7 +1582,7 @@
     drawUnits(dt);
     drawCores();
     drawEffects(now);
-    if (myId) drawMinimap();
+    if (myId || spectating) drawMinimap();
 
     hudTimer -= dt;
     if (hudTimer <= 0) {

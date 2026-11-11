@@ -111,3 +111,18 @@ canvas#game { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
 #bar #share { display: flex; gap: 3px; flex: 1; }
 #bar #share button { position: static; width: auto; height: 24px; flex: 1; font-size: 11px; padding: 0; border-width: 1px; flex-direction: row; }
 #bar #share button.active { border-color: #ffd54f; background: #2d2a12; color: #ffd54f; }
+
+/* ---- death screen & spectating */
+#death-spoils { color: #ffa198; font-size: 14px; margin: 4px 0 0; }
+.card .out { color: #8b949e; font-size: 13px; margin: 10px 0 0; }
+.card .choices { display: flex; gap: 10px; }
+.card .choices button { flex: 1; }
+.card button.secondary { background: #30363d; }
+.card button.secondary:hover { background: #3d444d; }
+#spec-bar { display: none; top: 10px; left: 50%; transform: translateX(-50%); font-size: 13px; align-items: center; gap: 12px; white-space: nowrap; }
+#spec-bar .muted { color: #8b949e; }
+#spec-bar button { padding: 5px 12px; border: none; border-radius: 6px; background: #238636; color: #fff; font-weight: 700; cursor: pointer; }
+#spec-bar button:hover { background: #2ea043; }
+#hud.spectating #spec-bar { display: flex; }
+#hud.spectating #stats, #hud.spectating #bar, #hud.spectating #order-info, #hud.spectating #selection,
+#hud.spectating #toast, #hud.spectating #help, #hud.spectating #help-toggle { display: none; }
