@@ -156,3 +156,19 @@ test('long simulation with bots stays consistent', () => {
   assert.doesNotThrow(() => JSON.stringify(g.snapshot()));
   console.log(`  8 min sim: ${g.players.size} players, ${g.towers.size} towers, ${g.units.size} troops, ${deaths} deaths`);
 });
+
+test('gold is tracked by source and kills pay bounties', () => {
+  const { g, a, b } = duel(17);
+  const [enemy] = troops(g, b, 'archer', 1, 50, 50, 2);
+  const before = { ...a.earned };
+  g.damageUnit(enemy, 1e9, a.id);
+  assert.strictEqual(a.earned.troops - before.troops, C.TROOP_BOUNTY + C.TROOP_BOUNTY_PER_LEVEL);
+  const fx = g.fx.find((f) => f.k === 'gold' && f.o === a.id);
+  assert.ok(fx, 'a gold popup for the killer');
+  assert.strictEqual(fx.n, C.TROOP_BOUNTY + C.TROOP_BOUNTY_PER_LEVEL);
+  const income = a.earned.income;
+  g.update(1);
+  assert.ok(a.earned.income > income, 'land income is tracked too');
+  // Fighting pays far more than a few seconds of land.
+  assert.ok(C.TOWER_BOUNTY > C.income(a.territory) * 30);
+});

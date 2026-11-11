@@ -129,6 +129,7 @@ class Game {
       kills: 0,
       coresDestroyed: 0,
       towersDestroyed: 0,
+      earned: { income: 0, troops: 0, camps: 0, towers: 0, cores: 0 }, // gold by source
       spawnTime: this.time,
       army,
       levels,
@@ -235,7 +236,7 @@ class Game {
     if (conquered) {
       goldTaken = Math.floor(p.gold);
       const bounty = C.CORE_KILL_BOUNTY + goldTaken;
-      killer.gold += bounty;
+      this.award(killer, bounty, 'cores', p.core.x + 0.5, p.core.y + 0.5);
       killer.coresDestroyed++;
       p.gold = 0;
       // Waves that were pushing on this player head home instead of wandering off.
@@ -262,8 +263,16 @@ class Game {
         kills: p.kills,
         coresDestroyed: p.coresDestroyed,
         towersDestroyed: p.towersDestroyed,
+        earned: Object.fromEntries(Object.entries(p.earned).map(([k, v]) => [k, Math.round(v)])),
       });
     }
+  }
+
+  // Give a player gold, remembering where it came from. Kill rewards pop up where they were earned.
+  award(p, amount, source, x, y) {
+    p.gold += amount;
+    p.earned[source] += amount;
+    if (x !== undefined) this.fx.push({ k: 'gold', x: round2(x), y: round2(y), n: Math.round(amount), o: p.id });
   }
 
   pushFeed(text) {
@@ -734,7 +743,7 @@ class Game {
     this.fx.push({ k: 'boom', x: round2(u.x), y: round2(u.y), r: 0.5 });
     const p = this.players.get(byPid);
     if (p && p.alive && byPid !== u.owner) {
-      p.gold += C.TROOP_BOUNTY + 3 * (u.level - 1);
+      this.award(p, C.TROOP_BOUNTY + C.TROOP_BOUNTY_PER_LEVEL * (u.level - 1), 'troops', u.x, u.y);
       p.kills++;
     }
   }
@@ -751,7 +760,7 @@ class Game {
       c.dead = true;
       const p = this.players.get(byPid);
       if (p && p.alive) {
-        p.gold += C.CREEPS[c.kind].bounty;
+        this.award(p, C.CREEPS[c.kind].bounty, 'camps', c.x, c.y);
         p.kills++;
       }
     }
@@ -774,7 +783,7 @@ class Game {
     this.fx.push({ k: 'boom', x: t.x + 0.5, y: t.y + 0.5, r: 1.2 });
     if (p && p.alive && p.id !== t.owner) {
       // The player who brings a tower down claims it, patched up to a fraction of its health.
-      p.gold += C.TOWER_BOUNTY;
+      this.award(p, C.TOWER_BOUNTY, 'towers', t.x + 0.5, t.y + 0.5);
       p.towersDestroyed++;
       t.hp = Math.max(1, Math.round(t.maxHp * C.TOWER_CLAIM_HP));
       this.transferTower(t, p.id, 'destroyed');
@@ -1464,8 +1473,21 @@ class Game {
       this.order(p.id, null, anchor);
       return;
     }
+    // Keep a small squad farming the nearest jungle camp (it pays well).
+    let home = troops.filter((u) => !u.attack);
+    const jungling = troops.some((u) => u.attack && u.attack.k === 'j');
+    if (!jungling && home.length >= 4) {
+      const camp = this.camps
+        .filter((c) => c.alive && dist(c.x, c.y, p.core.x, p.core.y) < 26)
+        .sort((c1, c2) => dist(c1.x, c1.y, p.core.x, p.core.y) - dist(c2.x, c2.y, p.core.x, p.core.y))[0];
+      if (camp) {
+        const squad = home.slice(0, Math.max(3, Math.round(home.length * C.BOT_JUNGLE_SHARE)));
+        this.order(p.id, squad.map((u) => u.id), { k: 'j', id: camp.id });
+        home = home.filter((u) => !squad.includes(u));
+      }
+    }
+
     // Attack with a strike force, keeping new waves at home to defend.
-    const home = troops.filter((u) => !u.attack);
     const enemy = this.nearestEnemy(p.core.x, p.core.y, p.id, true);
     if (enemy && home.length >= Math.max(8, C.unitCap(p.territory) * 0.5)) {
       let target = { k: 'c', id: enemy.id };
@@ -1483,12 +1505,6 @@ class Game {
       p.order = { type: 'defend', anchor: 0 };
       return;
     }
-    const camp = this.camps
-      .filter((c) => c.alive && dist(c.x, c.y, p.core.x, p.core.y) < 22)
-      .sort((c1, c2) => dist(c1.x, c1.y, p.core.x, p.core.y) - dist(c2.x, c2.y, p.core.x, p.core.y))[0];
-    if (camp && home.length >= 5) {
-      this.order(p.id, home.slice(0, Math.ceil(home.length / 2)).map((u) => u.id), { k: 'j', id: camp.id });
-    }
   }
 
   // ---------------------------------------------------------------- tick
@@ -1497,7 +1513,7 @@ class Game {
     this.time += dt;
 
     for (const p of this.players.values()) {
-      if (p.alive) p.gold += C.income(p.territory) * dt;
+      if (p.alive) this.award(p, C.income(p.territory) * dt, 'income');
     }
 
     this.updateWaves();

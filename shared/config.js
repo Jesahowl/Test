@@ -8,9 +8,11 @@
     MAP_W: 110,
     MAP_H: 110,
 
+    // Economy: land pays a trickle; most gold comes from fighting (troop kills, jungle camps,
+    // taking towers and cores - see the *_BOUNTY settings and each monster's bounty).
     START_GOLD: 200,
-    BASE_INCOME: 3, // gold per second
-    INCOME_PER_TILE: 0.03, // extra gold per second for each owned tile
+    BASE_INCOME: 1.5, // gold per second
+    INCOME_PER_TILE: 0.015, // extra gold per second for each owned tile
 
     // The core: your base. It shoots like a tower; if it falls, you're out.
     CORE_HP: 2500,
@@ -18,7 +20,7 @@
     CORE_DAMAGE: 60,
     CORE_RATE: 1,
     CORE_CLAIM: 6, // territory radius around a core
-    CORE_KILL_BOUNTY: 250, // plus half the victim's gold
+    CORE_KILL_BOUNTY: 250, // plus all of the victim's gold
     SPAWN_MIN_DIST: 24,
     SPAWN_SHIELD: 90, // seconds after spawning during which your core and towers can't be damaged
 
@@ -38,8 +40,9 @@
     MIN_UNITS: 10,
     MAX_UNITS: 30,
     TROOP_AGGRO: 2, // troops on the march engage enemies within (attack range + this)
-    TROOP_BOUNTY: 6, // gold for killing an enemy troop, +3 per troop level
-    TOWER_BOUNTY: 120, // gold for destroying an enemy tower
+    TROOP_BOUNTY: 14, // gold for killing an enemy troop
+    TROOP_BOUNTY_PER_LEVEL: 6, // extra gold per level of the troop killed
+    TOWER_BOUNTY: 250, // gold for destroying an enemy tower
     TOWER_CLAIM_HP: 0.7, // a destroyed tower becomes the destroyer's, at this fraction of max HP
     // Home turf: troops standing on their own land heal and hit harder, so defending is cheaper
     // than attacking and a big army can't simply steamroll a smaller one at its door.
@@ -59,6 +62,7 @@
 
     BOT_TARGET: 6, // bots fill the server up to this many players
     BOT_STRIKE_SHARE: 0.6, // share of its home troops a bot sends on each attack
+    BOT_JUNGLE_SHARE: 0.35, // share of its home troops a bot sends to farm jungle camps
     MAX_PLAYERS: 24,
 
     // Troop types. `cost` is the base price of adding one to every wave (see armyAddCost).
@@ -106,15 +110,15 @@
 
     // ---- Jungle: neutral camps that sit still, fight back when attacked, and pay out when cleared.
     CAMP_COUNT: 12,
-    CAMP_RESPAWN: 60,
+    CAMP_RESPAWN: 45,
     CAMP_LEASH: 4.5, // monsters chase attackers this far from their camp, then reset
     CAMP_TYPES: {
       small: { raptor: 3 },
       big: { golem: 1, raptor: 2 },
     },
     CREEPS: {
-      raptor: { name: 'Raptor', hp: 170, speed: 2.6, damage: 10, bounty: 15, size: 0.3 },
-      golem: { name: 'Golem', hp: 900, speed: 1.6, damage: 30, bounty: 80, size: 0.5 },
+      raptor: { name: 'Raptor', hp: 170, speed: 2.6, damage: 10, bounty: 55, size: 0.3 },
+      golem: { name: 'Golem', hp: 900, speed: 1.6, damage: 30, bounty: 250, size: 0.5 },
     },
     CREEP_REACH: 0.9,
   };

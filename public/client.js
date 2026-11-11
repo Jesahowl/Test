@@ -684,7 +684,7 @@
 
   function drawEffects(now) {
     const s = scale();
-    effects = effects.filter((f) => now - f.born < (f.k === 'coreDown' ? 1200 : f.k === 'wave' ? 700 : 450));
+    effects = effects.filter((f) => now - f.born < (f.k === 'coreDown' ? 1200 : f.k === 'wave' ? 700 : f.k === 'gold' ? 1100 : 450));
     for (const f of effects) {
       const age = (now - f.born) / 1000;
       switch (f.k) {
@@ -773,6 +773,17 @@
           ctx.beginPath();
           ctx.arc(x, y, s * 0.35, 0, Math.PI * 2);
           ctx.fill();
+          break;
+        }
+        case 'gold': {
+          // Bounty popup - only for the player who earned it.
+          if (f.o !== myId) break;
+          const [x, y] = toScreen(f.x, f.y);
+          const p = age / 1.1;
+          const big = f.n >= 100;
+          ctx.globalAlpha = Math.max(0, 1 - p * p);
+          label(`+${f.n}g`, x, y - s * (0.6 + p * 1.4), Math.round((big ? 18 : 13) + (big ? 4 : 0) * (1 - p)), '#ffd54f');
+          ctx.globalAlpha = 1;
           break;
         }
         case 'wave': {
@@ -1320,6 +1331,10 @@
       <div><b>${info.peakTerritory}</b><span>peak land</span></div>
       <div><b>${info.kills}</b><span>kills</span></div>
       <div><b>${info.towersDestroyed || 0} / ${info.coresDestroyed}</b><span>towers / cores destroyed</span></div>`;
+    const e = info.earned || {};
+    const total = Object.values(e).reduce((a, b) => a + b, 0);
+    $('death-gold').innerHTML = total ? `<b>${total}g earned</b>: ${[['troops', 'troop kills'], ['camps', 'jungle'], ['towers', 'towers'], ['cores', 'cores'], ['income', 'land']]
+      .filter(([k]) => e[k]).map(([k, name]) => `${name} ${Math.round((100 * e[k]) / total)}%`).join(' · ')}` : '';
   }
 
   let lastKiller = 0;

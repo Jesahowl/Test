@@ -126,3 +126,5 @@ canvas#game { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
 #hud.spectating #spec-bar { display: flex; }
 #hud.spectating #stats, #hud.spectating #bar, #hud.spectating #order-info, #hud.spectating #selection,
 #hud.spectating #toast, #hud.spectating #help, #hud.spectating #help-toggle { display: none; }
+#death-gold { color: #8b949e; font-size: 12px; margin: 8px 0 0; }
+#death-gold b { color: #ffd54f; }

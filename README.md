@@ -26,7 +26,8 @@ AI bots fill the server up to 6 players, so it's playable alone too.
 | **The push** | Troops march across the map (pathfinding around structures), fight whatever they meet, then hit the target. When a tower falls, the push rolls on to that player's next tower, then their core. |
 | **Towers** | Claim land and shoot enemy troops. Your core shoots too. Place them on your land, or **leapfrog** up to 3 tiles past your border onto unclaimed ground. |
 | **Taking towers** | **Destroy** one and it becomes yours (+120g): it keeps its level, comes back at 70% health, and its land switches to you. Or **capture** it without a fight: troops standing near an enemy tower with none of its owner's troops around flip it in ~10s (faster with more troops). Either way the attackers stay on as its garrison and your waves push on to that player's next tower. Towers only become ruins when their owner's core falls. |
-| **Jungle** | Neutral camps sit around the map. They're passive until attacked, then the whole camp fights back. Clear one for gold (raptors 15g, golems 80g); it respawns after 60s. Right-click a camp to send troops. |
+| **Gold** | Land only pays a trickle (1.5g/s + a little per tile). **Most gold comes from fighting**: 14g per enemy troop killed (+6 per troop level), 55g per raptor and 250g per golem in the jungle, 250g for a tower, and 250g plus all of their gold for a core. Each bounty pops up where you earned it, and the death screen breaks down where your gold came from. |
+| **Jungle** | Neutral camps sit around the map. They're passive until attacked, then the whole camp fights back. Clearing them pays well; they respawn after 45s. Right-click a camp to send troops. |
 | **Home turf** | Troops on their own land heal 2% HP/s and deal +30% damage, so defending is cheaper than attacking. |
 | **Army size** | You can have 1 troop alive per 10 tiles of land (min 10, max 30). Waves stop spawning at the cap. |
 | **Spawn protection** | For 90s after spawning your core and towers can't be damaged. |
@@ -61,7 +62,8 @@ A wave holds at most 12 troops.
 | `WASD` / arrows / right-drag | Pan. Wheel zooms. `Space` jumps home. Click the minimap to jump. `?` toggles help. |
 
 All numbers live in [`shared/config.js`](shared/config.js), shared by server and client, so tuning happens in one place.
-The most useful knobs: `WAVE_INTERVAL`, `START_ARMY`, `ARMY_MAX_PER_WAVE`, `LAND_PER_UNIT`, troop and tower stats,
+The most useful knobs: economy (`BASE_INCOME`, `INCOME_PER_TILE`, `TROOP_BOUNTY`, `TOWER_BOUNTY`, `CORE_KILL_BOUNTY`,
+monster `bounty`, `CAMP_RESPAWN`), `WAVE_INTERVAL`, `START_ARMY`, `ARMY_MAX_PER_WAVE`, `LAND_PER_UNIT`, troop and tower stats,
 `CORE_DAMAGE`, `HOME_DAMAGE_BONUS`, `SPAWN_SHIELD`, `CAPTURE_TIME`, `TOWER_CLAIM_HP`, `CAMP_*`.
 
 ## Architecture
@@ -83,7 +85,7 @@ test/                  node:test suite (game rules, waves & orders, jungle, path
 - **Troop movement.** Attacking troops follow a flow field toward their target (Dijkstra from the goal tile, one per
   active goal, rebuilt lazily when structures change). Defending troops plan short BFS paths within their own land and
   patrol around the structure they guard.
-- **Bots** leapfrog towers outward, grow and level their army plan, defend when invaded, farm jungle camps, and launch
+- **Bots** leapfrog towers outward, grow and level their army plan, defend when invaded, keep a squad farming jungle camps, and launch
   strike forces (60% of their home troops) at the nearest rival's towers while new waves stay home.
 
 ## Ideas for next steps
