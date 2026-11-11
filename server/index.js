@@ -21,6 +21,7 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 function createServer({ port = 3000, botTarget } = {}) {
   const clients = new Set();
   let game = null;
+  let tick = 0;
   let resetAt = 0; // when the scoreboard of a finished round gives way to the next round (ms)
 
   const server = http.createServer((req, res) => {
@@ -153,6 +154,7 @@ function createServer({ port = 3000, botTarget } = {}) {
       }
     }
     const snap = game.snapshot();
+    snap.tk = ++tick; // server tick counter: lets clients time snapshots exactly
     const body = JSON.stringify(snap).slice(1, -1);
     let terrJson = null;
     for (const client of clients) {
@@ -188,8 +190,13 @@ function createServer({ port = 3000, botTarget } = {}) {
 
 if (require.main === module) {
   const port = Number(process.env.PORT) || 3000;
-  createServer({ port });
+  const srv = createServer({ port });
   console.log(`Territory Siege running at http://localhost:${port}`);
+  // Hosts like Render send SIGTERM before restarting or redeploying: close cleanly.
+  process.on('SIGTERM', () => {
+    srv.close();
+    process.exit(0);
+  });
 }
 
 module.exports = { createServer };

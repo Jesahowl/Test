@@ -172,3 +172,20 @@ test('gold is tracked by source and kills pay bounties', () => {
   // Fighting pays far more than a few seconds of land.
   assert.ok(C.TOWER_BOUNTY > C.income(a.territory) * 30);
 });
+
+test('troops and towers level up to 5, with steep late levels', () => {
+  const C = require('../shared/config');
+  const { duel, outpost } = require('./helpers');
+  const { g, a } = duel(12);
+  const t = outpost(g, a);
+  for (let l = 1; l < 5; l++) assert.strictEqual(g.upgrade(a.id, t.id), null);
+  assert.strictEqual(t.level, 5);
+  assert.ok(g.upgrade(a.id, t.id));
+  for (let l = 1; l < 5; l++) assert.strictEqual(g.armyLevel(a.id, 'archer'), null);
+  assert.strictEqual(a.levels.archer, 5);
+  // Levels past 3 cost far more than the early ones, and land reach stops growing at level 3.
+  assert.ok(C.upgradeCost('tower', 4) > 3 * C.upgradeCost('tower', 3));
+  assert.ok(C.armyLevelCost('archer', 3) > 3 * C.armyLevelCost('archer', 2));
+  assert.strictEqual(C.towerStats('tower', 5).claim, C.towerStats('tower', 3).claim);
+  assert.strictEqual(C.sellValue('tower', 2), Math.floor((C.TOWERS.tower.cost + C.upgradeCost('tower', 1)) * C.SELL_REFUND));
+});

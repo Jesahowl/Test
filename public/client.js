@@ -142,9 +142,49 @@
     }
   }
 
+  // ---- smooth movement
+  // Troops and monsters are drawn INTERP_DELAY ms in the past, interpolating between the last
+  // server snapshots, so they glide at a steady speed however unevenly packets arrive.
+  const TICK_MS = 1000 / C.TICK_RATE;
+  const INTERP_DELAY = TICK_MS * 2;
+  let snapClock = 0; // server time (ms) of the latest snapshot, from its tick number
+  let clockOffset = null; // estimated server time minus local time
+  function stampSnapshot(now, tk) {
+    snapClock = tk * TICK_MS;
+    const target = snapClock - now;
+    // follow arrival times loosely (absorbs network jitter); resync after a stall or a burst
+    if (clockOffset === null || Math.abs(target - clockOffset) > 250) clockOffset = target;
+    else clockOffset += (target - clockOffset) * 0.05;
+  }
+  const renderTime = () => performance.now() + (clockOffset || 0) - INTERP_DELAY;
+  function addSample(old, x, y) {
+    const smp = old && old.samples ? old.samples : [];
+    if (smp.length >= 6) smp.shift();
+    smp.push({ t: snapClock, x, y });
+    return smp;
+  }
+  // Render position at time rt: interpolate between snapshots, extrapolate briefly past the last one.
+  function interpPos(o, rt) {
+    const smp = o.samples;
+    if (!smp || !smp.length) return [o.x, o.y];
+    if (rt <= smp[0].t || smp.length === 1) return [smp[0].x, smp[0].y];
+    for (let i = smp.length - 1; i > 0; i--) {
+      const a = smp[i - 1];
+      const b = smp[i];
+      if (rt >= a.t) {
+        const span = b.t - a.t || 1;
+        // past the newest snapshot: keep moving for up to one tick, then hold
+        const f = Math.min((rt - a.t) / span, i === smp.length - 1 ? 1 + TICK_MS / span : 1);
+        return [a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f];
+      }
+    }
+    return [smp[0].x, smp[0].y];
+  }
+
   function applyState(msg) {
     me = msg.me;
     const now = performance.now();
+    stampSnapshot(now, msg.tk);
     if (msg.round) round = msg.round;
 
     if (msg.terr) {
@@ -192,7 +232,7 @@
     for (const a of msg.units) {
       const old = units.get(a[0]);
       nu.set(a[0], { id: a[0], kind: UNIT_KEYS[a[1]], x: a[2], y: a[3], owner: a[4], level: a[5], hp: a[6], maxHp: a[7], anchor: a[8], attack: a[9],
-        rx: old ? old.rx : a[2], ry: old ? old.ry : a[3] });
+        rx: old ? old.rx : a[2], ry: old ? old.ry : a[3], samples: addSample(old, a[2], a[3]) });
     }
     units = nu;
     for (const id of selUnits) if (!units.has(id)) selUnits.delete(id);
@@ -200,13 +240,14 @@
     const nc = new Map();
     for (const a of msg.creeps) {
       const old = creeps.get(a[0]);
-      nc.set(a[0], { id: a[0], kind: CREEP_KEYS[a[1]], x: a[2], y: a[3], angry: a[4], hp: a[5], camp: a[6], rx: old ? old.rx : a[2], ry: old ? old.ry : a[3] });
+      nc.set(a[0], { id: a[0], kind: CREEP_KEYS[a[1]], x: a[2], y: a[3], angry: a[4], hp: a[5], camp: a[6], rx: old ? old.rx : a[2], ry: old ? old.ry : a[3],
+        samples: addSample(old, a[2], a[3]) });
     }
     creeps = nc;
     camps = msg.camps.map((a) => ({ id: a[0], x: a[1], y: a[2], type: CAMP_KEYS[a[3]], alive: !!a[4], respawn: a[5] }));
 
     for (const f of msg.fx) {
-      effects.push({ ...f, born: now });
+      effects.push({ ...f, born: now + INTERP_DELAY }); // shown in step with the delayed troops
       if (f.k === 'tshot') {
         // turn the shooting tower's turret (or flare the core) toward its target
         const tx = Math.floor(f.x1);
@@ -663,6 +704,37 @@
     ctx.ellipse(r * 0.12, r * 0.3, r * 1.2, r * 0.95, 0, 0, Math.PI * 2);
     ctx.fill();
 
+    // level 5: radiant aura in the owner's colour
+    if (lvl >= 5) {
+      const pulse = 0.5 + 0.5 * Math.sin(now / 400 + t.id);
+      const ag = ctx.createRadialGradient(0, 0, r * 0.6, 0, 0, r * 2);
+      ag.addColorStop(0, colorOf(t.owner, 65, 0.45 + 0.2 * pulse));
+      ag.addColorStop(1, colorOf(t.owner, 65, 0));
+      ctx.fillStyle = ag;
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // level 4+: a ring of gold runes turning around the base
+    if (lvl >= 4) {
+      ctx.save();
+      ctx.rotate(-now / 2500);
+      ctx.strokeStyle = 'rgba(255, 213, 79, 0.75)';
+      ctx.lineWidth = Math.max(1.5, s * 0.05);
+      ctx.setLineDash([s * 0.12, s * 0.1]);
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 1.45, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      for (let i = 0; i < 3; i++) {
+        const a = (Math.PI * 2 * i) / 3;
+        ctx.fillStyle = '#ffd54f';
+        polygon(Math.cos(a) * r * 1.45, Math.sin(a) * r * 1.45, Math.max(2, s * 0.08), 4, a);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
     // buttresses (level 2+)
     if (lvl >= 2) {
       ctx.fillStyle = '#6e6658';
@@ -742,7 +814,7 @@
     ctx.stroke();
     ctx.rotate(-(t.aim ?? -Math.PI / 2));
     // gem in the owner's colour, flaring on each shot
-    ctx.fillStyle = recoil > 0 ? '#fff' : colorOf(t.owner, 62);
+    ctx.fillStyle = recoil > 0 || lvl >= 5 ? '#fff' : colorOf(t.owner, 62);
     polygon(0, 0, r * (0.17 + 0.06 * recoil), 4, 0);
     ctx.fill();
     if (lvl >= 3) {
@@ -885,10 +957,9 @@
   function drawUnits(dt) {
     const s = scale();
     const r = s * 0.34;
-    const k = Math.min(1, dt * 14);
+    const rt = renderTime();
     for (const u of units.values()) {
-      u.rx += (u.x - u.rx) * k;
-      u.ry += (u.y - u.ry) * k;
+      [u.rx, u.ry] = interpPos(u, rt);
       const [x, y] = toScreen(u.rx, u.ry);
       if (!onScreen(x, y, s)) continue;
       if (selUnits.has(u.id)) {
@@ -921,7 +992,7 @@
       for (let i = 0; i < u.level; i++) {
         ctx.fillStyle = '#ffd54f';
         ctx.beginPath();
-        ctx.arc(x - r * 0.5 + i * r * 0.5, y + r * 1.1, Math.max(1.5, s * 0.055), 0, Math.PI * 2);
+        ctx.arc(x + (i - (u.level - 1) / 2) * r * 0.42, y + r * 1.1, Math.max(1.5, s * 0.055), 0, Math.PI * 2);
         ctx.fill();
       }
       hpBar(x, y - r * 1.6, s * 0.7, u.hp / u.maxHp);
@@ -969,10 +1040,9 @@
 
   function drawCreeps(dt) {
     const s = scale();
-    const k = Math.min(1, dt * 14);
+    const rt = renderTime();
     for (const c of creeps.values()) {
-      c.rx += (c.x - c.rx) * k;
-      c.ry += (c.y - c.ry) * k;
+      [c.rx, c.ry] = interpPos(c, rt);
       const [x, y] = toScreen(c.rx, c.ry);
       if (!onScreen(x, y, s)) continue;
       const r = C.CREEPS[c.kind].size * s;
@@ -1132,6 +1202,7 @@
     effects = effects.filter((f) => now - f.born < (f.k === 'coreDown' || f.k === 'buff' ? 1200 : f.k === 'wave' ? 700 : f.k === 'gold' ? 1100 : 450));
     for (const f of effects) {
       const age = (now - f.born) / 1000;
+      if (age < 0) continue; // not due yet (effects are delayed to match troop interpolation)
       switch (f.k) {
         case 'bolt':
         case 'tshot': {

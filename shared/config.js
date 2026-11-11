@@ -24,7 +24,10 @@
     SPAWN_MIN_DIST: 24,
     SPAWN_SHIELD: 90, // seconds after spawning during which your core and towers can't be damaged
 
-    MAX_LEVEL: 3,
+    MAX_LEVEL: 5, // troops and towers
+    // Levels past this one get steeply more expensive (x LATE_LEVEL_PRICE per extra level) - a late-game gold sink.
+    CHEAP_LEVELS: 2,
+    LATE_LEVEL_PRICE: 2.5,
     SELL_REFUND: 0.6,
     RUIN_CAPTURE_COST: 25,
     RUIN_LIFETIME: 120, // seconds before an unclaimed ruin crumbles
@@ -151,19 +154,26 @@
       damage: d.damage ? d.damage * (1 + 0.6 * l) : 0,
       heal: d.heal ? d.heal * (1 + 0.6 * l) : 0,
       range: d.range ? d.range + 0.5 * l : 0,
-      claim: d.claim ? d.claim + l : 0,
+      claim: d.claim ? d.claim + Math.min(l, 2) : 0, // land reach stops growing after level 3
       rate: d.rate || 0,
     };
   };
 
+  // Price multiplier for going from `level` to `level + 1`: steep past CHEAP_LEVELS.
+  CONFIG.latePrice = function (level) {
+    return level > CONFIG.CHEAP_LEVELS ? Math.pow(CONFIG.LATE_LEVEL_PRICE, level - CONFIG.CHEAP_LEVELS) : 1;
+  };
+
   // Tower upgrades: cost to go from `level` to `level + 1`.
   CONFIG.upgradeCost = function (kind, level) {
-    return CONFIG.defOf(kind).cost * level;
+    return Math.round(CONFIG.defOf(kind).cost * level * CONFIG.latePrice(level));
   };
 
   // Total gold invested in a tower of this level.
   CONFIG.totalSpent = function (kind, level) {
-    return CONFIG.defOf(kind).cost * (1 + (level * (level - 1)) / 2);
+    let total = CONFIG.defOf(kind).cost;
+    for (let l = 1; l < level; l++) total += CONFIG.upgradeCost(kind, l);
+    return total;
   };
 
   CONFIG.sellValue = function (kind, level) {
@@ -177,7 +187,7 @@
 
   // Price of raising a troop type from `level` to `level + 1` (applies to troops spawned after).
   CONFIG.armyLevelCost = function (kind, level) {
-    return CONFIG.UNITS[kind].cost * 2 * level;
+    return Math.round(CONFIG.UNITS[kind].cost * 2 * level * CONFIG.latePrice(level));
   };
 
   // How many troops a player with this much land may have alive at once.

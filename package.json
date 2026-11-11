@@ -1,7 +1,7 @@
 {
   "name": "territory-siege",
   "version": "0.1.0",
-  "description": "Territory Siege: a multiplayer .io tower defence game where you defend your core, grow your land and send creeps at your neighbours.",
+  "description": "Territory Siege: a multiplayer .io strategy game. Send waves of troops, take towers, clear the jungle, and be the last core standing.",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",

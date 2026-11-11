@@ -15,6 +15,7 @@ npm test
 ```
 
 Open the URL in a few browser tabs (or share it on your LAN) to play against each other.
+To put it online for friends, follow **[HOSTING.md](HOSTING.md)** (free, about 10 minutes, on Render).
 AI bots fill the server up to 6 players, so it's playable alone too.
 
 ## How to play
@@ -46,7 +47,9 @@ AI bots fill the server up to 6 players, so it's playable alone too.
 | `5` | Medic | 54g+ | 130 | Heals nearby troops, never attacks |
 
 Adding a troop gets pricier the more of that type you already have. `Shift`+number levels a type up
-(+50% HP, +60% damage, +0.5 range per level, max 3); levels apply to troops spawned after.
+(+50% HP, +60% damage, +0.5 range per level, **max 5**); levels apply to troops spawned after.
+Levels 4 and 5 (for troops and towers) cost a lot more: a late-game place to spend gold. Towers stop gaining land after level 3,
+and get a turning gold rune ring at level 4 and a radiant aura at level 5.
 A wave holds at most 12 troops.
 
 ### Controls
@@ -88,6 +91,8 @@ test/                  node:test suite (game rules, waves & orders, jungle, path
 - **Troop movement.** Attacking troops follow a flow field toward their target (Dijkstra from the goal tile, one per
   active goal, rebuilt lazily when structures change). Defending troops plan short BFS paths within their own land and
   patrol around the structure they guard.
+- **Smooth movement.** Each snapshot carries the server tick number; the client draws troops and monsters 100 ms in the
+  past, interpolating between snapshots on that steady clock, so movement stays smooth despite network jitter.
 - **Bots** leapfrog towers outward, grow and level their army plan, defend when invaded, keep a squad farming jungle camps, and launch
   strike forces (60% of their home troops) at the nearest rival's towers while new waves stay home.
 
