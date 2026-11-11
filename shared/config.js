@@ -60,6 +60,15 @@
     PATH_STRUCT_PER_HP: 0.02,
     PATH_RECOMPUTE_INTERVAL: 0.5, // seconds between flow-field rebuilds for the same goal
 
+    // ---- Rounds: last core standing wins, then a scoreboard and a fresh map.
+    ROUND_JOIN_WINDOW: 60, // seconds after a round starts during which players (and bots) can join
+    // Sudden death after this many seconds: no home-turf bonuses, troops hit structures harder,
+    // and cores slowly crumble - so every round ends.
+    ROUND_SUDDEN_DEATH: 600,
+    SUDDEN_DEATH_SIEGE: 2, // troop damage multiplier against towers and cores
+    SUDDEN_DEATH_DECAY: 0.002, // fraction of core max HP lost per second in sudden death (never below 1 HP)
+    ROUND_RESET_DELAY: 15, // seconds the scoreboard shows before the next round starts
+
     BOT_TARGET: 6, // bots fill the server up to this many players
     BOT_STRIKE_SHARE: 0.6, // share of its home troops a bot sends on each attack
     BOT_JUNGLE_SHARE: 0.35, // share of its home troops a bot sends to farm jungle camps
@@ -121,6 +130,11 @@
       golem: { name: 'Golem', hp: 900, speed: 1.6, damage: 30, bounty: 250, size: 0.5 },
     },
     CREEP_REACH: 0.9,
+    // Jungle buff: whoever clears one of these camp types empowers all their troops for a while.
+    BUFF_CAMPS: ['big'],
+    JUNGLE_BUFF_TIME: 60,
+    JUNGLE_BUFF_DAMAGE: 0.3, // +30% damage
+    JUNGLE_BUFF_ARMOR: 0.25, // -25% damage taken
   };
 
   // Definition of a troop or structure kind.

@@ -52,6 +52,13 @@ class Game {
     this.h = C.MAP_H;
     this.rand = opts.rand || Math.random;
     this.botTarget = opts.botTarget ?? C.BOT_TARGET;
+    // Rounds (used by the server): joining closes after ROUND_JOIN_WINDOW, the last core standing
+    // wins and the game freezes with phase 'over'. Without rounds, players come and go freely.
+    this.rounds = !!opts.rounds;
+    this.round = opts.round || 1;
+    this.phase = 'playing';
+    this.winner = null;
+    this.roster = new Map(); // everyone who played this round: id -> standings entry
 
     this.players = new Map();
     this.towers = new Map();
@@ -131,6 +138,7 @@ class Game {
       towersDestroyed: 0,
       earned: { income: 0, troops: 0, camps: 0, towers: 0, cores: 0 }, // gold by source
       spawnTime: this.time,
+      buffUntil: 0, // jungle buff active until this time
       army,
       levels,
       order: { type: 'defend', anchor: 0 },
@@ -138,6 +146,8 @@ class Game {
       bot: isBot ? { next: this.time + 1, nextOrder: this.time + 10 } : null,
     };
     this.players.set(id, p);
+    this.roster.set(id, { id, name: p.name, hue: p.hue, isBot, place: 0, left: false, survived: 0, peakTerritory: 0,
+      kills: 0, towersDestroyed: 0, coresDestroyed: 0, gold: 0 });
     this.grid[this.idx(pos.x, pos.y)] = -id;
     this.terrDirty = true;
     this.structVersion++;
@@ -168,6 +178,56 @@ class Game {
     return bestScore >= C.CORE_CLAIM * 2 ? best : null;
   }
 
+  // Whether new players may join right now.
+  canJoin() {
+    return !this.rounds || (this.phase === 'playing' && this.time < C.ROUND_JOIN_WINDOW);
+  }
+
+  humansAlive() {
+    let n = 0;
+    for (const p of this.players.values()) if (!p.isBot && p.alive) n++;
+    return n;
+  }
+
+  suddenDeath() {
+    return this.rounds && this.time >= C.ROUND_SUDDEN_DEATH;
+  }
+
+  buffed(pid) {
+    const p = this.players.get(pid);
+    return !!p && p.buffUntil > this.time;
+  }
+
+  // Copy a player's numbers into the round standings.
+  recordStanding(p, place, left = false) {
+    const r = this.roster.get(p.id);
+    if (!r) return;
+    Object.assign(r, {
+      place, left, survived: Math.round(this.time - p.spawnTime), peakTerritory: p.peakTerritory, kills: p.kills,
+      towersDestroyed: p.towersDestroyed, coresDestroyed: p.coresDestroyed,
+      gold: Math.round(Object.values(p.earned).reduce((a, b) => a + b, 0)),
+    });
+  }
+
+  // Final standings: winner first, then by how long each player lasted; players who left go last.
+  standings() {
+    return [...this.roster.values()].sort((a, b) => (a.left - b.left) || ((a.place || 99) - (b.place || 99)));
+  }
+
+  // Last core standing: once joining has closed and at most one core is left, the round is over.
+  checkRoundOver() {
+    if (!this.rounds || this.phase !== 'playing' || this.time < C.ROUND_JOIN_WINDOW) return;
+    const alive = [...this.players.values()].filter((p) => p.alive);
+    if (alive.length > 1) return;
+    this.phase = 'over';
+    const w = alive[0];
+    if (w) {
+      this.recordStanding(w, 1);
+      this.winner = { id: w.id, name: w.name, hue: w.hue };
+      this.pushFeed(`${w.name} is the last core standing and wins round ${this.round}!`);
+    }
+  }
+
   // Removes a player (disconnect) - their base turns into ruins like a death.
   removePlayer(id) {
     const p = this.players.get(id);
@@ -185,6 +245,7 @@ class Game {
   // The victim's other towers become ruins.
   killPlayer(p, killerId, leftGame = false) {
     if (!p.alive) return;
+    this.recordStanding(p, this.players.size, leftGame);
     p.alive = false;
     const coreIdx = this.idx(p.core.x, p.core.y);
     this.grid[coreIdx] = 0;
@@ -737,7 +798,7 @@ class Game {
 
   damageUnit(u, amount, byPid) {
     if (!this.units.has(u.id)) return;
-    u.hp -= amount;
+    u.hp -= this.buffed(u.owner) ? amount * (1 - C.JUNGLE_BUFF_ARMOR) : amount;
     if (u.hp > 0) return;
     this.units.delete(u.id);
     this.fx.push({ k: 'boom', x: round2(u.x), y: round2(u.y), r: 0.5 });
@@ -762,6 +823,13 @@ class Game {
       if (p && p.alive) {
         this.award(p, C.CREEPS[c.kind].bounty, 'camps', c.x, c.y);
         p.kills++;
+        const camp = this.camps[c.camp];
+        const cleared = ![...this.creeps.values()].some((m) => m.camp === c.camp && !m.dead);
+        if (cleared && camp && C.BUFF_CAMPS.includes(camp.type)) {
+          p.buffUntil = this.time + C.JUNGLE_BUFF_TIME;
+          this.fx.push({ k: 'buff', x: camp.x + 0.5, y: camp.y + 0.5, o: p.id });
+          this.pushFeed(`${p.name} cleared a golem camp: troops empowered for ${C.JUNGLE_BUFF_TIME}s`);
+        }
       }
     }
   }
@@ -983,7 +1051,7 @@ class Game {
   onHomeLand(u) {
     const x = Math.floor(u.x);
     const y = Math.floor(u.y);
-    return this.inBounds(x, y) && this.terr[this.idx(x, y)] === u.owner;
+    return !this.suddenDeath() && this.inBounds(x, y) && this.terr[this.idx(x, y)] === u.owner;
   }
 
   unitFire(u, target, s, def) {
@@ -991,30 +1059,33 @@ class Game {
     const [tx, ty] = posOf(target);
     const isStruct = target.isTower || target.isPlayer;
     const home = this.onHomeLand(u) ? 1 + C.HOME_DAMAGE_BONUS : 1;
-    const dmg = s.damage * home * (isStruct ? def.siege || 1 : 1);
+    const buff = this.buffed(u.owner) ? 1 + C.JUNGLE_BUFF_DAMAGE : 1;
+    const base = s.damage * buff; // splash and frost pulses
+    const siege = isStruct ? (def.siege || 1) * (this.suddenDeath() ? C.SUDDEN_DEATH_SIEGE : 1) : 1;
+    const dmg = base * home * siege;
     if (def.aoe) {
       // Frost pulse: every enemy troop and monster around us.
       for (const v of [...this.units.values()]) {
         if (v.owner === u.owner || dist(u.x, u.y, v.x, v.y) > s.range) continue;
         v.slowT = def.slowTime;
         v.slowF = def.slow;
-        this.damageUnit(v, s.damage, u.owner);
+        this.damageUnit(v, base, u.owner);
       }
       for (const c of this.creeps.values()) {
         if (c.dead || dist(u.x, u.y, c.x, c.y) > s.range) continue;
         c.slowT = def.slowTime;
         c.slowF = def.slow;
-        this.damageCreep(c, s.damage, u.owner);
+        this.damageCreep(c, base, u.owner);
       }
       if (isStruct) this.hurt(target, dmg, u.owner);
       this.fx.push({ k: 'frost', x: round2(u.x), y: round2(u.y), r: s.range });
     } else if (def.splash) {
       this.hurt(target, dmg, u.owner);
       for (const v of [...this.units.values()]) {
-        if (v !== target && v.owner !== u.owner && dist(tx, ty, v.x, v.y) <= def.splash) this.damageUnit(v, s.damage, u.owner);
+        if (v !== target && v.owner !== u.owner && dist(tx, ty, v.x, v.y) <= def.splash) this.damageUnit(v, base, u.owner);
       }
       for (const c of this.creeps.values()) {
-        if (c !== target && !c.dead && dist(tx, ty, c.x, c.y) <= def.splash) this.damageCreep(c, s.damage, u.owner);
+        if (c !== target && !c.dead && dist(tx, ty, c.x, c.y) <= def.splash) this.damageCreep(c, base, u.owner);
       }
       this.fx.push({ k: 'shell', x1: round2(u.x), y1: round2(u.y), x2: round2(tx), y2: round2(ty), r: def.splash });
     } else if (def.melee) {
@@ -1385,7 +1456,7 @@ class Game {
       else humans++;
     }
     const desired = Math.max(0, this.botTarget - humans);
-    if (bots < desired && this.time >= this.botSpawnAt) {
+    if (bots < desired && this.time >= this.botSpawnAt && this.canJoin()) {
       const used = new Set([...this.players.values()].map((p) => p.name));
       const free = BOT_NAMES.filter((n) => !used.has(n));
       const name = free.length ? free[Math.floor(this.rand() * free.length)] : 'Bot';
@@ -1477,9 +1548,11 @@ class Game {
     let home = troops.filter((u) => !u.attack);
     const jungling = troops.some((u) => u.attack && u.attack.k === 'j');
     if (!jungling && home.length >= 4) {
+      const campScore = (c) => dist(c.x, c.y, p.core.x, p.core.y) - (C.BUFF_CAMPS.includes(c.type) ? 8 : 0);
       const camp = this.camps
         .filter((c) => c.alive && dist(c.x, c.y, p.core.x, p.core.y) < 26)
-        .sort((c1, c2) => dist(c1.x, c1.y, p.core.x, p.core.y) - dist(c2.x, c2.y, p.core.x, p.core.y))[0];
+        // Golem camps are worth a detour: they give the jungle buff.
+        .sort((c1, c2) => campScore(c1) - campScore(c2))[0];
       if (camp) {
         const squad = home.slice(0, Math.max(3, Math.round(home.length * C.BOT_JUNGLE_SHARE)));
         this.order(p.id, squad.map((u) => u.id), { k: 'j', id: camp.id });
@@ -1489,6 +1562,11 @@ class Game {
 
     // Attack with a strike force, keeping new waves at home to defend.
     const enemy = this.nearestEnemy(p.core.x, p.core.y, p.id, true);
+    if (enemy && this.suddenDeath()) {
+      // Sudden death: everything, including new waves, goes for the nearest rival's core.
+      this.order(p.id, null, { k: 'c', id: enemy.id });
+      return;
+    }
     if (enemy && home.length >= Math.max(8, C.unitCap(p.territory) * 0.5)) {
       let target = { k: 'c', id: enemy.id };
       let bestD = Infinity;
@@ -1510,7 +1588,14 @@ class Game {
   // ---------------------------------------------------------------- tick
 
   update(dt) {
+    if (this.phase === 'over') return; // the round is decided: the map freezes under the scoreboard
     this.time += dt;
+
+    if (this.suddenDeath()) {
+      for (const p of this.players.values()) {
+        if (p.alive) p.core.hp = Math.max(1, p.core.hp - p.core.maxHp * C.SUDDEN_DEATH_DECAY * dt);
+      }
+    }
 
     for (const p of this.players.values()) {
       if (p.alive) this.award(p, C.income(p.territory) * dt, 'income');
@@ -1532,6 +1617,7 @@ class Game {
     }
 
     if (this.terrDirty) this.recomputeTerritory();
+    this.checkRoundOver();
   }
 
   // Shared (non-personal) part of the state broadcast. Clears per-tick fx/feed.
@@ -1539,7 +1625,8 @@ class Game {
     const players = [];
     for (const p of this.players.values()) {
       players.push([p.id, p.name, p.hue, p.core.x, p.core.y, Math.max(0, Math.round(p.core.hp)), p.core.maxHp,
-        p.territory, p.kills, p.isBot ? 1 : 0, this.isShielded(p) ? Math.ceil(C.SPAWN_SHIELD - (this.time - p.spawnTime)) : 0]);
+        p.territory, p.kills, p.isBot ? 1 : 0, this.isShielded(p) ? Math.ceil(C.SPAWN_SHIELD - (this.time - p.spawnTime)) : 0,
+        Math.max(0, Math.ceil(p.buffUntil - this.time))]);
     }
     const towers = [];
     for (const t of this.towers.values()) {
@@ -1559,6 +1646,13 @@ class Game {
     const camps = this.camps.map((c) => [c.id, c.x, c.y, CAMP_KEYS.indexOf(c.type), c.alive ? 1 : 0,
       c.alive ? 0 : Math.max(0, Math.ceil(c.respawnAt - this.time))]);
     const snap = { players, towers, units, creeps, camps, fx: this.fx, feed: this.feed };
+    if (this.rounds) {
+      snap.round = {
+        n: this.round, phase: this.phase, t: Math.floor(this.time),
+        join: Math.max(0, Math.ceil(C.ROUND_JOIN_WINDOW - this.time)),
+        sd: Math.ceil(C.ROUND_SUDDEN_DEATH - this.time), // <= 0: sudden death is on
+      };
+    }
     this.fx = [];
     this.feed = [];
     return snap;

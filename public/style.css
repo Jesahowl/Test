@@ -119,7 +119,7 @@ canvas#game { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
 .card .choices button { flex: 1; }
 .card button.secondary { background: #30363d; }
 .card button.secondary:hover { background: #3d444d; }
-#spec-bar { display: none; top: 10px; left: 50%; transform: translateX(-50%); font-size: 13px; align-items: center; gap: 12px; white-space: nowrap; }
+#spec-bar { display: none; top: 62px; left: 50%; transform: translateX(-50%); font-size: 13px; align-items: center; gap: 12px; white-space: nowrap; }
 #spec-bar .muted { color: #8b949e; }
 #spec-bar button { padding: 5px 12px; border: none; border-radius: 6px; background: #238636; color: #fff; font-weight: 700; cursor: pointer; }
 #spec-bar button:hover { background: #2ea043; }
@@ -128,3 +128,23 @@ canvas#game { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
 #hud.spectating #toast, #hud.spectating #help, #hud.spectating #help-toggle { display: none; }
 #death-gold { color: #8b949e; font-size: 12px; margin: 8px 0 0; }
 #death-gold b { color: #ffd54f; }
+
+/* ---- rounds */
+#round { top: 10px; left: 50%; transform: translateX(-50%); text-align: center; padding: 5px 14px; font-size: 13px; line-height: 1.45; }
+#round b { color: #ffd54f; }
+#round .sub { font-size: 12px; color: #8b949e; }
+#round .sd { font-size: 12px; color: #ff7b72; font-weight: 700; }
+#stats .buff { color: #ffab40; }
+.card.wide { width: min(560px, 94vw); }
+.card .trophy { font-size: 46px; line-height: 1; }
+#roundover h2 { color: #ffd54f; margin-top: 6px; }
+#ro-sub { color: #8b949e; margin: 0 0 12px; font-size: 14px; }
+#ro-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+#ro-table th { color: #8b949e; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; padding: 4px; }
+#ro-table td { padding: 5px 4px; border-top: 1px solid #21262d; }
+#ro-table td.n { text-align: left; }
+#ro-table tr.me td { color: #fff; font-weight: 700; background: #161b22; }
+#ro-table tr.win td { color: #ffd54f; }
+#ro-table .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+#ro-next { color: #8b949e; margin: 14px 0 0; font-size: 13px; }
+#spec-bar button:disabled { background: #30363d; color: #8b949e; cursor: default; }

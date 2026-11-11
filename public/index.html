@@ -16,6 +16,7 @@
     <div id="toast"></div>
     <div id="selection" class="panel hidden"></div>
 
+    <div id="round" class="panel hidden"></div>
     <div id="order-info" class="panel"></div>
     <div id="spec-bar" class="panel"></div>
 
@@ -55,7 +56,8 @@
         <li>Your core sends out a <b>wave of troops</b> every 20 seconds. Spend gold to make waves bigger and stronger.</li>
         <li><b>Right-click</b> an enemy tower or core to attack it, or one of yours to defend it.</li>
         <li><b>Towers</b> claim land and shoot. More land = more gold and a bigger army.</li>
-        <li>Clear <b>jungle camps</b> for gold. Park troops on an undefended enemy tower to <b>capture</b> it.</li>
+        <li>Clear <b>jungle camps</b> for gold. Golem camps also <b>empower your troops</b> for 60s.</li>
+        <li><b>Last core standing wins the round.</b> After 10 minutes, sudden death makes sure it ends.</li>
       </ul>
       <div id="conn"></div>
     </div>
@@ -68,11 +70,21 @@
       <p id="death-spoils"></p>
       <div id="death-stats"></div>
       <p id="death-gold"></p>
-      <p class="out">You're out of this game.</p>
+      <p class="out">You're out of this round. The last core standing wins.</p>
       <div class="choices">
         <button id="spectate" class="secondary">👁 Spectate</button>
-        <button id="again">New game</button>
+        <button id="again">Join next round</button>
       </div>
+    </div>
+  </div>
+
+  <div id="roundover" class="overlay hidden">
+    <div class="card wide">
+      <div class="trophy">🏆</div>
+      <h2 id="ro-title"></h2>
+      <p id="ro-sub"></p>
+      <table id="ro-table"></table>
+      <p id="ro-next"></p>
     </div>
   </div>
 

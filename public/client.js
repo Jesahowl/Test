@@ -23,6 +23,8 @@
   let myId = null;
   let me = null; // { id, gold, nextWave, army, levels, order }
   let lastName = '';
+  let round = null; // { n, phase, t, join, sd }
+  let queued = false; // waiting to join the next round
   const players = new Map(); // id -> { id, name, hue, x, y, hp, maxHp, territory, kills, isBot, shield }
   let towers = new Map(); // id -> tower / ruin
   let units = new Map(); // id -> troop (with rx/ry render positions)
@@ -93,6 +95,16 @@
         break;
       case 'welcome':
         stopSpectating();
+        queued = false;
+        if (round && msg.round !== round.n) {
+          // a new round on a fresh map
+          effects = [];
+          feed.length = 0;
+          towers = new Map();
+          units = new Map();
+          lastKiller = 0;
+        }
+        $('roundover').classList.add('hidden');
         myId = msg.id;
         centerOnMe = true;
         clearSelection();
@@ -105,6 +117,15 @@
         myId = null;
         me = null;
         showDeath(msg);
+        break;
+      case 'wait':
+        // Round in progress: watch it, and join the next one automatically.
+        queued = true;
+        if (!spectating) startSpectating();
+        toast(msg.over ? 'Next round starts in a few seconds' : `Round ${msg.round} is under way: you'll join the next one`, true);
+        break;
+      case 'roundover':
+        showRoundOver(msg);
         break;
       case 'err':
         toast(msg.m);
@@ -119,6 +140,8 @@
 
   function applyState(msg) {
     me = msg.me;
+    const now = performance.now();
+    if (msg.round) round = msg.round;
 
     if (msg.terr) {
       let i = 0;
@@ -128,9 +151,14 @@
       }
     }
 
+    const oldPlayers = new Map(players);
     players.clear();
     for (const a of msg.players) {
-      players.set(a[0], { id: a[0], name: a[1], hue: a[2], x: a[3], y: a[4], hp: a[5], maxHp: a[6], territory: a[7], kills: a[8], isBot: !!a[9], shield: a[10] || 0 });
+      const old = oldPlayers.get(a[0]);
+      const p = { id: a[0], name: a[1], hue: a[2], x: a[3], y: a[4], hp: a[5], maxHp: a[6], territory: a[7], kills: a[8], isBot: !!a[9],
+        shield: a[10] || 0, buff: a[11] || 0, hitAt: old ? old.hitAt : 0, trail: old ? old.trail : undefined, shotAt: old ? old.shotAt : 0 };
+      if (old && p.hp < old.hp) p.hitAt = now;
+      players.set(p.id, p);
     }
     if (msg.terr) drawTerritory();
 
@@ -138,6 +166,18 @@
     grid.clear();
     for (const a of msg.towers) {
       const t = { id: a[0], kind: KIND_KEYS[a[1]], x: a[2], y: a[3], owner: a[4], level: a[5], hp: a[6], maxHp: a[7], ruinOf: a[8], capBy: a[9], cap: a[10] };
+      t.ruin = !t.owner;
+      const old = towers.get(t.id);
+      if (old) {
+        // remember render state: when it was last hit, when it changed hands, where its turret points
+        for (const k of ['hitAt', 'flipAt', 'prevOwner', 'aim', 'shotAt', 'trail']) t[k] = old[k];
+        if (t.hp < old.hp && t.owner === old.owner) t.hitAt = now;
+        if (t.owner && old.owner !== t.owner) {
+          t.flipAt = now;
+          t.prevOwner = old.owner;
+          t.trail = t.hp;
+        }
+      }
       nt.set(t.id, t);
       grid.set(`${t.x},${t.y}`, t.id);
     }
@@ -161,8 +201,21 @@
     creeps = nc;
     camps = msg.camps.map((a) => ({ id: a[0], x: a[1], y: a[2], type: CAMP_KEYS[a[3]], alive: !!a[4], respawn: a[5] }));
 
-    const now = performance.now();
-    for (const f of msg.fx) effects.push({ ...f, born: now });
+    for (const f of msg.fx) {
+      effects.push({ ...f, born: now });
+      if (f.k === 'tshot') {
+        // turn the shooting tower's turret (or flare the core) toward its target
+        const tx = Math.floor(f.x1);
+        const ty = Math.floor(f.y1);
+        const t = towers.get(grid.get(`${tx},${ty}`));
+        const p = t ? null : [...players.values()].find((q) => q.x === tx && q.y === ty);
+        const o = t || p;
+        if (o) {
+          o.aim = Math.atan2(f.y2 - f.y1, f.x2 - f.x1);
+          o.shotAt = now;
+        }
+      }
+    }
     for (const text of msg.feed) feed.push({ text, born: now });
     while (feed.length > 6) feed.shift();
 
@@ -505,33 +558,309 @@
     }
   }
 
-  function drawTowers() {
-    const s = scale();
+  // ---- structures
+  // Health bars only appear once a structure has been hit, then fade out. They stay up while it is
+  // selected, hovered or badly damaged. A pale "trail" shows the damage just taken.
+  const BAR_HOLD = 3000;
+  const BAR_FADE = 1000;
+  function structBarAlpha(o, now, forced) {
+    if (forced || o.hp / o.maxHp < 0.35) return 1;
+    const since = now - (o.hitAt || -1e9);
+    return since < BAR_HOLD ? 1 : Math.max(0, 1 - (since - BAR_HOLD) / BAR_FADE);
+  }
+  function structBar(o, x, y, w, now, forced, dt) {
+    o.trail = o.trail === undefined ? o.hp : Math.max(o.hp, o.trail - (o.maxHp * 0.35 + (o.trail - o.hp) * 2) * dt);
+    const a = structBarAlpha(o, now, forced);
+    if (a <= 0) return;
+    const h = Math.max(4, Math.round(w * 0.09));
+    const frac = Math.max(0, o.hp / o.maxHp);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    roundRect(x - w / 2 - 1, y - 1, w + 2, h + 2, 3);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.fillRect(x - w / 2, y, w * Math.min(1, o.trail / o.maxHp), h);
+    ctx.fillStyle = frac > 0.5 ? '#3fb950' : frac > 0.25 ? '#d29922' : '#f85149';
+    ctx.fillRect(x - w / 2, y, w * frac, h);
+    ctx.globalAlpha = 1;
+  }
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function polygon(x, y, r, n, rot) {
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const a = rot + (Math.PI * 2 * i) / n;
+      ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+    }
+    ctx.closePath();
+  }
+  // Small deterministic random numbers per structure, for rubble and cracks.
+  function hashRand(seed) {
+    let h = seed * 2654435761 >>> 0;
+    return () => {
+      h ^= h << 13; h >>>= 0;
+      h ^= h >>> 17;
+      h ^= h << 5; h >>>= 0;
+      return h / 4294967296;
+    };
+  }
+  function drawCracks(x, y, r, damage, seed) {
+    if (damage < 0.4) return;
+    const rnd = hashRand(seed);
+    const n = damage > 0.7 ? 4 : 2;
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+    ctx.lineWidth = Math.max(1, r * 0.06);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < n; i++) {
+      let a = rnd() * Math.PI * 2;
+      let d = r * (0.25 + rnd() * 0.2);
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(a) * d, y + Math.sin(a) * d);
+      for (let j = 0; j < 3; j++) {
+        a += (rnd() - 0.5) * 0.9;
+        d += r * 0.22;
+        ctx.lineTo(x + Math.cos(a) * d, y + Math.sin(a) * d);
+      }
+      ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
+  }
+  function drawSmoke(x, y, r, now, seed) {
+    for (let i = 0; i < 3; i++) {
+      const p = ((now / 1600 + i / 3 + seed * 0.13) % 1);
+      ctx.fillStyle = `rgba(60, 60, 60, ${0.45 * (1 - p)})`;
+      ctx.beginPath();
+      ctx.arc(x + Math.sin(seed + i * 2 + p * 3) * r * 0.3, y - r * 0.2 - p * r * 1.6, r * (0.2 + p * 0.35), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // A defensive tower: stone platform in the owner's colours, a turret that turns toward its
+  // last shot and recoils, and extra stonework, a banner and a gold crown as it levels up.
+  function drawTowerSprite(t, x, y, s, now) {
+    const lvl = t.level;
+    const r = s * 0.5 * (1 + 0.1 * (lvl - 1));
+    const flip = t.flipAt ? (now - t.flipAt) / 900 : 1;
+    const bounce = flip < 1 ? 1 + 0.3 * Math.sin(flip * Math.PI * 3) * (1 - flip) : 1;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(bounce, bounce);
+
+    // shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(r * 0.12, r * 0.3, r * 1.2, r * 0.95, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // buttresses (level 2+)
+    if (lvl >= 2) {
+      ctx.fillStyle = '#6e6658';
+      ctx.strokeStyle = colorOf(t.owner, 60);
+      ctx.lineWidth = Math.max(1, s * 0.04);
+      for (let i = 0; i < 4; i++) {
+        const a = Math.PI / 4 + (Math.PI / 2) * i;
+        const bx = Math.cos(a) * r * 0.95;
+        const by = Math.sin(a) * r * 0.95;
+        polygon(bx, by, r * 0.32, 4, a);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+
+    // platform
+    polygon(0, 0, r * 1.1, 8, Math.PI / 8);
+    ctx.fillStyle = colorOf(t.owner, 26);
+    ctx.fill();
+    ctx.strokeStyle = colorOf(t.owner, 62);
+    ctx.lineWidth = Math.max(1.5, s * 0.08);
+    ctx.stroke();
+    polygon(0, 0, r * 0.82, 8, Math.PI / 8);
+    ctx.fillStyle = '#8a8070';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = Math.max(1, s * 0.03);
+    ctx.stroke();
+    // stone joints
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = (Math.PI / 4) * i;
+      ctx.moveTo(Math.cos(a) * r * 0.5, Math.sin(a) * r * 0.5);
+      ctx.lineTo(Math.cos(a) * r * 0.8, Math.sin(a) * r * 0.8);
+    }
+    ctx.stroke();
+    drawCracks(0, 0, r * 0.8, 1 - t.hp / t.maxHp, t.id);
+
+    // gold crown ring (level 3)
+    if (lvl >= 3) {
+      ctx.strokeStyle = '#ffd54f';
+      ctx.lineWidth = Math.max(1.5, s * 0.06);
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.62, 0, Math.PI * 2);
+      ctx.stroke();
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 3) * i + now / 3000;
+        ctx.fillStyle = '#ffe082';
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * r * 0.62, Math.sin(a) * r * 0.62, Math.max(1.2, s * 0.045), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // turret: barrel toward the last target, kicking back when it fires
+    const recoil = t.shotAt ? Math.max(0, 1 - (now - t.shotAt) / 180) : 0;
+    ctx.rotate(t.aim ?? -Math.PI / 2);
+    ctx.fillStyle = '#2b2722';
+    ctx.strokeStyle = colorOf(t.owner, 62);
+    ctx.lineWidth = Math.max(1, s * 0.03);
+    const bl = r * (0.95 + 0.1 * (lvl - 1));
+    roundRect(r * (0.1 - 0.2 * recoil), -r * 0.15, bl, r * 0.3, r * 0.08);
+    ctx.fill();
+    ctx.stroke();
+    if (lvl >= 3) {
+      // twin barrels
+      roundRect(r * (0.1 - 0.2 * recoil), -r * 0.38, bl * 0.8, r * 0.16, r * 0.05);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#c9bca3';
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.42, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.lineWidth = Math.max(1, s * 0.035);
+    ctx.stroke();
+    ctx.rotate(-(t.aim ?? -Math.PI / 2));
+    // gem in the owner's colour, flaring on each shot
+    ctx.fillStyle = recoil > 0 ? '#fff' : colorOf(t.owner, 62);
+    polygon(0, 0, r * (0.17 + 0.06 * recoil), 4, 0);
+    ctx.fill();
+    if (lvl >= 3) {
+      ctx.shadowColor = colorOf(t.owner, 60);
+      ctx.shadowBlur = s * 0.4 * (0.7 + 0.3 * Math.sin(now / 300));
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    // banner (level 2+)
+    if (lvl >= 2) {
+      const px = -r * 0.85;
+      const py = -r * 0.85;
+      ctx.strokeStyle = '#3b3630';
+      ctx.lineWidth = Math.max(1, s * 0.04);
+      ctx.beginPath();
+      ctx.moveTo(px, py + r * 0.5);
+      ctx.lineTo(px, py - r * 0.55);
+      ctx.stroke();
+      const wave = Math.sin(now / 220 + t.id) * r * 0.08;
+      ctx.fillStyle = colorOf(t.owner, 55);
+      ctx.beginPath();
+      ctx.moveTo(px, py - r * 0.55);
+      ctx.quadraticCurveTo(px + r * 0.3, py - r * 0.55 + wave, px + r * 0.55, py - r * 0.42 + wave);
+      ctx.lineTo(px, py - r * 0.2);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // capture / claim flash
+    if (flip < 1) {
+      ctx.globalAlpha = (1 - flip) * 0.8;
+      ctx.fillStyle = '#fff';
+      polygon(0, 0, r * 1.1, 8, Math.PI / 8);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+
+    if (flip < 1) {
+      // burst of shards in the new owner's colour, plus the old colour fading out
+      for (let i = 0; i < 10; i++) {
+        const a = (Math.PI * 2 * i) / 10 + t.id;
+        const d = s * (0.6 + flip * 2.2);
+        ctx.fillStyle = colorOf(i % 3 === 0 && t.prevOwner ? t.prevOwner : t.owner, 60, 1 - flip);
+        polygon(x + Math.cos(a) * d, y + Math.sin(a) * d, s * 0.12 * (1 - flip * 0.5), 3, a + flip * 6);
+        ctx.fill();
+      }
+    }
+    if (t.hp / t.maxHp < 0.3) drawSmoke(x, y, r, now, t.id);
+
+    // level pips
+    for (let i = 0; i < lvl; i++) {
+      ctx.fillStyle = '#ffd54f';
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.lineWidth = 1;
+      polygon(x - (lvl - 1) * r * 0.22 + i * r * 0.44, y + r * 1.3, Math.max(2, s * 0.07), 4, 0);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  // A ruin: scattered rubble and a broken stub.
+  function drawRuin(t, x, y, s) {
     const r = s * 0.5;
+    const rnd = hashRand(t.id + 7);
+    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + r * 0.2, r * 1.1, r * 0.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    for (let i = 0; i < 7; i++) {
+      const a = rnd() * Math.PI * 2;
+      const d = r * (0.3 + rnd() * 0.75);
+      ctx.fillStyle = i % 2 ? '#5d574d' : '#6e675b';
+      polygon(x + Math.cos(a) * d, y + Math.sin(a) * d, r * (0.14 + rnd() * 0.16), 5, rnd() * 6);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#4a453d';
+    ctx.beginPath();
+    ctx.moveTo(x - r * 0.4, y + r * 0.3);
+    ctx.lineTo(x - r * 0.4, y - r * 0.2);
+    ctx.lineTo(x - r * 0.15, y - r * 0.45);
+    ctx.lineTo(x + r * 0.05, y - r * 0.15);
+    ctx.lineTo(x + r * 0.25, y - r * 0.35);
+    ctx.lineTo(x + r * 0.4, y - r * 0.05);
+    ctx.lineTo(x + r * 0.4, y + r * 0.3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawTowers(dt) {
+    const s = scale();
+    const now = performance.now();
+    const hover = grid.get(`${Math.floor(mouse.wx)},${Math.floor(mouse.wy)}`);
     for (const t of towers.values()) {
       const [x, y] = toScreen(t.x + 0.5, t.y + 0.5);
       if (!onScreen(x, y, s * 3)) continue;
       if (t.ruin || !t.owner) {
-        ctx.globalAlpha = 0.45;
-        drawShape(t.kind, x, y, r, '#5a6370');
-        ctx.globalAlpha = 1;
+        drawRuin(t, x, y, s);
+        if (t.id === selectedId) {
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x - s / 2, y - s / 2, s, s);
+        }
         continue;
       }
-      ctx.fillStyle = colorOf(t.owner, 30, 0.9);
-      ctx.beginPath();
-      ctx.arc(x, y, r * 1.1, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = colorOf(t.owner, 60);
-      ctx.lineWidth = Math.max(1.5, s * 0.08);
-      ctx.stroke();
-      drawShape(t.kind, x, y, r * 0.85, C.TOWERS[t.kind].color);
-      for (let i = 0; i < t.level; i++) {
-        ctx.fillStyle = '#ffd54f';
+      const r = s * 0.5 * (1 + 0.1 * (t.level - 1));
+      if (t.id === selectedId) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 4]);
+        ctx.lineDashOffset = -now / 60;
         ctx.beginPath();
-        ctx.arc(x - r * 0.5 + i * r * 0.5, y + r * 1.15, Math.max(1.5, s * 0.06), 0, Math.PI * 2);
-        ctx.fill();
+        ctx.arc(x, y, r * 1.55, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
       }
-      hpBar(x, y - r * 1.5, s * 0.9, t.hp / t.maxHp);
+      drawTowerSprite(t, x, y, s, now);
+      const sieged = t.cap > 0 && t.capBy;
+      structBar(t, x, y - r * (sieged ? 2.6 : 1.75), s * 1.0, now, t.id === selectedId || t.id === hover, dt);
       if (t.cap > 0 && t.capBy) {
         // Capture in progress: a ring filling in the attacker's colour.
         ctx.strokeStyle = 'rgba(0,0,0,0.5)';
@@ -544,12 +873,7 @@
         ctx.arc(x, y, r * 1.9, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * t.cap);
         ctx.stroke();
         const txt = t.owner === myId ? `Under siege ${Math.round(t.cap * 100)}%` : `Capturing ${Math.round(t.cap * 100)}%`;
-        label(txt, x, y - r * 2.3, Math.max(10, Math.round(s * 0.4)), t.owner === myId ? '#ff7b72' : '#fff');
-      }
-      if (t.id === selectedId) {
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(x - s / 2, y - s / 2, s, s);
+        label(txt, x, y - r * 2.85, Math.max(10, Math.round(s * 0.4)), t.owner === myId ? '#ff7b72' : '#fff');
       }
     }
   }
@@ -568,6 +892,18 @@
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(x, y, r * 1.45, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      const op = players.get(u.owner);
+      if (op && op.buff) {
+        // jungle buff: flickering ember aura
+        const fl = 0.5 + 0.3 * Math.sin(performance.now() / 90 + u.id);
+        ctx.fillStyle = `rgba(255, 120, 40, ${0.35 * fl})`;
+        ctx.beginPath();
+        ctx.arc(x, y, r * 1.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = `rgba(255, 170, 60, ${fl})`;
+        ctx.lineWidth = Math.max(1.5, s * 0.05);
         ctx.stroke();
       }
       ctx.fillStyle = colorOf(u.owner, 30, 0.9);
@@ -602,7 +938,29 @@
       ctx.stroke();
       ctx.restore();
       if (!c.alive) label(`${c.respawn}s`, x, y + 4, Math.max(10, Math.round(s * 0.4)), '#8b949e');
+      else if (C.BUFF_CAMPS.includes(c.type) && s >= 12) {
+        // golem camps grant the jungle buff
+        drawFlame(x + s * 1.2, y - s * 1.2, s * 0.32);
+        label('buff', x + s * 1.2, y - s * 0.55, Math.max(9, Math.round(s * 0.3)), '#ffab40');
+      }
     }
+  }
+
+  function drawFlame(x, y, r) {
+    const flick = 1 + 0.08 * Math.sin(performance.now() / 90);
+    ctx.fillStyle = '#ff7043';
+    ctx.beginPath();
+    ctx.moveTo(x, y - r * 1.3 * flick);
+    ctx.quadraticCurveTo(x + r, y - r * 0.2, x + r * 0.6, y + r * 0.6);
+    ctx.quadraticCurveTo(x, y + r * 1.1, x - r * 0.6, y + r * 0.6);
+    ctx.quadraticCurveTo(x - r, y - r * 0.2, x, y - r * 1.3 * flick);
+    ctx.fill();
+    ctx.fillStyle = '#ffd54f';
+    ctx.beginPath();
+    ctx.moveTo(x, y - r * 0.4 * flick);
+    ctx.quadraticCurveTo(x + r * 0.45, y + r * 0.2, x, y + r * 0.7);
+    ctx.quadraticCurveTo(x - r * 0.45, y + r * 0.2, x, y - r * 0.4 * flick);
+    ctx.fill();
   }
 
   function drawCreeps(dt) {
@@ -636,46 +994,129 @@
     }
   }
 
-  function drawCores() {
+  // A core: a stone platform with a turning rune ring and a floating crystal in the player's colour.
+  // It cracks and smokes as it takes damage, and flashes when hit.
+  function drawCores(dt) {
     const s = scale();
+    const now = performance.now();
     for (const p of players.values()) {
       const [x, y] = toScreen(p.x + 0.5, p.y + 0.5);
       if (!onScreen(x, y, s * 3)) continue;
       const r = s * 0.75;
-      const grd = ctx.createRadialGradient(x, y, r * 0.2, x, y, r * 1.8);
-      grd.addColorStop(0, colorOf(p.id, 60, 0.6));
+      const frac = p.hp / p.maxHp;
+      const hit = p.hitAt ? Math.max(0, 1 - (now - p.hitAt) / 160) : 0;
+
+      // glow
+      const grd = ctx.createRadialGradient(x, y, r * 0.2, x, y, r * 2);
+      grd.addColorStop(0, colorOf(p.id, 60, 0.55));
       grd.addColorStop(1, colorOf(p.id, 60, 0));
       ctx.fillStyle = grd;
       ctx.beginPath();
-      ctx.arc(x, y, r * 1.8, 0, Math.PI * 2);
+      ctx.arc(x, y, r * 2, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = colorOf(p.id, 45);
+      // shadow and platform
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.beginPath();
+      ctx.ellipse(x + r * 0.1, y + r * 0.25, r * 1.15, r * 0.95, 0, 0, Math.PI * 2);
+      ctx.fill();
+      polygon(x, y, r * 1.08, 8, Math.PI / 8);
+      ctx.fillStyle = '#4d4a44';
+      ctx.fill();
+      ctx.strokeStyle = colorOf(p.id, 62);
+      ctx.lineWidth = Math.max(2, s * 0.09);
+      ctx.stroke();
+      polygon(x, y, r * 0.86, 8, Math.PI / 8);
+      ctx.fillStyle = colorOf(p.id, 22);
+      ctx.fill();
+      // corner studs
       for (let i = 0; i < 8; i++) {
-        const a = (Math.PI / 4) * i + Math.PI / 8;
-        ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+        const a = Math.PI / 8 + (Math.PI / 4) * i;
+        ctx.fillStyle = '#c9bca3';
+        ctx.beginPath();
+        ctx.arc(x + Math.cos(a) * r * 1.08, y + Math.sin(a) * r * 1.08, Math.max(1.5, s * 0.06), 0, Math.PI * 2);
+        ctx.fill();
       }
+
+      // turning rune ring
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(now / 4000);
+      ctx.strokeStyle = colorOf(p.id, 70, 0.8);
+      ctx.lineWidth = Math.max(1.5, s * 0.05);
+      ctx.setLineDash([s * 0.18, s * 0.12]);
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.66, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      for (let i = 0; i < 4; i++) {
+        const a = (Math.PI / 2) * i;
+        ctx.fillStyle = colorOf(p.id, 75);
+        polygon(Math.cos(a) * r * 0.66, Math.sin(a) * r * 0.66, Math.max(2, s * 0.08), 4, a);
+        ctx.fill();
+      }
+      ctx.restore();
+      drawCracks(x, y, r * 0.9, 1 - frac, p.id * 31);
+
+      // floating crystal
+      const bob = Math.sin(now / 500 + p.id) * r * 0.07;
+      const cy = y - r * 0.12 + bob;
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.ellipse(x, y + r * 0.18, r * 0.3, r * 0.12, 0, 0, Math.PI * 2);
+      ctx.fill();
+      const cg = ctx.createLinearGradient(x - r * 0.3, cy - r * 0.5, x + r * 0.3, cy + r * 0.4);
+      cg.addColorStop(0, colorOf(p.id, 85));
+      cg.addColorStop(0.5, colorOf(p.id, 58));
+      cg.addColorStop(1, colorOf(p.id, 32));
+      ctx.fillStyle = cg;
+      ctx.shadowColor = colorOf(p.id, 60);
+      ctx.shadowBlur = s * (0.3 + 0.15 * Math.sin(now / 350 + p.id) + (p.shotAt && now - p.shotAt < 200 ? 0.5 : 0));
+      ctx.beginPath();
+      ctx.moveTo(x, cy - r * 0.62);
+      ctx.lineTo(x + r * 0.3, cy - r * 0.05);
+      ctx.lineTo(x, cy + r * 0.38);
+      ctx.lineTo(x - r * 0.3, cy - r * 0.05);
       ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      const frac = p.hp / p.maxHp;
-      ctx.strokeStyle = frac > 0.5 ? '#3fb950' : frac > 0.25 ? '#d29922' : '#f85149';
-      ctx.lineWidth = Math.max(2, s * 0.12);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
       ctx.beginPath();
-      ctx.arc(x, y, r * 1.25, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac);
-      ctx.stroke();
+      ctx.moveTo(x, cy - r * 0.62);
+      ctx.lineTo(x + r * 0.3, cy - r * 0.05);
+      ctx.lineTo(x, cy - r * 0.1);
+      ctx.closePath();
+      ctx.fill();
 
-      label(p.id === myId ? `${p.name} (you)` : p.name, x, y - r * 1.6, Math.max(11, Math.round(s * 0.5)), '#fff');
+      if (hit > 0) {
+        ctx.globalAlpha = hit * 0.6;
+        ctx.fillStyle = '#fff';
+        polygon(x, y, r * 1.08, 8, Math.PI / 8);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      if (frac < 0.35) drawSmoke(x, y, r, now, p.id);
+
+      // jungle buff: a flickering ember ring
+      if (p.buff) {
+        ctx.strokeStyle = `rgba(255, 140, 50, ${0.55 + 0.25 * Math.sin(now / 120)})`;
+        ctx.lineWidth = Math.max(2, s * 0.07);
+        ctx.beginPath();
+        ctx.arc(x, y, r * 1.35, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      structBar(p, x, y - r * 1.55, s * 1.6, now, Math.hypot(mouse.wx - p.x - 0.5, mouse.wy - p.y - 0.5) < 1.2, dt);
+      label(p.id === myId ? `${p.name} (you)` : p.name, x, y - r * 1.75, Math.max(11, Math.round(s * 0.5)), '#fff');
 
       if (p.shield) {
-        ctx.strokeStyle = `rgba(121, 192, 255, ${0.5 + 0.3 * Math.sin(performance.now() / 250)})`;
+        // spawn shield: a shimmering hex bubble
+        const a = 0.35 + 0.2 * Math.sin(now / 250);
+        ctx.strokeStyle = `rgba(121, 192, 255, ${a + 0.2})`;
+        ctx.fillStyle = `rgba(121, 192, 255, ${a * 0.25})`;
         ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(x, y, r * 1.6, 0, Math.PI * 2);
+        polygon(x, y, r * 1.75, 6, now / 5000);
+        ctx.fill();
         ctx.stroke();
         label(`protected ${p.shield}s`, x, y + r * 2.4, Math.max(10, Math.round(s * 0.38)), '#79c0ff');
       }
@@ -684,7 +1125,7 @@
 
   function drawEffects(now) {
     const s = scale();
-    effects = effects.filter((f) => now - f.born < (f.k === 'coreDown' ? 1200 : f.k === 'wave' ? 700 : f.k === 'gold' ? 1100 : 450));
+    effects = effects.filter((f) => now - f.born < (f.k === 'coreDown' || f.k === 'buff' ? 1200 : f.k === 'wave' ? 700 : f.k === 'gold' ? 1100 : 450));
     for (const f of effects) {
       const age = (now - f.born) / 1000;
       switch (f.k) {
@@ -784,6 +1225,18 @@
           ctx.globalAlpha = Math.max(0, 1 - p * p);
           label(`+${f.n}g`, x, y - s * (0.6 + p * 1.4), Math.round((big ? 18 : 13) + (big ? 4 : 0) * (1 - p)), '#ffd54f');
           ctx.globalAlpha = 1;
+          break;
+        }
+        case 'buff': {
+          const [x, y] = toScreen(f.x, f.y);
+          const p = age / 1.2;
+          ctx.strokeStyle = `rgba(255, 140, 50, ${1 - p})`;
+          ctx.lineWidth = 5 * (1 - p) + 1;
+          ctx.beginPath();
+          ctx.arc(x, y, s * (0.8 + p * 4), 0, Math.PI * 2);
+          ctx.stroke();
+          drawFlame(x, y - s * p * 1.5, s * 0.6 * (1 - p * 0.5));
+          if (f.o === myId) label('EMPOWERED!', x, y - s * (1.6 + p * 1.5), Math.max(13, Math.round(s * 0.6)), '#ffab40');
           break;
         }
         case 'wave': {
@@ -1147,14 +1600,17 @@
       updateBoards();
       const t = players.get(specTarget);
       const bar = $('spec-bar');
-      const key = `${t ? t.name : ''}:${specFollow}`;
+      const humans = [...players.values()].some((q) => !q.isBot);
+      const btn = queued ? '✓ Joining next round' : humans ? 'Join next round' : 'New round';
+      const key = `${t ? t.name : ''}:${specFollow}:${btn}`;
       if (bar.dataset.key !== key) {
         bar.dataset.key = key;
         bar.innerHTML = `<span>👁 Spectating${t ? ` <b>${escapeHtml(t.name)}</b>` : ''}${t && !specFollow ? ' <span class="muted">(free camera)</span>' : ''}</span>
           <span class="muted">Tab: next player · Space: follow · WASD: move</span>
-          <button id="spec-new">New game</button>`;
+          <button id="spec-new"${queued ? ' disabled' : ''}>${btn}</button>`;
         $('spec-new').onclick = () => sendMsg({ t: 'join', name: lastName });
       }
+      updateRound();
       return;
     }
     if (!myId) return;
@@ -1165,11 +1621,13 @@
     const rank = sorted.findIndex((q) => q.id === myId) + 1;
     const myTroops = [...units.values()].filter((u) => u.owner === myId).length;
     const perWave = UNIT_KEYS.reduce((n, k) => n + me.army[k], 0);
+    updateRound();
     $('stats').innerHTML = `
       <div class="gold">${gold}g</div>
       <div>+${C.income(p.territory).toFixed(1)}g/s <span class="muted">· land ${p.territory}</span></div>
       <div class="muted">Rank #${rank} of ${players.size} · kills ${p.kills}</div>
       ${p.shield ? `<div style="color:#79c0ff">Spawn protection: ${p.shield}s</div>` : ''}
+      ${p.buff ? `<div class="buff">🔥 Empowered ${p.buff}s: +${Math.round(C.JUNGLE_BUFF_DAMAGE * 100)}% dmg, −${Math.round(C.JUNGLE_BUFF_ARMOR * 100)}% taken</div>` : ''}
       <div>Core ${p.hp}/${p.maxHp}</div>
       <div class="hpbar"><div style="width:${(100 * p.hp) / p.maxHp}%"></div></div>`;
 
@@ -1190,7 +1648,7 @@
     const sorted = [...players.values()].sort((a, b) => b.territory - a.territory);
     const focus = spectating ? specTarget : myId;
     $('leaderboard').innerHTML = '<h3>Leaderboard · land</h3>' + sorted.slice(0, 10).map((q, i) =>
-      `<div class="row${q.id === focus ? ' me' : ''}"><span>${i + 1}.</span><span class="dot" style="background:${colorOf(q.id, 55)}"></span><span class="n">${escapeHtml(q.name)}${q.isBot ? ' 🤖' : ''}</span><span>${q.territory}</span></div>`).join('');
+      `<div class="row${q.id === focus ? ' me' : ''}"><span>${i + 1}.</span><span class="dot" style="background:${colorOf(q.id, 55)}"></span><span class="n">${escapeHtml(q.name)}${q.isBot ? ' 🤖' : ''}${q.buff ? ' 🔥' : ''}</span><span>${q.territory}</span></div>`).join('');
     const now = performance.now();
     $('feed').innerHTML = feed.filter((f) => now - f.born < 9000).map((f) =>
       `<div style="opacity:${Math.min(1, (9000 - (now - f.born)) / 1500)}">${escapeHtml(f.text)}</div>`).join('');
@@ -1320,6 +1778,8 @@
     $('hud').classList.add('hidden');
     $('death').classList.remove('hidden');
     lastKiller = info.killerId || 0;
+    // With no other people left in the round, a new one starts straight away.
+    $('again').textContent = info.humansAlive ? 'Join next round' : 'New round';
     $('death-by').textContent = info.killer ? `Destroyed by ${info.killer}` : 'Your core fell';
     $('death-spoils').textContent = info.killer
       ? `${info.killer} took your ${info.goldTaken}g, ${info.troopsTaken} surviving troop${info.troopsTaken === 1 ? '' : 's'}, and turned your core into a tower.`
@@ -1339,8 +1799,52 @@
 
   let lastKiller = 0;
 
+  const fmtTime = (sec) => `${Math.floor(sec / 60)}:${String(Math.max(0, sec) % 60).padStart(2, '0')}`;
+
+  // Round banner: cores left, round clock, join window / sudden death.
+  function updateRound() {
+    const el = $('round');
+    if (!round) {
+      el.classList.add('hidden');
+      return;
+    }
+    el.classList.remove('hidden');
+    let sub = '';
+    if (round.join > 0) sub = `<div class="sub">Joining open for ${fmtTime(round.join)} · last core standing wins</div>`;
+    else if (round.sd <= 0) sub = '<div class="sd">☠ Sudden death: cores crumble · troops hit buildings ×2 · no home turf</div>';
+    else if (round.sd <= 120) sub = `<div class="sd">Sudden death in ${fmtTime(round.sd)}</div>`;
+    el.innerHTML = `Round <b>${round.n}</b> · <b>${players.size}</b> core${players.size === 1 ? '' : 's'} left · ${fmtTime(round.t)}${sub}`;
+  }
+
+  let roundTimer = null;
+  function showRoundOver(msg) {
+    if (!myId && !spectating && !queued && $('death').classList.contains('hidden')) return; // still on the menu
+    $('death').classList.add('hidden');
+    const w = msg.winner;
+    $('ro-title').textContent = !w ? `Round ${msg.round} is over` : w.id === myId ? 'Victory! You are the last core standing' : `${w.name} wins round ${msg.round}`;
+    $('ro-sub').textContent = w ? 'Last core standing' : 'No cores survived';
+    const rows = msg.standings.map((r) => `<tr class="${r.id === myId ? 'me' : ''}${r.place === 1 ? ' win' : ''}">
+      <td>${r.left ? '–' : r.place === 1 ? '🏆' : `#${r.place}`}</td>
+      <td class="n"><span class="dot" style="background:hsl(${r.hue},75%,55%)"></span>${escapeHtml(r.name)}${r.isBot ? ' 🤖' : ''}${r.left ? ' <span style="color:#8b949e">(left)</span>' : ''}</td>
+      <td>${fmtTime(r.survived)}</td><td>${r.coresDestroyed}</td><td>${r.towersDestroyed}</td><td>${r.kills}</td><td>${r.gold}g</td></tr>`).join('');
+    $('ro-table').innerHTML = `<tr><th></th><th class="n">Player</th><th>Lasted</th><th>Cores</th><th>Towers</th><th>Kills</th><th>Gold</th></tr>${rows}`;
+    $('roundover').classList.remove('hidden');
+    let left = msg.next;
+    const tick = () => {
+      $('ro-next').textContent = left > 0 ? `Next round starts in ${left}s on a fresh map…` : 'Starting…';
+      left--;
+    };
+    tick();
+    clearInterval(roundTimer);
+    roundTimer = setInterval(() => {
+      if ($('roundover').classList.contains('hidden')) clearInterval(roundTimer);
+      else tick();
+    }, 1000);
+  }
+
   function startSpectating() {
     spectating = true;
+    $('menu').classList.add('hidden');
     clearSelection();
     buildKind = null;
     specTarget = players.has(lastKiller) ? lastKiller : 0;
@@ -1592,10 +2096,10 @@
     drawBackground();
     drawCamps();
     drawOverlay();
-    drawTowers();
+    drawTowers(dt);
     drawCreeps(dt);
     drawUnits(dt);
-    drawCores();
+    drawCores(dt);
     drawEffects(now);
     if (myId || spectating) drawMinimap();
 

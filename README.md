@@ -28,10 +28,12 @@ AI bots fill the server up to 6 players, so it's playable alone too.
 | **Taking towers** | **Destroy** one and it becomes yours (+120g): it keeps its level, comes back at 70% health, and its land switches to you. Or **capture** it without a fight: troops standing near an enemy tower with none of its owner's troops around flip it in ~10s (faster with more troops). Either way the attackers stay on as its garrison and your waves push on to that player's next tower. Towers only become ruins when their owner's core falls. |
 | **Gold** | Land only pays a trickle (1.5g/s + a little per tile). **Most gold comes from fighting**: 14g per enemy troop killed (+6 per troop level), 55g per raptor and 250g per golem in the jungle, 250g for a tower, and 250g plus all of their gold for a core. Each bounty pops up where you earned it, and the death screen breaks down where your gold came from. |
 | **Jungle** | Neutral camps sit around the map. They're passive until attacked, then the whole camp fights back. Clearing them pays well; they respawn after 45s. Right-click a camp to send troops. |
+| **Jungle buff** | Clearing a **golem camp** (marked 🔥 buff) empowers all your troops for 60s: **+30% damage and 25% less damage taken**. Buffed troops glow orange and a 🔥 shows next to your name. |
+| **Rounds** | **Last core standing wins.** Joining is open for the first 60s of a round (bots fill in during that time too). After that, newcomers watch and join the next round automatically. After **10 minutes, sudden death** starts: no home-turf bonus, troops deal double damage to towers and cores, and cores slowly crumble, so every round ends. Then a scoreboard shows everyone's placing and a new round starts on a fresh map 15s later. If only bots are left, pressing *New round* starts one straight away. |
 | **Home turf** | Troops on their own land heal 2% HP/s and deal +30% damage, so defending is cheaper than attacking. |
 | **Army size** | You can have 1 troop alive per 10 tiles of land (min 10, max 30). Waves stop spawning at the cap. |
 | **Spawn protection** | For 90s after spawning your core and towers can't be damaged. |
-| **Losing** | If your core falls you're **out of the game**. Whoever destroyed it takes the spoils: **all your gold** (plus a 250g bounty), **every troop you still had standing**, and your core site, which becomes **one of their towers** garrisoned by your former troops. Your other towers become ruins. You can then **spectate** (follow any player with Tab, free camera with WASD, Space to follow again) or **start a new game** with a fresh base. If you disconnect instead, your troops vanish and nobody gets anything. |
+| **Losing** | If your core falls you're **out of the round**. Whoever destroyed it takes the spoils: **all your gold** (plus a 250g bounty), **every troop you still had standing**, and your core site, which becomes **one of their towers** garrisoned by your former troops. Your other towers become ruins. You can then **spectate** (follow any player with Tab, free camera with WASD, Space to follow again) and you join the next round automatically. If you disconnect instead, your troops vanish and nobody gets anything. |
 
 ### Troops
 
@@ -64,7 +66,8 @@ A wave holds at most 12 troops.
 All numbers live in [`shared/config.js`](shared/config.js), shared by server and client, so tuning happens in one place.
 The most useful knobs: economy (`BASE_INCOME`, `INCOME_PER_TILE`, `TROOP_BOUNTY`, `TOWER_BOUNTY`, `CORE_KILL_BOUNTY`,
 monster `bounty`, `CAMP_RESPAWN`), `WAVE_INTERVAL`, `START_ARMY`, `ARMY_MAX_PER_WAVE`, `LAND_PER_UNIT`, troop and tower stats,
-`CORE_DAMAGE`, `HOME_DAMAGE_BONUS`, `SPAWN_SHIELD`, `CAPTURE_TIME`, `TOWER_CLAIM_HP`, `CAMP_*`.
+`CORE_DAMAGE`, `HOME_DAMAGE_BONUS`, `SPAWN_SHIELD`, `CAPTURE_TIME`, `TOWER_CLAIM_HP`, `CAMP_*`, jungle buff (`BUFF_CAMPS`, `JUNGLE_BUFF_*`),
+rounds (`ROUND_JOIN_WINDOW`, `ROUND_SUDDEN_DEATH`, `SUDDEN_DEATH_*`, `ROUND_RESET_DELAY`).
 
 ## Architecture
 
@@ -93,5 +96,4 @@ test/                  node:test suite (game rules, waves & orders, jungle, path
 - Champions: one hero unit per player with abilities, leveling from kills
 - Lanes or rally points, and attack-move orders
 - Team mode (2v2 / 3v3) and alliances
-- Jungle buffs (e.g. a big camp that empowers your next wave)
 - Mobile touch controls

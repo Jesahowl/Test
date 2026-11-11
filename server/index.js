@@ -19,8 +19,9 @@ const STATIC = {
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 
 function createServer({ port = 3000, botTarget } = {}) {
-  const game = new Game({ botTarget });
   const clients = new Set();
+  let game = null;
+  let resetAt = 0; // when the scoreboard of a finished round gives way to the next round (ms)
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
@@ -47,17 +48,39 @@ function createServer({ port = 3000, botTarget } = {}) {
     if (client.ws.readyState === client.ws.OPEN) client.ws.send(JSON.stringify(obj));
   }
 
-  game.onDeath = (p, info) => {
-    for (const client of clients) {
-      if (client.pid === p.id) {
-        client.pid = null;
-        send(client, { t: 'dead', ...info });
-      }
+  function addToGame(client) {
+    const p = game.addPlayer(client.name, false);
+    if (!p) {
+      send(client, { t: 'err', m: 'Server is full, try again soon' });
+      return;
     }
-  };
+    client.pid = p.id;
+    client.queued = false;
+    send(client, { t: 'welcome', id: p.id, round: game.round });
+  }
+
+  // A fresh map. Everyone who is playing, spectating or queued joins it.
+  function newRound() {
+    game = new Game({ botTarget, rounds: true, round: game ? game.round + 1 : 1 });
+    game.onDeath = (p, info) => {
+      for (const client of clients) {
+        if (client.pid === p.id) {
+          client.pid = null;
+          send(client, { t: 'dead', ...info, humansAlive: game.humansAlive() });
+        }
+      }
+    };
+    resetAt = 0;
+    for (const client of clients) {
+      client.pid = null;
+      client.terrVersion = -1;
+      if (client.name) addToGame(client);
+    }
+  }
+  newRound();
 
   wss.on('connection', (ws) => {
-    const client = { ws, pid: null, terrVersion: -1 };
+    const client = { ws, pid: null, terrVersion: -1, name: null, queued: false };
     clients.add(client);
 
     ws.on('message', (raw) => {
@@ -72,13 +95,14 @@ function createServer({ port = 3000, botTarget } = {}) {
       switch (msg.t) {
         case 'join': {
           if (client.pid) return;
-          const p = game.addPlayer(msg.name, false);
-          if (!p) {
-            send(client, { t: 'err', m: 'Server is full, try again soon' });
-            return;
+          client.name = String(msg.name || '').slice(0, 40) || 'Player';
+          if (game.canJoin()) addToGame(client);
+          else if (game.phase === 'playing' && game.humansAlive() === 0) newRound(); // only bots left: start over now
+          else {
+            // Round in progress: watch it and join the next one automatically.
+            client.queued = true;
+            send(client, { t: 'wait', round: game.round, alive: game.players.size, over: game.phase === 'over' });
           }
-          client.pid = p.id;
-          send(client, { t: 'welcome', id: p.id });
           return;
         }
         case 'build':
@@ -119,6 +143,15 @@ function createServer({ port = 3000, botTarget } = {}) {
 
   const interval = setInterval(() => {
     game.update(1 / C.TICK_RATE);
+    if (game.phase === 'over') {
+      if (!resetAt) {
+        resetAt = Date.now() + C.ROUND_RESET_DELAY * 1000;
+        const msg = { t: 'roundover', round: game.round, winner: game.winner, standings: game.standings(), next: C.ROUND_RESET_DELAY };
+        for (const client of clients) send(client, msg);
+      } else if (Date.now() >= resetAt) {
+        newRound();
+      }
+    }
     const snap = game.snapshot();
     const body = JSON.stringify(snap).slice(1, -1);
     let terrJson = null;
@@ -140,7 +173,10 @@ function createServer({ port = 3000, botTarget } = {}) {
 
   return {
     server,
-    game,
+    get game() {
+      return game;
+    },
+    newRound,
     close() {
       clearInterval(interval);
       for (const c of clients) c.ws.terminate();
