@@ -8,120 +8,122 @@
     MAP_W: 110,
     MAP_H: 110,
 
-    START_GOLD: 160,
+    START_GOLD: 200,
     BASE_INCOME: 3, // gold per second
     INCOME_PER_TILE: 0.03, // extra gold per second for each owned tile
 
-    CORE_HP: 1000,
+    // The core: your base. It shoots like a tower; if it falls, you're out.
+    CORE_HP: 2500,
+    CORE_RANGE: 5,
+    CORE_DAMAGE: 60,
+    CORE_RATE: 1,
     CORE_CLAIM: 6, // territory radius around a core
-    CORE_KILL_BOUNTY: 200, // plus half the victim's gold
+    CORE_KILL_BOUNTY: 250, // plus half the victim's gold
     SPAWN_MIN_DIST: 24,
-    SPAWN_SHIELD: 60, // seconds after spawning during which other players can't send you creeps
+    SPAWN_SHIELD: 90, // seconds after spawning during which your core and towers can't be damaged
 
     MAX_LEVEL: 3,
     SELL_REFUND: 0.6,
     RUIN_CAPTURE_COST: 25,
     RUIN_LIFETIME: 120, // seconds before an unclaimed ruin crumbles
 
-    FIRST_WAVE_DELAY: 25,
-    NEUTRAL_WAVE_INTERVAL: 22,
-    NEUTRAL_SPAWN_DIST: 20,
-    // Neutral wave N has WAVE_BASE_COUNT + N * WAVE_COUNT_GROWTH creeps, each with
-    // (1 + N * WAVE_HP_GROWTH) x normal HP, plus one Brute per WAVE_BRUTE_EVERY waves survived.
-    WAVE_BASE_COUNT: 2,
-    WAVE_COUNT_GROWTH: 0.6,
-    WAVE_HP_GROWTH: 0.1,
-    WAVE_BRUTE_EVERY: 4,
+    // ---- Troop waves (like League minions)
+    // Every WAVE_INTERVAL seconds your core sends out a free wave built from your army plan.
+    WAVE_INTERVAL: 20,
+    FIRST_WAVE_DELAY: 6,
+    START_ARMY: { guard: 2, archer: 2 }, // troops per wave at the start
+    ARMY_MAX_PER_WAVE: 12,
+    // How many troops can be alive at once grows with land: one per LAND_PER_UNIT tiles.
+    LAND_PER_UNIT: 10,
+    MIN_UNITS: 10,
+    MAX_UNITS: 30,
+    TROOP_AGGRO: 2, // troops on the march engage enemies within (attack range + this)
+    TROOP_BOUNTY: 6, // gold for killing an enemy troop, +3 per troop level
+    TOWER_BOUNTY: 120, // gold for destroying an enemy tower
+    // Home turf: troops standing on their own land heal and hit harder, so defending is cheaper
+    // than attacking and a big army can't simply steamroll a smaller one at its door.
+    HOME_REGEN: 0.02, // fraction of max HP healed per second
+    HOME_DAMAGE_BONUS: 0.3,
 
-    MAX_CREEPS_PER_PLAYER: 60,
+    // Troops defending a structure patrol within this radius of it.
+    UNIT_LEASH_CORE: 4.5,
+    UNIT_LEASH_TOWER: 3.5,
+    UNIT_REPATH: 0.4, // seconds between re-planning a chase path
 
-    // Pathfinding: entering a structure tile (core or beacon) costs (BASE + maxHp * PER_HP) extra
-    // tiles of walking, so creeps go around structures unless the detour is very long.
+    // Pathfinding: entering a structure tile (core or tower) costs (BASE + maxHp * PER_HP) extra
+    // tiles of walking, so troops go around structures unless the detour is very long.
     PATH_STRUCT_BASE: 4,
-    PATH_STRUCT_PER_HP: 0.08,
-    PATH_RECOMPUTE_INTERVAL: 0.25, // seconds between flow-field rebuilds for the same target
+    PATH_STRUCT_PER_HP: 0.02,
+    PATH_RECOMPUTE_INTERVAL: 0.5, // seconds between flow-field rebuilds for the same goal
 
     BOT_TARGET: 6, // bots fill the server up to this many players
-    BOT_UNIT_RAMP: 10, // bots add roughly one unit per this many seconds (up to their land cap)
+    BOT_STRIKE_SHARE: 0.6, // share of its home troops a bot sends on each attack
     MAX_PLAYERS: 24,
 
-    // Mobile defenders. Each one guards an anchor (your core or one of your beacons): it patrols
-    // within the anchor's leash radius, chases enemy creeps that come near, and never leaves your land.
+    // Troop types. `cost` is the base price of adding one to every wave (see armyAddCost).
     UNITS: {
       guard: {
-        name: 'Guard', key: '1', cost: 80, hp: 520, range: 1.2, damage: 12, rate: 1, speed: 2.2,
+        name: 'Guard', key: '1', cost: 70, hp: 420, range: 1.5, damage: 14, rate: 1, speed: 2.2,
         melee: true, taunt: 2.5,
-        color: '#a5d6a7', desc: 'Tank. Taunts nearby creeps into fighting it instead',
+        color: '#a5d6a7', desc: 'Melee tank. Enemy troops nearby are taunted into fighting it',
       },
       archer: {
-        name: 'Archer', key: '2', cost: 60, hp: 110, range: 5.5, damage: 16, rate: 1.5, speed: 2.6,
-        color: '#4fc3f7', desc: 'Long-range single-target shots, fragile',
+        name: 'Archer', key: '2', cost: 60, hp: 120, range: 4.5, damage: 13, rate: 1.4, speed: 2.4,
+        color: '#4fc3f7', desc: 'Ranged damage, fragile',
       },
       frost: {
-        name: 'Frost', key: '3', cost: 75, hp: 150, range: 3, damage: 6, rate: 1, speed: 2.4,
-        aoe: true, slow: 0.45, slowTime: 1.5,
-        color: '#b3e5fc', desc: 'Pulses damage and slows all nearby creeps',
+        name: 'Frost', key: '3', cost: 90, hp: 160, range: 3, damage: 7, rate: 1, speed: 2.2,
+        aoe: true, slow: 0.5, slowTime: 1.5,
+        color: '#b3e5fc', desc: 'Pulses damage and slows every enemy nearby',
       },
       mortar: {
-        name: 'Mortar', key: '4', cost: 115, hp: 170, range: 6, minRange: 1.5, damage: 45, rate: 0.5, speed: 1.6,
-        splash: 1.6,
-        color: '#ff8a65', desc: 'Long-range splash, slow, cannot hit close targets',
+        name: 'Mortar', key: '4', cost: 130, hp: 170, range: 6, minRange: 1.5, damage: 40, rate: 0.5, speed: 1.8,
+        splash: 1.6, siege: 2,
+        color: '#ff8a65', desc: 'Long-range splash. Double damage to towers and cores',
       },
       medic: {
-        name: 'Medic', key: '5', cost: 70, hp: 130, range: 3, heal: 14, rate: 1, speed: 2.6,
-        color: '#f48fb1', desc: 'Heals nearby units, cannot attack',
+        name: 'Medic', key: '5', cost: 90, hp: 130, range: 3, heal: 12, rate: 1, speed: 2.4,
+        color: '#f48fb1', desc: 'Heals nearby troops, cannot attack',
       },
     },
-    // Army size grows with your land: one unit per LAND_PER_UNIT tiles (at least MIN_UNITS).
-    LAND_PER_UNIT: 25,
-    MIN_UNITS: 5,
-    MAX_UNITS: 24, // hard cap
-    UNIT_LEASH_CORE: 4.5, // patrol radius around the core
-    UNIT_LEASH_BEACON: 3.5, // patrol radius around a beacon
-    UNIT_REPATH: 0.4, // seconds between re-planning a chase path
 
     // Fixed structures.
     TOWERS: {
-      beacon: {
-        name: 'Beacon', key: 'B', cost: 90, hp: 400, claim: 5,
-        color: '#ffd54f', desc: 'Claims land around it. Creeps attack beacons they pass - guard them!',
+      tower: {
+        name: 'Tower', key: 'B', cost: 120, hp: 1400, claim: 5, range: 5, damage: 32, rate: 1,
+        color: '#ffd54f', desc: 'Claims land and shoots enemy troops',
       },
     },
 
-    // Creeps divert to attack enemy beacons within this range, and fight enemy units they bump into.
-    CREEP_AGGRO_RANGE: 2.5,
-    CREEP_UNIT_REACH: 0.7,
-
-    // Leapfrogging: beacons may be placed on unclaimed land up to this many tiles outside your border.
-    BEACON_LEAP: 3,
-    // Capture by occupation: your units within CAPTURE_RANGE of an enemy beacon take it over after
-    // CAPTURE_TIME seconds (faster with more units) - unless any of the owner's units are there too.
+    // Leapfrogging: towers may be placed on unclaimed land up to this many tiles outside your border.
+    TOWER_LEAP: 3,
+    // Capture by occupation: your troops within CAPTURE_RANGE of an enemy tower take it over after
+    // CAPTURE_TIME seconds (faster with more troops) - unless any of the owner's troops are there too.
     CAPTURE_RANGE: 4.5,
     CAPTURE_TIME: 10,
-    CAPTURE_EXTRA_UNIT_SPEED: 0.5, // each extra unit adds 50% capture speed
+    CAPTURE_EXTRA_UNIT_SPEED: 0.5, // each extra troop adds 50% capture speed
 
-    CREEPS: {
-      grunt: {
-        name: 'Grunt', key: 'Z', cost: 14, hp: 90, speed: 2.2, damage: 10, bounty: 4, size: 0.28,
-        desc: 'Cheap and steady',
-      },
-      runner: {
-        name: 'Runner', key: 'X', cost: 20, hp: 55, speed: 4, damage: 6, bounty: 4, size: 0.22,
-        desc: 'Fast, fragile',
-      },
-      brute: {
-        name: 'Brute', key: 'C', cost: 65, hp: 450, speed: 1.2, damage: 40, bounty: 15, size: 0.42,
-        desc: 'Slow tank that hits hard',
-      },
+    // ---- Jungle: neutral camps that sit still, fight back when attacked, and pay out when cleared.
+    CAMP_COUNT: 12,
+    CAMP_RESPAWN: 60,
+    CAMP_LEASH: 4.5, // monsters chase attackers this far from their camp, then reset
+    CAMP_TYPES: {
+      small: { raptor: 3 },
+      big: { golem: 1, raptor: 2 },
     },
+    CREEPS: {
+      raptor: { name: 'Raptor', hp: 170, speed: 2.6, damage: 10, bounty: 15, size: 0.3 },
+      golem: { name: 'Golem', hp: 900, speed: 1.6, damage: 30, bounty: 80, size: 0.5 },
+    },
+    CREEP_REACH: 0.9,
   };
 
-  // Definition of a unit or structure kind.
+  // Definition of a troop or structure kind.
   CONFIG.defOf = function (kind) {
     return CONFIG.UNITS[kind] || CONFIG.TOWERS[kind];
   };
 
-  // Stats of a unit or structure at a given level (levels scale damage, range, hp, claim).
+  // Stats of a troop or structure at a given level (levels scale damage, heal, range, hp, claim).
   CONFIG.towerStats = function (kind, level) {
     const d = CONFIG.defOf(kind);
     const l = level - 1;
@@ -135,12 +137,12 @@
     };
   };
 
-  // Cost to go from `level` to `level + 1`.
+  // Tower upgrades: cost to go from `level` to `level + 1`.
   CONFIG.upgradeCost = function (kind, level) {
     return CONFIG.defOf(kind).cost * level;
   };
 
-  // Total gold invested in a unit or structure of this level.
+  // Total gold invested in a tower of this level.
   CONFIG.totalSpent = function (kind, level) {
     return CONFIG.defOf(kind).cost * (1 + (level * (level - 1)) / 2);
   };
@@ -149,7 +151,17 @@
     return Math.floor(CONFIG.totalSpent(kind, level) * CONFIG.SELL_REFUND);
   };
 
-  // How many units a player with this much land may field.
+  // Army plan: price of adding one more `kind` to every wave when you already have `count`.
+  CONFIG.armyAddCost = function (kind, count) {
+    return Math.round(CONFIG.UNITS[kind].cost * (0.6 + 0.4 * count));
+  };
+
+  // Price of raising a troop type from `level` to `level + 1` (applies to troops spawned after).
+  CONFIG.armyLevelCost = function (kind, level) {
+    return CONFIG.UNITS[kind].cost * 2 * level;
+  };
+
+  // How many troops a player with this much land may have alive at once.
   CONFIG.unitCap = function (territory) {
     return Math.min(CONFIG.MAX_UNITS, Math.max(CONFIG.MIN_UNITS, Math.floor(territory / CONFIG.LAND_PER_UNIT)));
   };

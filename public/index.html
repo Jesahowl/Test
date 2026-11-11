@@ -16,36 +16,43 @@
     <div id="toast"></div>
     <div id="selection" class="panel hidden"></div>
 
+    <div id="order-info" class="panel"></div>
+
     <div id="bar" class="panel">
-      <div class="group" id="build-buttons"></div>
+      <button id="tower-button" class="build"></button>
       <div class="divider"></div>
-      <div class="group" id="send-buttons"></div>
-      <div id="target-label"></div>
+      <div id="army"></div>
+      <div class="divider"></div>
+      <div class="side">
+        <div id="wave-info"></div>
+        <button id="defend-home" title="All troops and new waves defend your core [H]">🛡 Defend home [H]</button>
+      </div>
     </div>
 
     <canvas id="minimap" width="170" height="170"></canvas>
 
+    <button id="help-toggle" class="hidden" title="Show controls [?]">?</button>
     <div id="help" class="panel">
-      <b>Buy</b> 1-5 units · B beacon (can leap 3 tiles past your border) &nbsp; <b>Cancel</b> Esc / right-click<br>
-      <b>Units</b> click to select (Shift adds, Q selects all) · click your beacon/core to guard it · click an enemy beacon to capture it<br>
-      <b>Send creeps</b> Z X C (Shift = ×5) · click an enemy core to target it<br>
-      <b>Camera</b> WASD / arrows / right-drag · wheel zoom · Space = home<br>
-      <b>Selected</b> U upgrade · Del sell
+      <button class="close" title="Hide [?]">×</button>
+      <b>Waves</b> your core sends troops every 20s · buy more per wave in the army panel (1-5, Shift = level up)<br>
+      <b>Orders</b> right-click an enemy tower/core or a jungle camp to attack · right-click your tower/core to defend · H = all home<br>
+      <b>Select</b> click troops (Shift adds, Q = all) to command only them · Esc deselects<br>
+      <b>Towers</b> B, then click your land (or up to 3 tiles past it) · click a tower: U upgrade, Del sell<br>
+      <b>Camera</b> WASD / arrows / right-drag · wheel zoom · Space = home
     </div>
   </div>
 
   <div id="menu" class="overlay">
     <div class="card">
       <h1>Territory <span>Siege</span></h1>
-      <p class="tag">Defend your core. Grow your land. Siege your neighbours.</p>
+      <p class="tag">Send your waves. Take their towers. Break their core.</p>
       <input id="name" maxlength="16" placeholder="Your name" autocomplete="off">
       <button id="play">Play</button>
       <ul class="how">
-        <li>Buy <b>units</b> (Guard, Archer, Frost, Mortar, Medic) that patrol your core and beacons. More land = bigger army.</li>
-        <li><b>Beacons</b> expand your land (more land = more gold), but creeps raid them - assign guards!</li>
-        <li>Send <b>creeps</b> at other players. Destroying a core pays a big bounty.</li>
-        <li><b>Leapfrog</b> beacons past your border and park units on enemy beacons to <b>capture</b> them.</li>
-        <li>Fallen bases leave <b>ruins</b> you can capture cheaply.</li>
+        <li>Your core sends out a <b>wave of troops</b> every 20 seconds. Spend gold to make waves bigger and stronger.</li>
+        <li><b>Right-click</b> an enemy tower or core to attack it, or one of yours to defend it.</li>
+        <li><b>Towers</b> claim land and shoot. More land = more gold and a bigger army.</li>
+        <li>Clear <b>jungle camps</b> for gold. Park troops on an undefended enemy tower to <b>capture</b> it.</li>
       </ul>
       <div id="conn"></div>
     </div>

@@ -90,21 +90,17 @@ function createServer({ port = 3000, botTarget } = {}) {
         case 'sell':
           err = game.sell(client.pid, msg.id);
           break;
-        case 'assign':
-          err = game.assign(client.pid, msg.ids, Number.isInteger(msg.anchor) ? msg.anchor : -1);
-          break;
-        case 'occupy':
-          err = game.occupy(client.pid, msg.ids, msg.id);
-          break;
         case 'capture':
           err = game.capture(client.pid, msg.id);
           break;
-        case 'send': {
-          const count = Math.max(1, Math.min(10, msg.count | 0));
-          for (let i = 0; i < count; i++) {
-            err = game.send(client.pid, msg.kind, msg.target);
-            if (err) break;
-          }
+        case 'army':
+          if (msg.op === 'add') err = game.armyAdd(client.pid, msg.kind);
+          else if (msg.op === 'remove') err = game.armyRemove(client.pid, msg.kind);
+          else if (msg.op === 'level') err = game.armyLevel(client.pid, msg.kind);
+          break;
+        case 'order': {
+          const target = msg.target && typeof msg.target === 'object' ? { k: String(msg.target.k), id: msg.target.id } : null;
+          err = game.order(client.pid, Array.isArray(msg.ids) ? msg.ids : null, target);
           break;
         }
         default:
@@ -133,7 +129,7 @@ function createServer({ port = 3000, botTarget } = {}) {
         client.terrVersion = game.terrVersion;
       }
       const p = client.pid ? game.players.get(client.pid) : null;
-      const me = p ? JSON.stringify({ id: p.id, gold: Math.floor(p.gold), nextWave: Math.ceil(p.nextWave - game.time) }) : 'null';
+      const me = p ? JSON.stringify(game.personal(p)) : 'null';
       client.ws.send(`{"t":"s","me":${me},${extra}${body}}`);
     }
   }, 1000 / C.TICK_RATE);

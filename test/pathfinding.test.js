@@ -7,7 +7,7 @@ const Path = require('../shared/pathfinding');
 
 const W = 30;
 const H = 30;
-const WALL = Path.structureCost(C, 500); // a sturdy obstacle
+const WALL = Path.STEP * 50; // a sturdy obstacle: worth a 50-tile detour
 const at = (x, y) => y * W + x;
 
 function trace(extra, start, goal) {
