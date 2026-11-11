@@ -36,6 +36,7 @@
   const tctx = terrCanvas.getContext('2d');
   const grid = new Map(); // "x,y" -> tower id
   let terrShapes = []; // [{ owner, path: Path2D in tile units }]
+  let terrStamp = 0; // bumps whenever territory changes
 
   const cam = { x: C.MAP_W / 2, y: C.MAP_H / 2, zoom: 1 };
   const BASE_SCALE = 28;
@@ -122,7 +123,7 @@
     const nt = new Map();
     grid.clear();
     for (const a of msg.towers) {
-      const t = { id: a[0], kind: KIND_KEYS[a[1]], x: a[2], y: a[3], owner: a[4], level: a[5], hp: a[6], maxHp: a[7], ruinOf: a[8] };
+      const t = { id: a[0], kind: KIND_KEYS[a[1]], x: a[2], y: a[3], owner: a[4], level: a[5], hp: a[6], maxHp: a[7], ruinOf: a[8], capBy: a[9], cap: a[10] };
       nt.set(t.id, t);
       grid.set(`${t.x},${t.y}`, t.id);
     }
@@ -132,7 +133,7 @@
     const nu = new Map();
     for (const a of msg.units) {
       const old = units.get(a[0]);
-      nu.set(a[0], { id: a[0], kind: UNIT_KEYS[a[1]], x: a[2], y: a[3], owner: a[4], level: a[5], hp: a[6], maxHp: a[7], anchor: a[8],
+      nu.set(a[0], { id: a[0], kind: UNIT_KEYS[a[1]], x: a[2], y: a[3], owner: a[4], level: a[5], hp: a[6], maxHp: a[7], anchor: a[8], capture: a[9],
         rx: old ? old.rx : a[2], ry: old ? old.ry : a[3] });
     }
     units = nu;
@@ -261,6 +262,7 @@
   }
 
   function drawTerritory() {
+    terrStamp++;
     const byOwner = new Map();
     for (const loop of traceOutlines()) {
       let path = byOwner.get(loop.owner);
@@ -439,6 +441,27 @@
         ctx.fill();
       }
       hpBar(x, y - r * 1.5, s * 0.8, t.hp / t.maxHp);
+      if (t.cap > 0 && t.capBy) {
+        // Capture in progress: a ring filling in the attacker's colour.
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+        ctx.lineWidth = Math.max(3, s * 0.14);
+        ctx.beginPath();
+        ctx.arc(x, y, r * 1.9, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = colorOf(t.capBy, 60);
+        ctx.beginPath();
+        ctx.arc(x, y, r * 1.9, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * t.cap);
+        ctx.stroke();
+        ctx.font = `bold ${Math.max(10, Math.round(s * 0.4))}px system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.lineWidth = 3;
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+        const label = t.owner === myId ? `Under siege ${Math.round(t.cap * 100)}%` : `Capturing ${Math.round(t.cap * 100)}%`;
+        ctx.strokeText(label, x, y - r * 2.3);
+        ctx.fillStyle = t.owner === myId ? '#ff7b72' : '#fff';
+        ctx.fillText(label, x, y - r * 2.3);
+      }
       if (t.id === selectedId) {
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
@@ -634,6 +657,16 @@
           ctx.fill();
           break;
         }
+        case 'capture': {
+          const [x, y] = toScreen(f.x, f.y);
+          const p = Math.min(1, age / 0.45);
+          ctx.strokeStyle = colorOf(f.o, 60, 1 - p);
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.arc(x, y, s * (0.5 + p * 4), 0, Math.PI * 2);
+          ctx.stroke();
+          break;
+        }
         case 'coreDown': {
           const [x, y] = toScreen(f.x, f.y);
           const p = age / 1.2;
@@ -652,12 +685,95 @@
     }
   }
 
-  function canBuildAt(x, y) {
+  // ---- leapfrogging: unclaimed tiles within BEACON_LEAP of my land accept beacons
+  let leapZone = new Uint8Array(C.MAP_W * C.MAP_H);
+  let leapKey = '';
+
+  function getLeapZone() {
+    const key = `${myId}:${terrStamp}`;
+    if (key === leapKey) return leapZone;
+    leapKey = key;
+    leapZone = new Uint8Array(C.MAP_W * C.MAP_H);
+    if (!myId) return leapZone;
+    const R = C.BEACON_LEAP;
+    for (let y = 0; y < C.MAP_H; y++) {
+      for (let x = 0; x < C.MAP_W; x++) {
+        if (terr[y * C.MAP_W + x] !== myId) continue;
+        for (let dy = -R; dy <= R; dy++) {
+          for (let dx = -R; dx <= R; dx++) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= C.MAP_W || ny >= C.MAP_H || Math.hypot(dx, dy) > R + 0.01) continue;
+            const k = ny * C.MAP_W + nx;
+            if (terr[k] === 0) leapZone[k] = 1;
+          }
+        }
+      }
+    }
+    return leapZone;
+  }
+
+  function canBuildAt(x, y, kind = buildKind) {
     if (!me || x < 0 || y < 0 || x >= C.MAP_W || y >= C.MAP_H) return false;
-    if (terr[y * C.MAP_W + x] !== myId) return false;
+    const k = y * C.MAP_W + x;
+    if (terr[k] !== myId && !(kind === 'beacon' && getLeapZone()[k])) return false;
     if (grid.has(`${x},${y}`)) return false;
     for (const p of players.values()) if (p.x === x && p.y === y) return false;
     return true;
+  }
+
+  // Land a new beacon at (bx, by) would win: mirrors the server's nearest-claim rule
+  // (cores hold land at half distance, beacons at full distance).
+  function claimPreview(bx, by) {
+    const r = C.towerStats('beacon', 1).claim + 0.25;
+    const R = Math.ceil(r);
+    const gained = [];
+    const stolen = new Map(); // owner -> count
+    for (let dy = -R; dy <= R; dy++) {
+      for (let dx = -R; dx <= R; dx++) {
+        const x = bx + dx;
+        const y = by + dy;
+        const d = Math.hypot(dx, dy);
+        if (d > r || x < 0 || y < 0 || x >= C.MAP_W || y >= C.MAP_H) continue;
+        const o = terr[y * C.MAP_W + x];
+        if (o === myId) continue;
+        if (o) {
+          // The current owner's strongest claim on this tile.
+          const core = players.get(o);
+          let eff = core ? Math.hypot(core.x - x, core.y - y) * 0.5 : Infinity;
+          for (const t of towers.values()) {
+            if (t.owner !== o) continue;
+            const td = Math.hypot(t.x - x, t.y - y);
+            if (td <= C.towerStats('beacon', t.level).claim + 0.25) eff = Math.min(eff, td);
+          }
+          if (!(d < eff)) continue;
+          stolen.set(o, (stolen.get(o) || 0) + 1);
+        }
+        gained.push([x, y, o]);
+      }
+    }
+    return { gained, stolen };
+  }
+
+  // Can my units stand within capture range of beacon t (on my open land)?
+  function canReachForCapture(t) {
+    const R = Math.floor(C.CAPTURE_RANGE);
+    for (let dy = -R; dy <= R; dy++) {
+      for (let dx = -R; dx <= R; dx++) {
+        if (Math.hypot(dx, dy) > C.CAPTURE_RANGE - 0.2) continue;
+        const x = t.x + dx;
+        const y = t.y + dy;
+        if (x < 0 || y < 0 || x >= C.MAP_W || y >= C.MAP_H) continue;
+        if (terr[y * C.MAP_W + x] === myId && !grid.has(`${x},${y}`)) return true;
+      }
+    }
+    return false;
+  }
+
+  function enemyBeaconAt(wx, wy) {
+    const tid = grid.get(`${Math.floor(wx)},${Math.floor(wy)}`);
+    const t = tid && towers.get(tid);
+    return t && t.owner && t.owner !== myId ? t : null;
   }
 
   function drawRange(wx, wy, range, color) {
@@ -737,13 +853,36 @@
         drawLeash(a, 'rgba(126,231,135,0.85)', true);
       }
       const [ux, uy] = toScreen(u.rx, u.ry);
-      const [ax, ay] = toScreen(a.x, a.y);
-      ctx.strokeStyle = 'rgba(126,231,135,0.35)';
+      const capT = u.capture && towers.get(u.capture);
+      const [ax, ay] = capT ? toScreen(capT.x + 0.5, capT.y + 0.5) : toScreen(a.x, a.y);
+      ctx.strokeStyle = capT ? 'rgba(255,123,114,0.7)' : 'rgba(126,231,135,0.35)';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(ux, uy);
       ctx.lineTo(ax, ay);
       ctx.stroke();
+    }
+    // Hovering an enemy beacon with units selected: preview the capture order.
+    if (selUnits.size && !buildKind && myId) {
+      const prey = enemyBeaconAt(mouse.wx, mouse.wy);
+      if (prey) {
+        const ok = canReachForCapture(prey);
+        const [px, py] = toScreen(prey.x + 0.5, prey.y + 0.5);
+        ctx.save();
+        ctx.strokeStyle = ok ? 'rgba(255,123,114,0.95)' : 'rgba(139,148,158,0.8)';
+        ctx.fillStyle = ok ? 'rgba(255,123,114,0.1)' : 'rgba(139,148,158,0.06)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 5]);
+        ctx.beginPath();
+        ctx.arc(px, py, C.CAPTURE_RANGE * s, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+        ctx.font = 'bold 12px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = ok ? '#ff7b72' : '#8b949e';
+        ctx.fillText(ok ? 'Click to capture this beacon' : `Too far - your land must reach within ${C.CAPTURE_RANGE} tiles`, px, py - C.CAPTURE_RANGE * s - 8);
+      }
     }
     // Hovering an anchor with units selected: preview the reassignment.
     if (selUnits.size && !buildKind && myId) {
@@ -781,6 +920,39 @@
           ctx.moveTo(gx, gy);
           ctx.lineTo(ax, ay);
           ctx.stroke();
+        }
+      }
+      if (buildKind === 'beacon') {
+        // Leap zone: unclaimed ground a beacon can jump to.
+        const zone = getLeapZone();
+        const [x0, y0] = toWorld(0, 0);
+        const [x1, y1] = toWorld(canvas.width, canvas.height);
+        ctx.fillStyle = 'rgba(255,213,79,0.10)';
+        for (let y = Math.max(0, Math.floor(y0)); y <= Math.min(C.MAP_H - 1, Math.ceil(y1)); y++) {
+          for (let x = Math.max(0, Math.floor(x0)); x <= Math.min(C.MAP_W - 1, Math.ceil(x1)); x++) {
+            if (!zone[y * C.MAP_W + x]) continue;
+            const [sx, sy] = toScreen(x, y);
+            ctx.fillRect(sx + 1, sy + 1, s - 2, s - 2);
+          }
+        }
+        // Exactly which tiles this beacon would win, and from whom.
+        if (ok) {
+          const { gained, stolen } = claimPreview(tx, ty);
+          for (const [gx, gy, o] of gained) {
+            const [sx, sy] = toScreen(gx, gy);
+            ctx.fillStyle = o ? 'rgba(255,123,114,0.35)' : 'rgba(126,231,135,0.28)';
+            ctx.fillRect(sx + 2, sy + 2, s - 4, s - 4);
+          }
+          const taken = [...stolen].map(([o, n]) => `${n} from ${(players.get(o) || { name: '?' }).name}`).join(', ');
+          const text = `+${gained.length} land${taken ? ` (taking ${taken})` : ''}`;
+          ctx.font = 'bold 12px system-ui, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.lineWidth = 3;
+          ctx.lineJoin = 'round';
+          ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+          ctx.strokeText(text, mouse.sx + 16, mouse.sy + 24);
+          ctx.fillStyle = taken ? '#ffa198' : '#7ee787';
+          ctx.fillText(text, mouse.sx + 16, mouse.sy + 24);
         }
       }
       drawRange(tx + 0.5, ty + 0.5, st.range || st.claim, ok ? 'rgba(88,166,255,A)' : 'rgba(248,81,73,A)');
@@ -919,8 +1091,8 @@
         const maxed = u.level >= C.MAX_LEVEL;
         panel.innerHTML = `<h4>${d.name} · level ${u.level}</h4><div id="sel-info"></div>
           <div>Damage ${st.damage.toFixed(0)} · Range ${st.range} · ${st.rate}/s</div>
-          <div>Guarding <b id="sel-guard"></b></div>
-          <div class="muted">Click one of your beacons or your core to reassign</div>
+          <div id="sel-guard-row"></div>
+          <div class="muted">Click your beacon or core to guard it, or an enemy beacon to capture it</div>
           <div class="btns">
             <button id="sel-up">${maxed ? 'Max level' : `Upgrade (${C.upgradeCost(u.kind, u.level)}g) [U]`}</button>
             <button id="sel-sell">Sell +${C.sellValue(u.kind, u.level)}g</button>
@@ -932,13 +1104,16 @@
         for (const u of list) counts[C.UNITS[u.kind].name] = (counts[C.UNITS[u.kind].name] || 0) + 1;
         panel.innerHTML = `<h4>${list.length} units selected</h4>
           <div>${Object.entries(counts).map(([n, c]) => `${c}× ${n}`).join(' · ')}</div>
-          <div class="muted">Click one of your beacons or your core to send them all to guard it</div>`;
+          <div class="muted">Click your beacon or core to guard it, or an enemy beacon to capture it</div>`;
       }
     }
     if (list.length === 1) {
       const u = list[0];
       $('sel-info').textContent = `HP ${u.hp}/${u.maxHp}`;
-      $('sel-guard').textContent = guardName(u.anchor);
+      const capT = u.capture && towers.get(u.capture);
+      $('sel-guard-row').innerHTML = capT
+        ? `<b style="color:#ff7b72">Capturing ${escapeHtml((players.get(capT.owner) || { name: 'enemy' }).name)}'s beacon</b>`
+        : `Guarding <b>${guardName(u.anchor)}</b>`;
       $('sel-up').disabled = u.level >= C.MAX_LEVEL || gold < C.upgradeCost(u.kind, u.level);
     }
   }
@@ -1070,6 +1245,16 @@
     if (buildKind) {
       sendMsg({ t: 'build', kind: buildKind, x: tx, y: ty });
       return;
+    }
+
+    // Units selected + clicked an enemy beacon: order a capture.
+    if (selUnits.size) {
+      const prey = enemyBeaconAt(mouse.wx, mouse.wy);
+      if (prey) {
+        sendMsg({ t: 'occupy', ids: [...selUnits], id: prey.id });
+        if (canReachForCapture(prey)) toast(`${selUnits.size} unit${selUnits.size === 1 ? '' : 's'} moving in to capture`);
+        return;
+      }
     }
 
     // Units selected + clicked one of my anchors: send them to guard it.

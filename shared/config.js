@@ -72,6 +72,14 @@
     CREEP_AGGRO_RANGE: 2.5,
     CREEP_UNIT_REACH: 0.7,
 
+    // Leapfrogging: beacons may be placed on unclaimed land up to this many tiles outside your border.
+    BEACON_LEAP: 3,
+    // Capture by occupation: your units within CAPTURE_RANGE of an enemy beacon take it over after
+    // CAPTURE_TIME seconds (faster with more units) - unless any of the owner's units are there too.
+    CAPTURE_RANGE: 4.5,
+    CAPTURE_TIME: 10,
+    CAPTURE_EXTRA_UNIT_SPEED: 0.5, // each extra unit adds 50% capture speed
+
     CREEPS: {
       grunt: {
         name: 'Grunt', key: 'Z', cost: 10, hp: 45, speed: 2.2, damage: 8, bounty: 4, size: 0.28,

@@ -108,7 +108,7 @@ class Game {
       spawnTime: this.time,
       nextWave: this.time + C.FIRST_WAVE_DELAY,
       waveNum: 0,
-      bot: isBot ? { next: this.time + 1, nextAttack: this.time + 25 + this.rand() * 25 } : null,
+      bot: isBot ? { next: this.time + 1, nextAttack: this.time + 25 + this.rand() * 25, nextCapture: this.time + 60 } : null,
     };
     this.players.set(id, p);
     this.grid[this.idx(pos.x, pos.y)] = -id;
@@ -155,6 +155,8 @@ class Game {
     for (const t of this.towers.values()) {
       if (t.owner === p.id) {
         t.owner = 0;
+        t.cap = 0;
+        t.capBy = 0;
         t.ruin = true;
         t.ruinOf = p.name;
         t.ruinTime = this.time;
@@ -275,9 +277,13 @@ class Game {
     if (!p || !p.alive || !def) return 'Invalid build';
     if (!Number.isInteger(x) || !Number.isInteger(y) || !this.inBounds(x, y)) return 'Out of bounds';
     const k = this.idx(x, y);
-    if (this.terr[k] !== pid) return 'You can only build on your own land';
-    if (this.grid[k] !== 0) return 'Tile is occupied';
     const isUnit = !!C.UNITS[kind];
+    if (this.terr[k] !== pid) {
+      if (isUnit) return 'You can only place units on your own land';
+      if (this.terr[k] !== 0) return 'You cannot build on enemy land';
+      if (!this.withinLeap(pid, x, y)) return `Beacons can leap at most ${C.BEACON_LEAP} tiles beyond your border`;
+    }
+    if (this.grid[k] !== 0) return 'Tile is occupied';
     if (isUnit) {
       let count = 0;
       for (const u of this.units.values()) if (u.owner === pid) count++;
@@ -290,8 +296,8 @@ class Game {
     if (isUnit) {
       const anchor = this.isValidAnchor(pid, anchorId) ? anchorId : this.nearestAnchor(p, x + 0.5, y + 0.5);
       this.units.set(id, {
-        id, kind, owner: pid, x: x + 0.5, y: y + 0.5, level: 1, hp: stats.hp, maxHp: stats.hp, cd: 0,
-        anchor, path: [], dest: null, repathAt: 0, idleUntil: this.time + 0.5,
+        isUnit: true, id, kind, owner: pid, x: x + 0.5, y: y + 0.5, level: 1, hp: stats.hp, maxHp: stats.hp, cd: 0,
+        anchor, capture: 0, path: [], dest: null, repathAt: 0, idleUntil: this.time + 0.5,
       });
       return null;
     }
@@ -302,6 +308,54 @@ class Game {
     this.structVersion++;
     this.terrDirty = true;
     return null;
+  }
+
+  // Is unclaimed tile (x, y) within BEACON_LEAP tiles of pid's land?
+  withinLeap(pid, x, y) {
+    const r = C.BEACON_LEAP;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.hypot(dx, dy) > r + 0.01 || !this.inBounds(x + dx, y + dy)) continue;
+        if (this.terr[this.idx(x + dx, y + dy)] === pid) return true;
+      }
+    }
+    return false;
+  }
+
+  // Can pid's units stand within capture range of beacon t (on pid's own open land)?
+  canReachForCapture(pid, t) {
+    const r = Math.floor(C.CAPTURE_RANGE);
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const x = t.x + dx;
+        const y = t.y + dy;
+        if (!this.inBounds(x, y) || Math.hypot(dx, dy) > C.CAPTURE_RANGE - 0.2) continue;
+        if (this.walkable(this.idx(x, y), pid)) return true;
+      }
+    }
+    return false;
+  }
+
+  // Order units to occupy (capture) an enemy beacon.
+  occupy(pid, ids, beaconId) {
+    const p = this.players.get(pid);
+    const t = this.towers.get(beaconId);
+    if (!p || !p.alive || !Array.isArray(ids)) return 'Invalid order';
+    if (!t || !t.owner || t.owner === pid || t.kind !== 'beacon') return 'Units can only capture enemy beacons';
+    if (!this.canReachForCapture(pid, t)) {
+      return `Too far: your land must reach within ${C.CAPTURE_RANGE} tiles of that beacon`;
+    }
+    let n = 0;
+    for (const id of ids.slice(0, C.MAX_UNITS)) {
+      const u = this.units.get(id);
+      if (!u || u.owner !== pid) continue;
+      u.capture = t.id;
+      u.path = [];
+      u.dest = null;
+      u.repathAt = 0;
+      n++;
+    }
+    return n ? null : 'No units selected';
   }
 
   // A unit or a structure owned by pid.
@@ -352,6 +406,7 @@ class Game {
       const u = this.units.get(id);
       if (!u || u.owner !== pid) continue;
       u.anchor = anchorId;
+      u.capture = 0;
       u.path = [];
       u.dest = null;
       u.idleUntil = 0;
@@ -442,7 +497,7 @@ class Game {
   spawnNeutralWave(p) {
     p.waveNum++;
     const n = 2 + Math.floor(p.waveNum * 0.9);
-    const hpMul = 1 + p.waveNum * 0.2;
+    const hpMul = 1 + p.waveNum * 0.17;
     const a = this.rand() * Math.PI * 2;
     const clamp = (v, max) => Math.max(1, Math.min(max - 2, v));
     const sx = clamp(p.core.x + Math.cos(a) * C.NEUTRAL_SPAWN_DIST, this.w);
@@ -486,7 +541,7 @@ class Game {
   damageUnit(u, amount) {
     u.hp -= amount;
     this.fx.push({ k: 'hit', x: round2(u.x), y: round2(u.y) });
-    if (u.hp <= 0) {
+    if (u.hp <= 0 && this.units.has(u.id)) {
       this.units.delete(u.id);
       this.fx.push({ k: 'boom', x: round2(u.x), y: round2(u.y), r: 0.6 });
     }
@@ -521,7 +576,13 @@ class Game {
 
   // Plan a path for u toward (gx, gy) over its owner's open land (BFS, no corner cutting past
   // structures). If the point itself can't be reached, head for the reachable tile nearest to it.
-  planUnit(u, gx, gy) {
+  // With `assault` (an enemy beacon under a capture order) the unit may also storm the enemy's
+  // open tiles within CAPTURE_RANGE of that beacon.
+  planUnit(u, gx, gy, assault = null) {
+    const ok = assault
+      ? (n) => this.walkable(n, u.owner) || (this.walkable(n, assault.owner)
+        && dist((n % this.w) + 0.5, Math.floor(n / this.w) + 0.5, assault.x + 0.5, assault.y + 0.5) <= C.CAPTURE_RANGE)
+      : (n) => this.walkable(n, u.owner);
     const w = this.w;
     const gen = ++this.bfsGen;
     const stamp = this.bfsStamp;
@@ -546,8 +607,8 @@ class Game {
         const ny = y + dy;
         if (!this.inBounds(nx, ny)) continue;
         const n = this.idx(nx, ny);
-        if (stamp[n] === gen || !this.walkable(n, u.owner)) continue;
-        if (dx && dy && (!this.walkable(this.idx(x + dx, y), u.owner) || !this.walkable(this.idx(x, y + dy), u.owner))) continue;
+        if (stamp[n] === gen || !ok(n)) continue;
+        if (dx && dy && (!ok(this.idx(x + dx, y)) || !ok(this.idx(x, y + dy)))) continue;
         stamp[n] = gen;
         parent[n] = k;
         queue[tail++] = n;
@@ -567,7 +628,7 @@ class Game {
     u.path = path;
     u.dest = exact ? { x: gx, y: gy } : { x: bx + 0.5, y: by + 0.5 };
     // Stranded outside our land (territory shrank) with nowhere to walk: head straight home.
-    if (!path.length && !this.walkable(start, u.owner)) {
+    if (!path.length && !ok(start)) {
       const a = this.anchorOf(u);
       u.dest = { x: a.x, y: a.y };
     }
@@ -609,37 +670,90 @@ class Game {
     return false;
   }
 
+  // Damage a creep or an enemy unit.
+  hurt(obj, amount, byPid) {
+    if (obj.isUnit) this.damageUnit(obj, amount);
+    else this.damageCreep(obj, amount, byPid);
+  }
+
+  // Every enemy creep and enemy unit, for area damage.
+  *foesOf(pid) {
+    for (const c of this.creeps.values()) if (!c.dead && c.owner !== pid) yield c;
+    for (const u of this.units.values()) if (u.owner !== pid && u.hp > 0) yield u;
+  }
+
   unitFire(u, target, s, def) {
     u.cd = 1 / s.rate;
     if (def.aoe) {
-      for (const c of this.creeps.values()) {
-        if (c.dead || c.owner === u.owner || dist(u.x, u.y, c.x, c.y) > s.range) continue;
-        c.slowT = def.slowTime;
-        c.slowF = def.slow;
-        this.damageCreep(c, s.damage, u.owner);
+      for (const f of [...this.foesOf(u.owner)]) {
+        if (dist(u.x, u.y, f.x, f.y) > s.range) continue;
+        if (!f.isUnit) {
+          f.slowT = def.slowTime;
+          f.slowF = def.slow;
+        }
+        this.hurt(f, s.damage, u.owner);
       }
       this.fx.push({ k: 'frost', x: round2(u.x), y: round2(u.y), r: s.range });
     } else if (def.splash) {
-      for (const c of this.creeps.values()) {
-        if (c.dead || c.owner === u.owner) continue;
-        if (dist(target.x, target.y, c.x, c.y) <= def.splash) this.damageCreep(c, s.damage, u.owner);
+      for (const f of [...this.foesOf(u.owner)]) {
+        if (dist(target.x, target.y, f.x, f.y) <= def.splash) this.hurt(f, s.damage, u.owner);
       }
       this.fx.push({ k: 'shell', x1: round2(u.x), y1: round2(u.y), x2: round2(target.x), y2: round2(target.y), r: def.splash });
     } else {
-      this.damageCreep(target, s.damage, u.owner);
+      this.hurt(target, s.damage, u.owner);
       this.fx.push({ k: 'bolt', x1: round2(u.x), y1: round2(u.y), x2: round2(target.x), y2: round2(target.y), o: u.owner });
     }
   }
 
   updateUnits(dt) {
     for (const u of this.units.values()) {
+      if (u.hp <= 0) continue;
       const def = C.UNITS[u.kind];
       const s = C.towerStats(u.kind, u.level);
       const a = this.anchorOf(u);
+      const minRange = def.minRange || 0;
       u.cd -= dt;
 
-      // Engage the nearest enemy creep that threatens our patch: anywhere we could reach and shoot
-      // without straying past the leash.
+      // Drop a capture order that no longer makes sense.
+      let capT = null;
+      if (u.capture) {
+        capT = this.towers.get(u.capture);
+        if (!capT || !capT.owner || capT.owner === u.owner) {
+          u.capture = 0;
+          capT = null;
+          u.path = [];
+          u.dest = null;
+        }
+      }
+
+      // 1. Anything (enemy creep or enemy unit) already in range? Stand and shoot.
+      let shoot = null;
+      let shootD = Infinity;
+      for (const f of this.foesOf(u.owner)) {
+        const d = dist(u.x, u.y, f.x, f.y);
+        if (d <= s.range && d >= minRange && d < shootD) {
+          shootD = d;
+          shoot = f;
+        }
+      }
+      if (shoot) {
+        u.path = [];
+        u.dest = null;
+        if (u.cd <= 0) this.unitFire(u, shoot, s, def);
+        continue;
+      }
+
+      // 2. Occupation order: walk to the spot on our land nearest the target beacon and hold it.
+      if (capT) {
+        if (this.time >= u.repathAt || (!u.dest && dist(u.x, u.y, capT.x + 0.5, capT.y + 0.5) > 1.5)) {
+          this.planUnit(u, capT.x + 0.5, capT.y + 0.5, capT);
+          u.repathAt = this.time + 1;
+        }
+        this.moveUnit(u, dt, def.speed);
+        continue;
+      }
+
+      // 3. Chase enemy creeps that threaten our patch, staying on the leash.
       let target = null;
       let bestD = Infinity;
       for (const c of this.creeps.values()) {
@@ -651,16 +765,7 @@ class Game {
           target = c;
         }
       }
-
       if (target) {
-        const minRange = def.minRange || 0;
-        if (bestD <= s.range && bestD >= minRange) {
-          // In range: stand and shoot.
-          u.path = [];
-          u.dest = null;
-          if (u.cd <= 0) this.unitFire(u, target, s, def);
-          continue;
-        }
         // Close the distance (or back off, for a mortar that's too close), staying on the leash.
         let gx = target.x;
         let gy = target.y;
@@ -682,14 +787,14 @@ class Game {
         continue;
       }
 
-      // No threat: patrol around the anchor.
+      // 4. No threat: patrol around the anchor.
       if (u.dest) {
         if (this.moveUnit(u, dt, def.speed)) u.idleUntil = this.time + 0.8 + this.rand() * 2;
         continue;
       }
       const k = this.idx(Math.floor(u.x), Math.floor(u.y));
       if (dist(u.x, u.y, a.x, a.y) > a.leash + 0.75 || !this.inBounds(Math.floor(u.x), Math.floor(u.y)) || this.terr[k] !== u.owner) {
-        this.planUnit(u, a.x, a.y); // wandered off (reassigned, or land shrank): go home
+        this.planUnit(u, a.x, a.y); // wandered off (reassigned, captured elsewhere, or land shrank): go home
         continue;
       }
       if (this.time < u.idleUntil) continue;
@@ -698,6 +803,60 @@ class Game {
       this.planUnit(u, a.x + Math.cos(ang) * r, a.y + Math.sin(ang) * r);
       u.idleUntil = this.time + 0.5;
     }
+  }
+
+  // Occupation: units near an enemy beacon slowly take it over, unless its owner's units are there.
+  updateCaptures(dt) {
+    for (const t of this.towers.values()) {
+      if (!t.owner) continue;
+      const cx = t.x + 0.5;
+      const cy = t.y + 0.5;
+      const counts = new Map();
+      for (const u of this.units.values()) {
+        if (dist(u.x, u.y, cx, cy) <= C.CAPTURE_RANGE) counts.set(u.owner, (counts.get(u.owner) || 0) + 1);
+      }
+      const defended = (counts.get(t.owner) || 0) > 0;
+      let attacker = 0;
+      let most = 0;
+      for (const [pid, n] of counts) {
+        if (pid === t.owner) continue;
+        if (n > most || (n === most && pid === t.capBy)) {
+          most = n;
+          attacker = pid;
+        }
+      }
+      if (!defended && attacker) {
+        if (t.capBy !== attacker) {
+          t.capBy = attacker; // a new challenger starts from scratch
+          t.cap = 0;
+        }
+        t.cap += (dt * (1 + C.CAPTURE_EXTRA_UNIT_SPEED * (most - 1))) / C.CAPTURE_TIME;
+        if (t.cap >= 1) this.transferBeacon(t, attacker);
+      } else if (t.cap) {
+        // Contested or abandoned: progress drains away.
+        t.cap = Math.max(0, t.cap - dt / C.CAPTURE_TIME);
+        if (!t.cap) t.capBy = 0;
+      }
+    }
+  }
+
+  transferBeacon(t, newOwner) {
+    const winner = this.players.get(newOwner);
+    const loser = this.players.get(t.owner);
+    t.owner = newOwner;
+    t.cap = 0;
+    t.capBy = 0;
+    this.structVersion++;
+    this.terrDirty = true;
+    this.fx.push({ k: 'capture', x: t.x + 0.5, y: t.y + 0.5, o: newOwner });
+    // The occupying squad stays on as the beacon's new guard.
+    for (const u of this.units.values()) {
+      if (u.owner === newOwner && u.capture === t.id) {
+        u.capture = 0;
+        u.anchor = t.id;
+      }
+    }
+    if (winner && loser) this.pushFeed(`${winner.name} captured a beacon from ${loser.name}`);
   }
 
   // ---------------------------------------------------------------- pathfinding
@@ -904,11 +1063,50 @@ class Game {
     const enemy = this.nearestEnemy(p.core.x, p.core.y, p.id);
     const roll = this.rand();
 
-    // Expand
-    if (beacons.length < Math.min(4, 1 + Math.floor(age / 60)) && p.gold >= C.TOWERS.beacon.cost + 20 && roll < 0.35) {
-      const tile = this.botPickTile(p, p.core.x, p.core.y, 4, 6, null);
-      if (tile) this.build(p.id, tile.x, tile.y, 'beacon');
+    // Expand: leapfrog outward from the core or an existing beacon.
+    if (beacons.length < Math.min(5, 1 + Math.floor(age / 60)) && p.gold >= C.TOWERS.beacon.cost + 20 && roll < 0.35) {
+      const bases = [p.core, ...beacons];
+      const base = bases[Math.floor(this.rand() * bases.length)];
+      for (let i = 0; i < 25; i++) {
+        const ang = this.rand() * Math.PI * 2;
+        const r = 5 + this.rand() * 3;
+        const x = Math.round(base.x + Math.cos(ang) * r);
+        const y = Math.round(base.y + Math.sin(ang) * r);
+        if (this.inBounds(x, y) && this.build(p.id, x, y, 'beacon') === null) break;
+      }
       return;
+    }
+
+    // Seize an enemy beacon: if one is in reach, send a squad; otherwise leap a siege beacon up to it.
+    if (units.length >= 5 && p.gold >= 40 && this.time >= p.bot.nextCapture) {
+      p.bot.nextCapture = this.time + 10 + this.rand() * 10;
+      const enemyBeacons = [...this.towers.values()]
+        .filter((t) => t.owner && t.owner !== p.id && dist(t.x, t.y, p.core.x, p.core.y) < 30)
+        .sort((t1, t2) => dist(t1.x, t1.y, p.core.x, p.core.y) - dist(t2.x, t2.y, p.core.x, p.core.y));
+      const prey = enemyBeacons.find((t) => this.canReachForCapture(p.id, t));
+      if (prey) {
+        if (![...this.units.values()].some((u) => u.owner === p.id && u.capture === prey.id)) {
+          const squad = units
+            .filter((u) => !u.capture)
+            .sort((u1, u2) => dist(u1.x, u1.y, prey.x, prey.y) - dist(u2.x, u2.y, prey.x, prey.y))
+            .slice(0, Math.max(3, Math.floor(units.length / 2)))
+            .map((u) => u.id);
+          if (squad.length) this.occupy(p.id, squad, prey.id);
+        }
+        p.bot.nextCapture = this.time + 25 + this.rand() * 20;
+        return;
+      }
+      const near = enemyBeacons[0];
+      if (near && p.gold >= C.TOWERS.beacon.cost) {
+        for (let i = 0; i < 30; i++) {
+          const ang = this.rand() * Math.PI * 2;
+          const r = 5.3 + this.rand() * 1.5;
+          const x = Math.round(near.x + Math.cos(ang) * r);
+          const y = Math.round(near.y + Math.sin(ang) * r);
+          if (this.inBounds(x, y) && this.build(p.id, x, y, 'beacon') === null) break;
+        }
+        return;
+      }
     }
 
     // Attack
@@ -967,6 +1165,7 @@ class Game {
 
     this.updateBots();
     this.updateUnits(dt);
+    this.updateCaptures(dt);
     this.updateCreeps(dt);
 
     for (const t of this.towers.values()) {
@@ -985,11 +1184,13 @@ class Game {
     }
     const towers = [];
     for (const t of this.towers.values()) {
-      towers.push([t.id, KIND_KEYS.indexOf(t.kind), t.x, t.y, t.owner, t.level, Math.round(t.hp), t.maxHp, t.ruinOf || '']);
+      towers.push([t.id, KIND_KEYS.indexOf(t.kind), t.x, t.y, t.owner, t.level, Math.round(t.hp), t.maxHp, t.ruinOf || '',
+        t.capBy || 0, t.cap ? round2(t.cap) : 0]);
     }
     const units = [];
     for (const u of this.units.values()) {
-      units.push([u.id, UNIT_KEYS.indexOf(u.kind), round2(u.x), round2(u.y), u.owner, u.level, Math.round(u.hp), u.maxHp, u.anchor]);
+      units.push([u.id, UNIT_KEYS.indexOf(u.kind), round2(u.x), round2(u.y), u.owner, u.level, Math.round(u.hp), u.maxHp, u.anchor,
+        u.capture || 0]);
     }
     const creeps = [];
     for (const c of this.creeps.values()) {

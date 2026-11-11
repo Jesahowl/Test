@@ -93,6 +93,9 @@ function createServer({ port = 3000, botTarget } = {}) {
         case 'assign':
           err = game.assign(client.pid, msg.ids, Number.isInteger(msg.anchor) ? msg.anchor : -1);
           break;
+        case 'occupy':
+          err = game.occupy(client.pid, msg.ids, msg.id);
+          break;
         case 'capture':
           err = game.capture(client.pid, msg.id);
           break;
