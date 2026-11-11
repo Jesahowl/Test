@@ -5,6 +5,9 @@ const assert = require('node:assert');
 const C = require('../shared/config');
 const Game = require('../server/game');
 
+// These tests field bigger squads than a fresh base's land allows; lift the land-based cap.
+C.MIN_UNITS = 20;
+
 function seeded(seed) {
   let s = seed >>> 0;
   return () => {
@@ -69,7 +72,7 @@ test('beacons can leap onto unclaimed land just beyond the border', () => {
   const far = edgeTile(g, a, -1, 0, C.BEACON_LEAP + 1);
   const before = a.territory;
   assert.match(g.build(a.id, far.x, far.y, 'beacon'), /leap at most/);
-  assert.match(g.build(a.id, near.x, near.y, 'bolt'), /own land/, 'units cannot leap');
+  assert.match(g.build(a.id, near.x, near.y, 'archer'), /own land/, 'units cannot leap');
   assert.strictEqual(g.build(a.id, near.x, near.y, 'beacon'), null);
   g.update(0.05);
   assert.ok(a.territory > before + 40, `leap should claim new land (${before} -> ${a.territory})`);
@@ -98,7 +101,7 @@ test('units occupy and capture an undefended enemy beacon', () => {
   const { g, a, b } = setup(4);
   const beacon = plantEnemyBeacon(g, a, b);
   assert.ok(g.canReachForCapture(a.id, beacon));
-  const ids = addUnits(g, a, 'bolt', 2);
+  const ids = addUnits(g, a, 'archer', 2);
   const landBefore = a.territory;
   assert.strictEqual(g.occupy(a.id, ids, beacon.id), null);
   let t = 0;
@@ -127,7 +130,7 @@ test('a defended beacon cannot be captured', () => {
   const def = [...g.units.values()].find((u) => u.owner === b.id);
   def.hp = def.maxHp = 1e9;
   def.anchor = beacon.id;
-  const ids = addUnits(g, a, 'bolt', 3);
+  const ids = addUnits(g, a, 'archer', 3);
   assert.strictEqual(g.occupy(a.id, ids, beacon.id), null);
   for (let i = 0; i < 20 * 20; i++) g.update(0.05);
   assert.strictEqual(beacon.owner, b.id);
@@ -138,7 +141,7 @@ test('a defended beacon cannot be captured', () => {
 test('capture progress drains when the attackers leave', () => {
   const { g, a, b } = setup(6);
   const beacon = plantEnemyBeacon(g, a, b);
-  const ids = addUnits(g, a, 'bolt', 1);
+  const ids = addUnits(g, a, 'archer', 1);
   g.occupy(a.id, ids, beacon.id);
   for (let i = 0; i < 20 * 30 && !(beacon.cap > 0.3); i++) g.update(0.05);
   assert.ok(beacon.cap > 0.3);
@@ -150,7 +153,7 @@ test('capture progress drains when the attackers leave', () => {
 
 test('occupy rejects bad targets', () => {
   const { g, a, b } = setup(7);
-  const ids = addUnits(g, a, 'bolt', 1);
+  const ids = addUnits(g, a, 'archer', 1);
   const own = edgeTile(g, a, 0, 1, -2);
   g.build(a.id, own.x, own.y, 'beacon');
   const ownBeacon = [...g.towers.values()].find((t) => t.owner === a.id);
@@ -195,7 +198,7 @@ test('leapfrogging up to an enemy beacon puts it within capture reach', () => {
   assert.ok(g.canReachForCapture(a.id, enemy), `foothold after ${hops} hops`);
   assert.ok(hops >= 2, 'the target started more than one hop away');
 
-  const ids = addUnits(g, a, 'bolt', 3);
+  const ids = addUnits(g, a, 'archer', 3);
   assert.strictEqual(g.occupy(a.id, ids, enemy.id), null);
   for (let i = 0; i < 20 * 40 && enemy.owner === b.id; i++) g.update(0.05);
   assert.strictEqual(enemy.owner, a.id);

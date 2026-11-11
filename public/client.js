@@ -116,7 +116,7 @@
 
     players.clear();
     for (const a of msg.players) {
-      players.set(a[0], { id: a[0], name: a[1], hue: a[2], x: a[3], y: a[4], hp: a[5], maxHp: a[6], territory: a[7], kills: a[8], isBot: !!a[9] });
+      players.set(a[0], { id: a[0], name: a[1], hue: a[2], x: a[3], y: a[4], hp: a[5], maxHp: a[6], territory: a[7], kills: a[8], isBot: !!a[9], shield: a[10] || 0 });
     }
     if (msg.terr) drawTerritory();
 
@@ -367,11 +367,38 @@
     ctx.fillStyle = fill;
     ctx.beginPath();
     switch (kind) {
-      case 'bolt':
+      case 'archer':
         ctx.arc(x, y, r * 0.75, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = 'rgba(0,0,0,0.35)';
-        ctx.fillRect(x - r * 0.18, y - r * 0.95, r * 0.36, r * 0.9);
+        // arrowhead
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.beginPath();
+        ctx.moveTo(x, y - r * 0.85);
+        ctx.lineTo(x + r * 0.35, y - r * 0.2);
+        ctx.lineTo(x - r * 0.35, y - r * 0.2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillRect(x - r * 0.09, y - r * 0.25, r * 0.18, r * 0.75);
+        break;
+      case 'guard':
+        // shield
+        ctx.moveTo(x - r * 0.8, y - r * 0.75);
+        ctx.lineTo(x + r * 0.8, y - r * 0.75);
+        ctx.lineTo(x + r * 0.8, y);
+        ctx.quadraticCurveTo(x + r * 0.7, y + r * 0.7, x, y + r * 0.95);
+        ctx.quadraticCurveTo(x - r * 0.7, y + r * 0.7, x - r * 0.8, y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+        ctx.lineWidth = Math.max(1, r * 0.12);
+        ctx.stroke();
+        break;
+      case 'medic':
+        ctx.arc(x, y, r * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x - r * 0.14, y - r * 0.5, r * 0.28, r);
+        ctx.fillRect(x - r * 0.5, y - r * 0.14, r, r * 0.28);
         break;
       case 'frost':
         for (let i = 0; i < 6; i++) {
@@ -548,6 +575,22 @@
       ctx.fillStyle = '#fff';
       ctx.fillText(label, x, y - r * 1.6);
 
+      if (p.shield) {
+        // Spawn protection: other players can't send creeps here yet.
+        ctx.strokeStyle = `rgba(121, 192, 255, ${0.5 + 0.3 * Math.sin(performance.now() / 250)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, r * 1.6, 0, Math.PI * 2);
+        ctx.stroke();
+        const shieldText = `protected ${p.shield}s`;
+        ctx.font = `${Math.max(10, Math.round(s * 0.38))}px system-ui, sans-serif`;
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+        ctx.strokeText(shieldText, x, y + r * 2.4);
+        ctx.fillStyle = '#79c0ff';
+        ctx.fillText(shieldText, x, y + r * 2.4);
+      }
+
       if (p.id === attackTarget) {
         const t = performance.now() / 300;
         ctx.strokeStyle = '#ff5252';
@@ -607,6 +650,31 @@
           ctx.moveTo(x1, y1);
           ctx.lineTo(x2, y2);
           ctx.stroke();
+          break;
+        }
+        case 'slash': {
+          if (age > 0.18) break;
+          const [x, y] = toScreen(f.x, f.y);
+          ctx.strokeStyle = `rgba(255, 255, 255, ${1 - age / 0.18})`;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(x, y, s * 0.4, -2.4 + age * 8, -0.8 + age * 8);
+          ctx.stroke();
+          break;
+        }
+        case 'heal': {
+          if (age > 0.5) break;
+          const [x, y] = toScreen(f.x, f.y);
+          const p = age / 0.5;
+          ctx.strokeStyle = `rgba(126, 231, 135, ${0.6 * (1 - p)})`;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(x, y, f.r * s * (0.3 + 0.7 * p), 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = `rgba(126, 231, 135, ${1 - p})`;
+          ctx.font = `bold ${Math.round(s * 0.5)}px system-ui, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.fillText('+', x, y - s * (0.5 + p * 0.6));
           break;
         }
         case 'frost': {
@@ -1047,7 +1115,8 @@
     $('stats').innerHTML = `
       <div class="gold">${gold}g</div>
       <div>+${C.income(p.territory).toFixed(1)}g/s <span class="muted">· land ${p.territory}</span></div>
-      <div class="muted">Units ${[...units.values()].filter((u) => u.owner === myId).length}/${C.MAX_UNITS}</div>
+      <div class="muted">Units ${[...units.values()].filter((u) => u.owner === myId).length}/${C.unitCap(p.territory)} <span title="1 unit per ${C.LAND_PER_UNIT} land">(grows with land)</span></div>
+      ${p.shield ? `<div style="color:#79c0ff">Spawn protection: ${p.shield}s</div>` : ''}
       <div class="muted">Rank #${rank} of ${players.size} · kills ${p.kills}</div>
       <div class="muted">Next neutral wave in ${Math.max(0, me.nextWave)}s</div>
       <div>Core ${p.hp}/${p.maxHp}</div>
@@ -1090,7 +1159,9 @@
         const st = C.towerStats(u.kind, u.level);
         const maxed = u.level >= C.MAX_LEVEL;
         panel.innerHTML = `<h4>${d.name} · level ${u.level}</h4><div id="sel-info"></div>
-          <div>Damage ${st.damage.toFixed(0)} · Range ${st.range} · ${st.rate}/s</div>
+          <div>${d.heal ? `Heals ${st.heal.toFixed(0)} HP/s to units within ${st.range}`
+            : `Damage ${st.damage.toFixed(0)} · Range ${st.range} · ${st.rate}/s${d.melee ? ' · melee' : ''}`}</div>
+          ${d.taunt ? `<div class="muted">Taunts creeps within ${d.taunt} tiles</div>` : ''}
           <div id="sel-guard-row"></div>
           <div class="muted">Click your beacon or core to guard it, or an enemy beacon to capture it</div>
           <div class="btns">
@@ -1347,7 +1418,7 @@
     keys.add(k);
     if (!myId) return;
     for (const kind of BUY_KEYS) {
-      if (e.key === C.defOf(kind).key) toggleBuild(kind);
+      if (e.key.toUpperCase() === C.defOf(kind).key) toggleBuild(kind);
     }
     for (const kind of CREEP_KEYS) {
       if (k === C.CREEPS[kind].key.toLowerCase()) sendCreeps(kind, e.shiftKey ? 5 : 1);

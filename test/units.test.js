@@ -5,6 +5,9 @@ const assert = require('node:assert');
 const C = require('../shared/config');
 const Game = require('../server/game');
 
+// These tests field bigger squads than a fresh base's land allows; lift the land-based cap.
+C.MIN_UNITS = 20;
+
 function seeded(seed) {
   let s = seed >>> 0;
   return () => {
@@ -21,6 +24,7 @@ function setup(seed = 1) {
   for (const p of [a, b]) {
     p.nextWave = Infinity;
     p.gold = 10000;
+    p.spawnTime = -C.SPAWN_SHIELD; // past spawn protection
   }
   g.update(0.05);
   return { g, a, b };
@@ -55,7 +59,7 @@ test('units guard the nearest anchor and do not occupy tiles', () => {
   const beacon = addBeacon(g, a);
   const nearCore = openTileNear(g, a, a.core.x, a.core.y);
   const nearBeacon = openTileNear(g, a, beacon.x, beacon.y);
-  assert.strictEqual(g.build(a.id, nearCore.x, nearCore.y, 'bolt'), null);
+  assert.strictEqual(g.build(a.id, nearCore.x, nearCore.y, 'archer'), null);
   assert.strictEqual(g.build(a.id, nearBeacon.x, nearBeacon.y, 'frost'), null);
   assert.strictEqual(g.build(a.id, nearBeacon.x, nearBeacon.y, 'mortar'), null, 'units can share a tile');
   const [u1, u2, u3] = [...g.units.values()];
@@ -65,11 +69,56 @@ test('units guard the nearest anchor and do not occupy tiles', () => {
   assert.strictEqual(g.grid[g.idx(nearBeacon.x, nearBeacon.y)], 0);
 });
 
-test('unit cap is enforced', () => {
+test('unit cap grows with land', () => {
   const { g, a } = setup(2);
+  const saved = C.MIN_UNITS;
+  C.MIN_UNITS = 3;
+  try {
+    const cap = C.unitCap(a.territory);
+    assert.strictEqual(cap, Math.max(3, Math.floor(a.territory / C.LAND_PER_UNIT)));
+    const t = openTileNear(g, a, a.core.x, a.core.y);
+    for (let i = 0; i < cap; i++) assert.strictEqual(g.build(a.id, t.x, t.y, 'archer'), null);
+    assert.match(g.build(a.id, t.x, t.y, 'archer'), /limit/);
+    addBeacon(g, a); // more land -> bigger army
+    assert.ok(C.unitCap(a.territory) > cap);
+    assert.strictEqual(g.build(a.id, t.x, t.y, 'archer'), null);
+  } finally {
+    C.MIN_UNITS = saved;
+  }
+});
+
+test('medics heal wounded units and never attack', () => {
+  const { g, a, b } = setup(10);
   const t = openTileNear(g, a, a.core.x, a.core.y);
-  for (let i = 0; i < C.MAX_UNITS; i++) assert.strictEqual(g.build(a.id, t.x, t.y, 'bolt'), null);
-  assert.match(g.build(a.id, t.x, t.y, 'bolt'), /limit/);
+  g.build(a.id, t.x, t.y, 'guard');
+  g.build(a.id, t.x, t.y, 'medic');
+  const [guard, medic] = [...g.units.values()];
+  guard.hp = 100;
+  for (let i = 0; i < 20 * 3; i++) g.update(0.05);
+  assert.ok(guard.hp > 100, `guard should be healed (hp ${guard.hp})`);
+  assert.strictEqual(C.towerStats('medic', 1).damage, 0);
+  // A creep right next to the medic is never shot by it.
+  g.spawnCreep('grunt', b.id, a.id, medic.x + 0.5, medic.y, 1);
+  const creep = [...g.creeps.values()][0];
+  creep.hp = creep.maxHp = 1e6;
+  g.units.delete(guard.id); // only the medic is left to (not) fight
+  for (let i = 0; i < 20 * 2; i++) g.update(0.05);
+  assert.strictEqual(creep.hp, 1e6);
+});
+
+test('guards taunt nearby creeps into fighting them', () => {
+  const { g, a, b } = setup(11);
+  const t = openTileNear(g, b, b.core.x, b.core.y, 3, 4);
+  g.build(b.id, t.x, t.y, 'guard');
+  const guard = [...g.units.values()][0];
+  guard.hp = guard.maxHp = 1e6; // survive the whole test
+  // A creep passing within taunt range on its way to B's core.
+  g.spawnCreep('grunt', a.id, b.id, guard.x + 2, guard.y, 1);
+  const creep = [...g.creeps.values()][0];
+  creep.hp = creep.maxHp = 1e6;
+  for (let i = 0; i < 20 * 5; i++) g.update(0.05);
+  assert.ok(guard.hp < guard.maxHp, 'the taunted creep should be hitting the guard');
+  assert.strictEqual(b.core.hp, C.CORE_HP, 'and not the core');
 });
 
 test('patrolling units stay on their land and near their anchor', () => {
@@ -77,9 +126,9 @@ test('patrolling units stay on their land and near their anchor', () => {
   const beacon = addBeacon(g, a);
   for (let i = 0; i < 4; i++) {
     const t = openTileNear(g, a, a.core.x, a.core.y);
-    g.build(a.id, t.x, t.y, ['bolt', 'frost', 'mortar'][i % 3]);
+    g.build(a.id, t.x, t.y, ['archer', 'frost', 'mortar'][i % 3]);
     const tb = openTileNear(g, a, beacon.x, beacon.y);
-    g.build(a.id, tb.x, tb.y, 'bolt');
+    g.build(a.id, tb.x, tb.y, 'archer');
   }
   const start = new Map([...g.units.values()].map((u) => [u.id, [u.x, u.y]]));
   for (let i = 0; i < 20 * 90; i++) {
@@ -98,7 +147,7 @@ test('units chase and kill creeps entering their patch', () => {
   const { g, a, b } = setup(4);
   for (let i = 0; i < 3; i++) {
     const t = openTileNear(g, b, b.core.x, b.core.y);
-    g.build(b.id, t.x, t.y, 'bolt');
+    g.build(b.id, t.x, t.y, 'archer');
   }
   for (let i = 0; i < 4; i++) g.send(a.id, 'grunt', b.id);
   for (let i = 0; i < 20 * 120 && b.kills < 4; i++) g.update(0.05);
@@ -110,7 +159,7 @@ test('assign sends units to guard a beacon', () => {
   const { g, a, b } = setup(5);
   const beacon = addBeacon(g, a);
   const t = openTileNear(g, a, a.core.x, a.core.y);
-  g.build(a.id, t.x, t.y, 'bolt');
+  g.build(a.id, t.x, t.y, 'archer');
   g.build(a.id, t.x, t.y, 'frost');
   const ids = [...g.units.keys()];
   assert.match(g.assign(a.id, ids, 12345), /only guard/);
@@ -127,7 +176,7 @@ test('units fall back to the core when their beacon is destroyed', () => {
   const { g, a } = setup(6);
   const beacon = addBeacon(g, a);
   const t = openTileNear(g, a, beacon.x, beacon.y);
-  g.build(a.id, t.x, t.y, 'bolt');
+  g.build(a.id, t.x, t.y, 'archer');
   const u = [...g.units.values()][0];
   assert.strictEqual(u.anchor, beacon.id);
   g.destroyTower(beacon, true);
@@ -159,17 +208,17 @@ test('creeps fight units that block them', () => {
 test('units can be upgraded and sold, and die with their owner', () => {
   const { g, a, b } = setup(9);
   const t = openTileNear(g, a, a.core.x, a.core.y);
-  g.build(a.id, t.x, t.y, 'bolt');
+  g.build(a.id, t.x, t.y, 'archer');
   const u = [...g.units.values()][0];
   assert.strictEqual(g.upgrade(a.id, u.id), null);
   assert.strictEqual(u.level, 2);
   assert.match(g.upgrade(b.id, u.id), /Invalid/);
   const gold = a.gold;
   assert.strictEqual(g.sell(a.id, u.id), null);
-  assert.strictEqual(a.gold, gold + C.sellValue('bolt', 2));
+  assert.strictEqual(a.gold, gold + C.sellValue('archer', 2));
   assert.strictEqual(g.units.size, 0);
 
-  g.build(a.id, t.x, t.y, 'bolt');
+  g.build(a.id, t.x, t.y, 'archer');
   g.killPlayer(a, b.id);
   assert.strictEqual(g.units.size, 0);
 });

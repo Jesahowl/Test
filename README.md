@@ -20,8 +20,8 @@ AI bots fill the server up to 6 players, so it's playable alone too.
 
 | Goal | How |
 |---|---|
-| **Survive** | Your core has 1000 HP. If creeps destroy it, you're out. Respawn instantly with a new base. |
-| **Defend** | Buy **units** (Bolt / Frost / Mortar). Each one guards your core or one of your beacons, patrolling around it and chasing off creeps. |
+| **Survive** | Your core has 1000 HP. If creeps destroy it, you're out. Respawn instantly with a new base, protected from other players' creeps for 60s. |
+| **Defend** | Buy **units** (Guard / Archer / Frost / Mortar / Medic). Each one guards your core or one of your beacons, patrolling around it and chasing off creeps. Your army size grows with your land. |
 | **Grow** | **Beacons** claim land (more land = more gold per second). They can **leapfrog** up to 3 tiles past your border onto unclaimed ground. |
 | **Conquer** | Park units next to an enemy beacon to **capture** it, land and all. |
 | **Attack** | Send creeps (Grunt / Runner / Brute) at another player. Click an enemy core to target it, otherwise they go for the nearest one. Destroying a core pays **200g + half the victim's gold**. |
@@ -42,7 +42,11 @@ Neutral waves also hit every player every ~22s, and they get stronger the longer
 - **Beacons need guards.** Creeps divert to attack any enemy beacon they pass within 2.5 tiles. Lose a
   beacon and you lose its land; its guards fall back to your core.
 - Units **body-block**: a creep that bumps into an enemy unit stops to fight it.
-- Up to 14 units per player. Units cost no upkeep and can be upgraded (max level 3) or sold.
+- **Army size comes from land:** 1 unit per 25 tiles you own (minimum 5, maximum 24). Expanding is how
+  you grow your army; losing land doesn't kill units, but you can't replace them until you regrow.
+- Units cost no upkeep and can be upgraded (max level 3) or sold.
+- **Guards** taunt: creeps within 2.5 tiles of an enemy Guard stop and fight it instead of pushing on.
+- **Medics** never attack; they heal every friendly unit around them and shadow the most wounded one.
 - Creeps still **pathfind** around cores and beacons to reach their target.
 
 ### Leapfrogging and capturing beacons
@@ -67,8 +71,8 @@ Neutral waves also hit every player every ~22s, and they get stronger the longer
 
 | Key | Action |
 |---|---|
-| `1` `2` `3` | Buy a Bolt / Frost / Mortar unit: click your land to place it |
-| `4` | Place a Beacon |
+| `1`–`5` | Buy a Guard / Archer / Frost / Mortar / Medic: click your land to place it |
+| `B` | Place a Beacon |
 | Click a unit | Select it (`Shift`-click to add more, `Q` selects all your units) |
 | Click your beacon / core | With units selected, send them to guard it. Otherwise selects the beacon. |
 | Click an enemy beacon | With units selected, order them to capture it |
@@ -80,21 +84,26 @@ Neutral waves also hit every player every ~22s, and they get stronger the longer
 
 ## Units, structures & creeps
 
-| Unit | Cost | Role |
-|---|---|---|
-| Bolt | 55 | Fast single-target shots, quick on its feet |
-| Frost | 75 | Area pulse that damages and slows |
-| Mortar | 115 | Long-range splash, slow, can't hit adjacent targets |
+| Unit | Cost | HP | Role |
+|---|---|---|---|
+| Guard | 80 | 520 | Melee tank. Taunts nearby creeps into fighting it |
+| Archer | 60 | 110 | Long range (5.5) single-target DPS, fragile |
+| Frost | 75 | 150 | Area pulse that damages and slows |
+| Mortar | 115 | 170 | Long-range splash, slow, can't hit adjacent targets |
+| Medic | 70 | 130 | Heals nearby units (14 HP/s), no attack |
 
 | Structure | Cost | Role |
 |---|---|---|
 | Beacon | 90 | Claims land (radius 5, +1 per level). Anchor for guards. |
 
-| Creep | Cost | Notes |
-|---|---|---|
-| Grunt | 10 | Balanced |
-| Runner | 15 | Fast, fragile |
-| Brute | 45 | Slow tank, hits hard |
+| Creep | Cost | HP | Notes |
+|---|---|---|---|
+| Grunt | 14 | 90 | Balanced |
+| Runner | 20 | 55 | Fast, fragile |
+| Brute | 65 | 450 | Slow tank, hits hard |
+
+Neutral waves hit every player every 22s. Wave N has `2 + 0.6·N` creeps with `+10%·N` HP, plus a Brute
+every 4 waves (`WAVE_*` settings in the config).
 
 All numbers live in [`shared/config.js`](shared/config.js) and are shared by server and client, so tuning happens in one place.
 
@@ -126,7 +135,7 @@ test/              node:test suite (game logic, units, leapfrog/capture, pathfin
 ## Ideas for next steps
 
 - Team / clan mode and alliances
-- More unit branches at level 3 (e.g. Bolt → Sniper or Gatling)
+- More unit branches at level 3 (e.g. Archer → Sniper or Gatling)
 - Box-select and control groups for units
 - Mobile touch controls
 - Delta-compressed snapshots and interest management for large servers

@@ -36,7 +36,7 @@ test('client can load the page, join and receive state', async () => {
     assert.ok(state.players.some((p) => p[1] === 'Tester'));
 
     ws.send('not json');
-    ws.send(JSON.stringify({ t: 'build', kind: 'bolt', x: -5, y: 0 }));
+    ws.send(JSON.stringify({ t: 'build', kind: 'archer', x: -5, y: 0 }));
     await waitFor((m) => m.t === 'err');
     ws.close();
   } finally {

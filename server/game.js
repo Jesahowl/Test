@@ -2,7 +2,7 @@
 
 // Authoritative game simulation for Territory Siege.
 // Positions are in tiles. A structure on tile (x, y) has its centre at (x + 0.5, y + 0.5).
-// Structures (cores, beacons) sit on the grid; units (bolt, frost, mortar) move freely within
+// Structures (cores, beacons) sit on the grid; units (guard, archer, frost, mortar, medic) move freely within
 // their owner's land, guarding an anchor (the core or a beacon).
 
 const C = require('../shared/config');
@@ -287,7 +287,8 @@ class Game {
     if (isUnit) {
       let count = 0;
       for (const u of this.units.values()) if (u.owner === pid) count++;
-      if (count >= C.MAX_UNITS) return `Unit limit reached (${C.MAX_UNITS})`;
+      const cap = C.unitCap(p.territory);
+      if (count >= cap) return `Unit limit reached (${cap}) - grow your land for a bigger army`;
     }
     if (p.gold < def.cost) return 'Not enough gold';
     p.gold -= def.cost;
@@ -461,18 +462,26 @@ class Game {
     for (const c of this.creeps.values()) if (c.owner === pid) owned++;
     if (owned >= C.MAX_CREEPS_PER_PLAYER) return 'Too many creeps in the field';
     let target = this.players.get(targetId);
-    if (!target || !target.alive || target.id === pid) target = this.nearestEnemy(p.core.x, p.core.y, pid);
+    if (target && target.alive && target.id !== pid && this.isShielded(target)) {
+      return `${target.name} is under spawn protection for ${Math.ceil(C.SPAWN_SHIELD - (this.time - target.spawnTime))}s`;
+    }
+    if (!target || !target.alive || target.id === pid) target = this.nearestEnemy(p.core.x, p.core.y, pid, true);
     if (!target) return 'No one to attack';
     p.gold -= def.cost;
     this.spawnCreep(kind, pid, target.id, p.core.x + 0.5, p.core.y + 0.5, 1);
     return null;
   }
 
-  nearestEnemy(x, y, excludeId) {
+  // Newly spawned players can't be sent creeps for SPAWN_SHIELD seconds.
+  isShielded(p) {
+    return this.time - p.spawnTime < C.SPAWN_SHIELD;
+  }
+
+  nearestEnemy(x, y, excludeId, skipShielded = false) {
     let best = null;
     let bestD = Infinity;
     for (const p of this.players.values()) {
-      if (!p.alive || p.id === excludeId) continue;
+      if (!p.alive || p.id === excludeId || (skipShielded && this.isShielded(p))) continue;
       const d = dist(x, y, p.core.x, p.core.y);
       if (d < bestD) {
         bestD = d;
@@ -496,8 +505,8 @@ class Game {
 
   spawnNeutralWave(p) {
     p.waveNum++;
-    const n = 2 + Math.floor(p.waveNum * 0.9);
-    const hpMul = 1 + p.waveNum * 0.17;
+    const n = C.WAVE_BASE_COUNT + Math.floor(p.waveNum * C.WAVE_COUNT_GROWTH);
+    const hpMul = 1 + p.waveNum * C.WAVE_HP_GROWTH;
     const a = this.rand() * Math.PI * 2;
     const clamp = (v, max) => Math.max(1, Math.min(max - 2, v));
     const sx = clamp(p.core.x + Math.cos(a) * C.NEUTRAL_SPAWN_DIST, this.w);
@@ -506,7 +515,7 @@ class Game {
       const kind = p.waveNum >= 3 && i % 3 === 2 ? 'runner' : 'grunt';
       this.spawnCreep(kind, 0, p.id, sx + this.rand() * 1.5, sy + this.rand() * 1.5, hpMul);
     }
-    for (let i = 0; i < Math.floor(p.waveNum / 4); i++) {
+    for (let i = 0; i < Math.floor(p.waveNum / C.WAVE_BRUTE_EVERY); i++) {
       this.spawnCreep('brute', 0, p.id, sx, sy, hpMul);
     }
   }
@@ -699,6 +708,9 @@ class Game {
         if (dist(target.x, target.y, f.x, f.y) <= def.splash) this.hurt(f, s.damage, u.owner);
       }
       this.fx.push({ k: 'shell', x1: round2(u.x), y1: round2(u.y), x2: round2(target.x), y2: round2(target.y), r: def.splash });
+    } else if (def.melee) {
+      this.hurt(target, s.damage, u.owner);
+      this.fx.push({ k: 'slash', x: round2(target.x), y: round2(target.y) });
     } else {
       this.hurt(target, s.damage, u.owner);
       this.fx.push({ k: 'bolt', x1: round2(u.x), y1: round2(u.y), x2: round2(target.x), y2: round2(target.y), o: u.owner });
@@ -726,10 +738,49 @@ class Game {
         }
       }
 
+      // Medics never attack: they heal nearby friends and shadow the most wounded one.
+      if (def.heal) {
+        let patient = null;
+        let worst = 1;
+        let healed = 0;
+        for (const f of this.units.values()) {
+          if (f.owner !== u.owner || f.hp >= f.maxHp) continue;
+          const fd = dist(u.x, u.y, f.x, f.y);
+          if (u.cd <= 0 && fd <= s.range) {
+            f.hp = Math.min(f.maxHp, f.hp + s.heal);
+            healed++;
+          }
+          const frac = f.hp / f.maxHp;
+          if (frac < worst && (capT || dist(a.x, a.y, f.x, f.y) <= a.leash + s.range)) {
+            worst = frac;
+            patient = f;
+          }
+        }
+        if (healed) {
+          u.cd = 1 / s.rate;
+          this.fx.push({ k: 'heal', x: round2(u.x), y: round2(u.y), r: s.range });
+        }
+        if (patient && patient !== u && dist(u.x, u.y, patient.x, patient.y) > s.range * 0.6) {
+          let gx = patient.x;
+          let gy = patient.y;
+          const da = dist(a.x, a.y, gx, gy);
+          if (!capT && da > a.leash) {
+            gx = a.x + ((gx - a.x) / da) * a.leash;
+            gy = a.y + ((gy - a.y) / da) * a.leash;
+          }
+          if (this.time >= u.repathAt || !u.dest) {
+            this.planUnit(u, gx, gy, capT);
+            u.repathAt = this.time + C.UNIT_REPATH;
+          }
+          this.moveUnit(u, dt, def.speed);
+          continue;
+        }
+      }
+
       // 1. Anything (enemy creep or enemy unit) already in range? Stand and shoot.
       let shoot = null;
       let shootD = Infinity;
-      for (const f of this.foesOf(u.owner)) {
+      for (const f of def.heal ? [] : this.foesOf(u.owner)) {
         const d = dist(u.x, u.y, f.x, f.y);
         if (d <= s.range && d >= minRange && d < shootD) {
           shootD = d;
@@ -756,7 +807,7 @@ class Game {
       // 3. Chase enemy creeps that threaten our patch, staying on the leash.
       let target = null;
       let bestD = Infinity;
-      for (const c of this.creeps.values()) {
+      for (const c of def.heal ? [] : this.creeps.values()) {
         if (c.dead || c.owner === u.owner) continue;
         if (dist(a.x, a.y, c.x, c.y) > a.leash + s.range) continue;
         const d = dist(u.x, u.y, c.x, c.y);
@@ -956,6 +1007,25 @@ class Game {
         continue;
       }
 
+      // Taunted: an enemy Guard nearby pulls us in to fight it.
+      let taunter = null;
+      let tauntD = Infinity;
+      for (const u of this.units.values()) {
+        const ud = C.UNITS[u.kind];
+        if (!ud.taunt || u.owner === c.owner) continue;
+        const d = dist(u.x, u.y, c.x, c.y);
+        if (d <= ud.taunt && d < tauntD) {
+          tauntD = d;
+          taunter = u;
+        }
+      }
+      if (taunter) {
+        const step = Math.min(Math.max(0, tauntD - C.CREEP_UNIT_REACH * 0.8), speed * dt);
+        c.x += ((taunter.x - c.x) / tauntD) * step;
+        c.y += ((taunter.y - c.y) / tauntD) * step;
+        continue;
+      }
+
       // Divert to wreck an enemy beacon we pass near.
       let beacon = null;
       let beaconD = C.CREEP_AGGRO_RANGE;
@@ -1060,7 +1130,7 @@ class Game {
     const age = this.time - p.spawnTime;
     const beacons = [...this.towers.values()].filter((t) => t.owner === p.id);
     const units = [...this.units.values()].filter((u) => u.owner === p.id);
-    const enemy = this.nearestEnemy(p.core.x, p.core.y, p.id);
+    const enemy = this.nearestEnemy(p.core.x, p.core.y, p.id, true);
     const roll = this.rand();
 
     // Expand: leapfrog outward from the core or an existing beacon.
@@ -1130,9 +1200,9 @@ class Game {
     }
 
     // Defend: buy a unit for whichever anchor is most under-guarded (the core counts double).
-    if (p.gold >= 55 && units.length < Math.min(C.MAX_UNITS, 3 + age / 40)) {
+    if (p.gold >= 60 && units.length < Math.min(C.unitCap(p.territory), 3 + age / C.BOT_UNIT_RAMP)) {
       const r = this.rand();
-      const kind = r < 0.5 ? 'bolt' : r < 0.75 ? 'frost' : 'mortar';
+      const kind = r < 0.2 ? 'guard' : r < 0.55 ? 'archer' : r < 0.7 ? 'frost' : r < 0.85 ? 'mortar' : 'medic';
       if (p.gold < C.UNITS[kind].cost) return;
       const anchors = [{ id: 0, x: p.core.x, y: p.core.y, w: 2 }, ...beacons.map((t) => ({ id: t.id, x: t.x, y: t.y, w: 1 }))];
       let pick = anchors[0];
@@ -1180,7 +1250,7 @@ class Game {
     const players = [];
     for (const p of this.players.values()) {
       players.push([p.id, p.name, p.hue, p.core.x, p.core.y, Math.max(0, Math.round(p.core.hp)), p.core.maxHp,
-        p.territory, p.kills, p.isBot ? 1 : 0]);
+        p.territory, p.kills, p.isBot ? 1 : 0, this.isShielded(p) ? Math.ceil(C.SPAWN_SHIELD - (this.time - p.spawnTime)) : 0]);
     }
     const towers = [];
     for (const t of this.towers.values()) {

@@ -50,12 +50,12 @@ test('building is only allowed on your own empty land', () => {
   const tile = ownTile(g, a);
   assert.strictEqual(g.build(a.id, tile.x, tile.y, 'beacon'), null);
   assert.match(g.build(a.id, tile.x, tile.y, 'beacon'), /occupied/);
-  assert.match(g.build(a.id, tile.x, tile.y, 'bolt'), /occupied/);
-  assert.match(g.build(a.id, a.core.x, a.core.y, 'bolt'), /occupied/);
-  assert.match(g.build(b.id, tile.x, tile.y, 'bolt'), /own land/);
-  assert.match(g.build(a.id, b.core.x + 1, b.core.y, 'bolt'), /own land/);
-  assert.match(g.build(a.id, -1, 0, 'bolt'), /bounds/);
-  assert.match(g.build(a.id, 1.5, 0, 'bolt'), /bounds/);
+  assert.match(g.build(a.id, tile.x, tile.y, 'archer'), /occupied/);
+  assert.match(g.build(a.id, a.core.x, a.core.y, 'archer'), /occupied/);
+  assert.match(g.build(b.id, tile.x, tile.y, 'archer'), /own land/);
+  assert.match(g.build(a.id, b.core.x + 1, b.core.y, 'archer'), /own land/);
+  assert.match(g.build(a.id, -1, 0, 'archer'), /bounds/);
+  assert.match(g.build(a.id, 1.5, 0, 'archer'), /bounds/);
 });
 
 test('walls no longer exist', () => {
@@ -93,12 +93,13 @@ test('units kill creeps and pay bounty', () => {
   const a = g.addPlayer('A');
   const b = g.addPlayer('B');
   g.update(0.05);
+  b.spawnTime = -C.SPAWN_SHIELD; // past spawn protection
   a.gold = 1000;
   b.gold = 1000;
   // A squad of bolts guarding B's core
   for (let i = 0; i < 4; i++) {
     const tile = ownTile(g, b, 2);
-    assert.strictEqual(g.build(b.id, tile.x, tile.y, 'bolt'), null);
+    assert.strictEqual(g.build(b.id, tile.x, tile.y, 'archer'), null);
   }
   assert.strictEqual(g.units.size, 4);
   const goldBefore = b.gold;
@@ -117,6 +118,7 @@ test('undefended core falls, killer gets bounty, base becomes ruins', () => {
   const a = g.addPlayer('A');
   const b = g.addPlayer('B');
   g.update(0.05);
+  b.spawnTime = -C.SPAWN_SHIELD; // past spawn protection
   const tile = ownTile(g, b, 3);
   g.build(b.id, tile.x, tile.y, 'beacon');
   let death = null;
@@ -187,4 +189,17 @@ test('territory RLE encodes the full map', () => {
   let total = 0;
   for (let i = 1; i < rle.length; i += 2) total += rle[i];
   assert.strictEqual(total, C.MAP_W * C.MAP_H);
+});
+
+test('new players are protected from other players\' creeps for a while', () => {
+  const g = new Game({ botTarget: 0, rand: seeded(12) });
+  const a = g.addPlayer('A');
+  g.update(C.SPAWN_SHIELD + 1);
+  const b = g.addPlayer('B');
+  g.update(0.05);
+  a.gold = 1000;
+  assert.match(g.send(a.id, 'grunt', b.id), /spawn protection/);
+  assert.match(g.send(a.id, 'grunt', 0), /No one to attack/, 'nearest-target sends skip protected players');
+  g.update(C.SPAWN_SHIELD);
+  assert.strictEqual(g.send(a.id, 'grunt', b.id), null);
 });
