@@ -84,24 +84,39 @@ test('an attack marches across the map and captures an undefended tower', () => 
   }
 });
 
-test('when a tower is destroyed the attack rolls on to the next structure', () => {
+test('destroying a tower claims it for the attacker', () => {
   const { g, a, b } = duel(6);
   const saved = C.CAPTURE_RANGE;
-  C.CAPTURE_RANGE = 0; // force destruction instead of capture
+  C.CAPTURE_RANGE = 0; // no occupation: the tower has to be knocked down
   try {
     const t = outpost(g, b);
+    t.level = 2;
+    const landBefore = a.territory;
     const squad = troops(g, a, 'mortar', 4, t.x - 3, t.y + 0.5, 3);
-    g.order(a.id, squad.map((u) => u.id), { k: 't', id: t.id });
+    g.order(a.id, null, { k: 't', id: t.id });
     const gold = a.gold;
-    assert.ok(run(g, 120, () => t.ruin), 'tower should be destroyed');
+    assert.ok(run(g, 120, () => t.owner !== b.id), 'tower should fall');
+    assert.strictEqual(t.owner, a.id, 'the destroyer claims it');
+    assert.ok(!t.ruin);
+    assert.strictEqual(t.level, 2, 'it keeps its level');
+    assert.ok(t.hp > 0 && t.hp <= Math.round(t.maxHp * C.TOWER_CLAIM_HP) + 1, `patched up to ${C.TOWER_CLAIM_HP * 100}% (hp ${t.hp})`);
     assert.ok(a.gold >= gold + C.TOWER_BOUNTY);
+    assert.strictEqual(a.towersDestroyed, 1);
     g.update(0.05);
-    const alive = squad.filter((u) => g.units.has(u.id));
-    assert.ok(alive.length);
-    for (const u of alive) assert.deepStrictEqual(u.attack, { k: 'c', id: b.id });
+    assert.ok(a.territory > landBefore, 'its land comes with it');
+    for (const u of squad.filter((v) => g.units.has(v.id))) assert.strictEqual(u.anchor, t.id, 'the attackers garrison it');
+    assert.deepStrictEqual(a.order, { type: 'attack', target: { k: 'c', id: b.id } }, 'new waves push on to the core');
   } finally {
     C.CAPTURE_RANGE = saved;
   }
+});
+
+test('towers still fall to ruins when their owner is wiped out', () => {
+  const { g, a, b } = duel(15);
+  const t = outpost(g, b);
+  g.damageCore(b, 1e9, a.id);
+  assert.ok(t.ruin);
+  assert.strictEqual(t.owner, 0);
 });
 
 test('a defended tower is not captured', () => {

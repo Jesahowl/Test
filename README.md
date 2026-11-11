@@ -25,7 +25,7 @@ AI bots fill the server up to 6 players, so it's playable alone too.
 | **Orders** | **Right-click** an enemy tower or core to attack it, or one of your own towers or your core to defend there. Who goes depends on the **Send %** setting: at 100% every troop goes and every future wave follows; at 25/50/75% only that share of your current troops goes (nearest to the target first, keeping your army's mix of types) and new waves keep their orders, so you can split your forces. Select specific troops first (click, Shift-click, `Q` = all) to command exactly those. `H` brings everyone home. |
 | **The push** | Troops march across the map (pathfinding around structures), fight whatever they meet, then hit the target. When a tower falls, the push rolls on to that player's next tower, then their core. |
 | **Towers** | Claim land and shoot enemy troops. Your core shoots too. Place them on your land, or **leapfrog** up to 3 tiles past your border onto unclaimed ground. |
-| **Taking towers** | Destroy them (they become ruins, +120g), or **capture** them: troops standing near an enemy tower with none of its owner's troops around flip it in ~10s (faster with more troops). Captured towers keep their land, and the attackers stay on as their garrison. |
+| **Taking towers** | **Destroy** one and it becomes yours (+120g): it keeps its level, comes back at 70% health, and its land switches to you. Or **capture** it without a fight: troops standing near an enemy tower with none of its owner's troops around flip it in ~10s (faster with more troops). Either way the attackers stay on as its garrison and your waves push on to that player's next tower. Towers only become ruins when their owner's core falls. |
 | **Jungle** | Neutral camps sit around the map. They're passive until attacked, then the whole camp fights back. Clear one for gold (raptors 15g, golems 80g); it respawns after 60s. Right-click a camp to send troops. |
 | **Home turf** | Troops on their own land heal 2% HP/s and deal +30% damage, so defending is cheaper than attacking. |
 | **Army size** | You can have 1 troop alive per 10 tiles of land (min 10, max 30). Waves stop spawning at the cap. |
@@ -62,7 +62,7 @@ A wave holds at most 12 troops.
 
 All numbers live in [`shared/config.js`](shared/config.js), shared by server and client, so tuning happens in one place.
 The most useful knobs: `WAVE_INTERVAL`, `START_ARMY`, `ARMY_MAX_PER_WAVE`, `LAND_PER_UNIT`, troop and tower stats,
-`CORE_DAMAGE`, `HOME_DAMAGE_BONUS`, `SPAWN_SHIELD`, `CAPTURE_TIME`, `CAMP_*`.
+`CORE_DAMAGE`, `HOME_DAMAGE_BONUS`, `SPAWN_SHIELD`, `CAPTURE_TIME`, `TOWER_CLAIM_HP`, `CAMP_*`.
 
 ## Architecture
 

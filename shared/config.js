@@ -40,6 +40,7 @@
     TROOP_AGGRO: 2, // troops on the march engage enemies within (attack range + this)
     TROOP_BOUNTY: 6, // gold for killing an enemy troop, +3 per troop level
     TOWER_BOUNTY: 120, // gold for destroying an enemy tower
+    TOWER_CLAIM_HP: 0.7, // a destroyed tower becomes the destroyer's, at this fraction of max HP
     // Home turf: troops standing on their own land heal and hit harder, so defending is cheaper
     // than attacking and a big army can't simply steamroll a smaller one at its door.
     HOME_REGEN: 0.02, // fraction of max HP healed per second
