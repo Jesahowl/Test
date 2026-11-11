@@ -27,6 +27,13 @@
     NEUTRAL_SPAWN_DIST: 20,
 
     MAX_CREEPS_PER_PLAYER: 60,
+
+    // Pathfinding: entering a structure tile costs (BASE + maxHp * PER_HP) extra tiles of walking.
+    // A 500 HP wall is worth a ~44 tile detour; seal a base completely and creeps break through.
+    PATH_STRUCT_BASE: 4,
+    PATH_STRUCT_PER_HP: 0.08,
+    PATH_RECOMPUTE_INTERVAL: 0.25, // seconds between flow-field rebuilds for the same target
+
     BOT_TARGET: 6, // bots fill the server up to this many players
     MAX_PLAYERS: 24,
 

@@ -26,14 +26,26 @@ AI bots fill the server up to 6 players, so it's playable alone too.
 | **Scavenge** | Fallen bases leave **ruins**. Grow your land over them and capture them for 25g. |
 
 Neutral waves also hit every player every ~22s, and they get stronger the longer you survive.
-Creeps walk straight at their target and chew through any structure in the way,
-including a third player's base they happen to cross. **Walls** are cheap blockers.
+
+### Mazing
+
+Creeps **pathfind** to their target core. Every structure (yours or anyone else's) is an obstacle,
+so cheap **Walls** let you build mazes that funnel creeps past your towers for longer.
+
+- Structures aren't impassable, just *expensive* to path through: entering one costs
+  `4 + maxHp × 0.08` tiles of walking (a fresh wall ≈ 44 tiles). Creeps take a detour up to that
+  long, and beyond it they **break through** the cheapest point instead. Sealing your core completely
+  doesn't make you invincible - it just tells creeps where to dig.
+- While a build tool is selected, dashed lines show the routes neutral waves would take from 12 directions,
+  including the effect of the tower under your cursor, and a readout shows the average route length
+  (green `+N` = your placement lengthens the path).
+- No diagonal corner-cutting between structures, so a diagonal line of walls is a real wall.
 
 ### Controls
 
 | Key | Action |
 |---|---|
-| `1`–`5` | Pick a tower (Bolt, Frost, Mortar, Beacon, Wall), click your land to place |
+| `1`–`5` | Pick a tower (Bolt, Frost, Mortar, Beacon, Wall), click your land to place. Shows the creep-route preview. |
 | `Esc` / right-click | Cancel build / deselect |
 | `Z` `X` `C` | Send Grunt / Runner / Brute (hold `Shift` for ×5) |
 | Click enemy core | Set it as your attack target |
@@ -62,6 +74,7 @@ All numbers live in [`shared/config.js`](shared/config.js) and are shared by ser
 
 ```
 shared/config.js   game constants + stat helpers (used by Node and the browser)
+shared/pathfinding.js  flow-field Dijkstra (server creep movement + client route preview)
 server/game.js     authoritative simulation: territory, towers, creeps, bots, waves
 server/index.js    HTTP static server + WebSocket, 20 Hz tick, state broadcast
 public/            canvas client (index.html, client.js, style.css)
@@ -71,11 +84,13 @@ test/              node:test suite (game logic + server smoke test)
 - **Authoritative server.** Clients only send intents (`build`, `upgrade`, `sell`, `capture`, `send`). The server validates everything.
 - **State sync.** The full state (players, towers, creeps, effects) is broadcast every tick as compact arrays. Territory is sent run-length encoded, and only when it changes.
 - **Territory.** Each tile belongs to whichever core/beacon claims it most strongly. Cores hold nearby land twice as strongly as beacons.
+- **Pathfinding.** One flow field per targeted core (Dijkstra from the core outward, binary heap, 8-way moves).
+  Every creep heading to that core just steps downhill, so cost doesn't grow with creep count. Fields
+  are rebuilt lazily when structures change, at most every 0.25s per target.
 - **Bots** expand, build defences (facing their nearest rival), upgrade, and periodically launch attacks.
 
 ## Ideas for next steps
 
-- Pathfinding so creeps route around walls (true mazing)
 - Team / clan mode and alliances
 - More tower branches at level 3 (e.g. Bolt → Sniper or Gatling)
 - Mobile touch controls

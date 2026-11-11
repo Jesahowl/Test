@@ -1,8 +1,9 @@
-/* global TD_CONFIG */
+/* global TD_CONFIG, TD_PATH */
 (() => {
   'use strict';
 
   const C = TD_CONFIG;
+  const Path = TD_PATH;
   const KIND_KEYS = Object.keys(C.TOWERS);
   const CREEP_KEYS = Object.keys(C.CREEPS);
   const TPX = 8; // territory canvas pixels per tile
@@ -346,6 +347,7 @@
 
       ctx.font = `bold ${Math.max(11, Math.round(s * 0.5))}px system-ui, sans-serif`;
       ctx.textAlign = 'center';
+      ctx.lineJoin = 'round';
       ctx.lineWidth = 3;
       ctx.strokeStyle = 'rgba(0,0,0,0.8)';
       const label = p.id === myId ? `${p.name} (you)` : p.name;
@@ -498,6 +500,104 @@
     ctx.arc(x, y, range * scale(), 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+  }
+
+  // ------------------------------------------------------------------ path preview
+  // While building, show the routes neutral waves (which spawn ~20 tiles out in a random
+  // direction) would take to your core, including the effect of the structure under the cursor.
+  const preview = { key: '', at: 0, paths: [], len: 0, baseLen: 0 };
+  const PREVIEW_DIRS = 12;
+
+  function pathExtra() {
+    const extra = new Int32Array(C.MAP_W * C.MAP_H);
+    for (const t of towers.values()) {
+      if (t.owner) extra[t.y * C.MAP_W + t.x] = Path.structureCost(C, t.maxHp);
+    }
+    for (const p of players.values()) extra[p.y * C.MAP_W + p.x] = Path.structureCost(C, p.maxHp);
+    return extra;
+  }
+
+  function routes(extra, core) {
+    const goal = core.y * C.MAP_W + core.x;
+    const dist = Path.computeField(C.MAP_W, C.MAP_H, extra, goal);
+    const paths = [];
+    let total = 0;
+    for (let i = 0; i < PREVIEW_DIRS; i++) {
+      const a = (Math.PI * 2 * i) / PREVIEW_DIRS;
+      const sx = Math.max(1, Math.min(C.MAP_W - 2, Math.round(core.x + Math.cos(a) * C.NEUTRAL_SPAWN_DIST)));
+      const sy = Math.max(1, Math.min(C.MAP_H - 2, Math.round(core.y + Math.sin(a) * C.NEUTRAL_SPAWN_DIST)));
+      const path = Path.tracePath(dist, C.MAP_W, C.MAP_H, extra, sy * C.MAP_W + sx, goal);
+      paths.push(path);
+      total += path.length - 1;
+    }
+    return { paths, len: total / PREVIEW_DIRS };
+  }
+
+  function updatePreview(now) {
+    const core = myId && players.get(myId);
+    if (!buildKind || !core) {
+      preview.paths = [];
+      preview.key = '';
+      return;
+    }
+    const tx = Math.floor(mouse.wx);
+    const ty = Math.floor(mouse.wy);
+    const ok = canBuildAt(tx, ty);
+    const key = `${buildKind}:${ok ? `${tx},${ty}` : '-'}`;
+    if (key === preview.key && now - preview.at < 400) return;
+    preview.key = key;
+    preview.at = now;
+    const extra = pathExtra();
+    const base = routes(extra, core);
+    preview.baseLen = base.len;
+    if (ok) {
+      extra[ty * C.MAP_W + tx] = Path.structureCost(C, C.towerStats(buildKind, 1).hp);
+      const withGhost = routes(extra, core);
+      preview.paths = withGhost.paths;
+      preview.len = withGhost.len;
+    } else {
+      preview.paths = base.paths;
+      preview.len = base.len;
+    }
+  }
+
+  function drawPreview() {
+    if (!preview.paths.length) return;
+    const s = scale();
+    ctx.save();
+    ctx.lineWidth = Math.max(1.5, s * 0.08);
+    ctx.lineJoin = 'round';
+    ctx.setLineDash([s * 0.25, s * 0.2]);
+    ctx.lineDashOffset = -performance.now() / 40; // marching ants toward the core
+    ctx.strokeStyle = 'rgba(255, 120, 90, 0.55)';
+    for (const path of preview.paths) {
+      ctx.beginPath();
+      for (let i = 0; i < path.length; i++) {
+        const [x, y] = toScreen((path[i] % C.MAP_W) + 0.5, Math.floor(path[i] / C.MAP_W) + 0.5);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(255, 120, 90, 0.8)';
+    for (const path of preview.paths) {
+      const [x, y] = toScreen((path[0] % C.MAP_W) + 0.5, Math.floor(path[0] / C.MAP_W) + 0.5);
+      ctx.beginPath();
+      ctx.arc(x, y, Math.max(3, s * 0.15), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Route length readout next to the cursor.
+    const delta = preview.len - preview.baseLen;
+    const text = `route ${preview.len.toFixed(1)} tiles${Math.abs(delta) >= 0.05 ? ` (${delta > 0 ? '+' : ''}${delta.toFixed(1)})` : ''}`;
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+    ctx.strokeText(text, mouse.sx + 16, mouse.sy + 24);
+    ctx.fillStyle = delta > 0.05 ? '#7ee787' : '#e6edf3';
+    ctx.fillText(text, mouse.sx + 16, mouse.sy + 24);
+    ctx.restore();
   }
 
   function drawOverlay() {
@@ -857,6 +957,8 @@
     updateMouseWorld();
 
     drawBackground();
+    updatePreview(now);
+    drawPreview();
     drawOverlay();
     drawTowers();
     drawCreeps(dt);

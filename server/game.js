@@ -4,6 +4,7 @@
 // Units: positions are in tiles. A structure on tile (x, y) has its centre at (x + 0.5, y + 0.5).
 
 const C = require('../shared/config');
+const Path = require('../shared/pathfinding');
 
 const BOT_NAMES = [
   'Ironclad', 'Warden', 'Bulwark', 'Rampart', 'Sentinel', 'Citadel', 'Palisade', 'Keepr',
@@ -44,6 +45,12 @@ class Game {
     this.terrDist = new Float32Array(this.w * this.h);
     this.terrDirty = true;
     this.terrVersion = 0;
+
+    // Pathfinding: structVersion bumps whenever a structure appears, disappears or changes max HP.
+    this.structVersion = 0;
+    this.extra = new Int32Array(this.w * this.h); // per-tile path entry cost
+    this.extraVersion = -1;
+    this.fields = new Map(); // target player id -> { dist, version, at }
 
     this.nextId = 1;
     this.time = 0;
@@ -93,6 +100,7 @@ class Game {
     this.players.set(id, p);
     this.grid[this.idx(pos.x, pos.y)] = -id;
     this.terrDirty = true;
+    this.structVersion++;
     this.pushFeed(`${p.name} joined the siege`);
     return p;
   }
@@ -157,7 +165,9 @@ class Game {
     }
 
     this.players.delete(p.id);
+    this.fields.delete(p.id);
     this.terrDirty = true;
+    this.structVersion++;
 
     if (this.onDeath && !leftGame) {
       this.onDeath(p, {
@@ -256,6 +266,7 @@ class Game {
       id, kind, x, y, owner: pid, level: 1, hp: stats.hp, maxHp: stats.hp, cd: 0, ruin: false,
     });
     this.grid[k] = id;
+    this.structVersion++;
     if (kind === 'beacon') this.terrDirty = true;
     return null;
   }
@@ -272,6 +283,7 @@ class Game {
     const stats = C.towerStats(t.kind, t.level);
     t.hp += stats.hp - t.maxHp;
     t.maxHp = stats.hp;
+    this.structVersion++;
     if (t.kind === 'beacon') this.terrDirty = true;
     return null;
   }
@@ -297,6 +309,7 @@ class Game {
     t.hp = t.maxHp;
     delete t.ruinOf;
     delete t.ruinTime;
+    this.structVersion++;
     if (t.kind === 'beacon') this.terrDirty = true;
     return null;
   }
@@ -346,7 +359,7 @@ class Game {
   spawnNeutralWave(p) {
     p.waveNum++;
     const n = 2 + Math.floor(p.waveNum * 0.9);
-    const hpMul = 1 + p.waveNum * 0.17;
+    const hpMul = 1 + p.waveNum * 0.2;
     const a = this.rand() * Math.PI * 2;
     const clamp = (v, max) => Math.max(1, Math.min(max - 2, v));
     const sx = clamp(p.core.x + Math.cos(a) * C.NEUTRAL_SPAWN_DIST, this.w);
@@ -390,6 +403,7 @@ class Game {
   destroyTower(t, explode) {
     this.towers.delete(t.id);
     this.grid[this.idx(t.x, t.y)] = 0;
+    this.structVersion++;
     if (explode) this.fx.push({ k: 'boom', x: t.x + 0.5, y: t.y + 0.5, r: 0.8 });
     if (t.kind === 'beacon' && t.owner) this.terrDirty = true;
   }
@@ -449,6 +463,59 @@ class Game {
     }
   }
 
+  // ---------------------------------------------------------------- pathfinding
+
+  // Per-tile extra cost of walking into a tile. Live towers and cores are costly; ruins are rubble.
+  getExtra() {
+    if (this.extraVersion === this.structVersion) return this.extra;
+    const extra = this.extra;
+    extra.fill(0);
+    for (const t of this.towers.values()) {
+      if (t.owner) extra[this.idx(t.x, t.y)] = Path.structureCost(C, t.maxHp);
+    }
+    for (const p of this.players.values()) {
+      if (p.alive) extra[this.idx(p.core.x, p.core.y)] = Path.structureCost(C, p.core.maxHp);
+    }
+    this.extraVersion = this.structVersion;
+    return extra;
+  }
+
+  // Flow field toward player pid's core. Rebuilt lazily, at most every PATH_RECOMPUTE_INTERVAL.
+  getField(p) {
+    let f = this.fields.get(p.id);
+    const stale = !f || (f.version !== this.structVersion && this.time - f.at >= C.PATH_RECOMPUTE_INTERVAL);
+    if (stale) {
+      const goal = this.idx(p.core.x, p.core.y);
+      f = { dist: Path.computeField(this.w, this.h, this.getExtra(), goal), goal, version: this.structVersion, at: this.time };
+      this.fields.set(p.id, f);
+    }
+    return f;
+  }
+
+  // Attack whatever enemy structure sits on tile k. Returns true if the creep is busy attacking.
+  creepAttackTile(c, k, target, damage) {
+    const s = this.grid[k];
+    if (s > 0) {
+      const t = this.towers.get(s);
+      if (!t || !t.owner || t.owner === c.owner) return false;
+      if (c.atkCd <= 0) {
+        c.atkCd = 1;
+        this.damageTower(t, damage);
+      }
+      return true;
+    }
+    if (s < 0 && -s !== c.owner && -s !== target.id) {
+      const blocker = this.players.get(-s);
+      if (!blocker || !blocker.alive) return false;
+      if (c.atkCd <= 0) {
+        c.atkCd = 1;
+        this.damageCore(blocker, damage, c.owner);
+      }
+      return true;
+    }
+    return false;
+  }
+
   updateCreeps(dt) {
     for (const c of this.creeps.values()) {
       if (c.dead) continue;
@@ -464,13 +531,9 @@ class Game {
       if (c.slowT > 0) c.slowT -= dt;
       const speed = def.speed * (c.slowT > 0 ? c.slowF : 1);
 
-      const tx = target.core.x + 0.5;
-      const ty = target.core.y + 0.5;
-      const dx = tx - c.x;
-      const dy = ty - c.y;
-      const d = Math.hypot(dx, dy);
-
-      if (d < 0.9) {
+      const cx = target.core.x + 0.5;
+      const cy = target.core.y + 0.5;
+      if (Math.hypot(cx - c.x, cy - c.y) < 0.9) {
         if (c.atkCd <= 0) {
           c.atkCd = 1;
           this.damageCore(target, def.damage, c.owner);
@@ -478,32 +541,26 @@ class Game {
         continue;
       }
 
-      // Check the tile just ahead for a structure that blocks us.
-      const ax = Math.floor(c.x + (dx / d) * 0.6);
-      const ay = Math.floor(c.y + (dy / d) * 0.6);
-      if (this.inBounds(ax, ay)) {
-        const s = this.grid[this.idx(ax, ay)];
-        if (s > 0) {
-          const t = this.towers.get(s);
-          if (t && t.owner && t.owner !== c.owner) {
-            if (c.atkCd <= 0) {
-              c.atkCd = 1;
-              this.damageTower(t, def.damage);
-            }
-            continue;
-          }
-        } else if (s < 0 && -s !== c.owner) {
-          const blocker = this.players.get(-s);
-          if (blocker && blocker.alive) {
-            if (c.atkCd <= 0) {
-              c.atkCd = 1;
-              this.damageCore(blocker, def.damage, c.owner);
-            }
-            continue;
-          }
-        }
+      // Follow the flow field one tile at a time.
+      const field = this.getField(target);
+      const tx = Math.max(0, Math.min(this.w - 1, Math.floor(c.x)));
+      const ty = Math.max(0, Math.min(this.h - 1, Math.floor(c.y)));
+      const here = this.idx(tx, ty);
+      const next = Path.nextStep(field.dist, this.w, this.h, this.extra, here, field.goal);
+
+      let gx = cx;
+      let gy = cy;
+      if (next >= 0 && next !== field.goal) {
+        // The field routes through a structure only when going around is costlier: break it.
+        if (this.creepAttackTile(c, next, target, def.damage)) continue;
+        gx = (next % this.w) + 0.5;
+        gy = Math.floor(next / this.w) + 0.5;
       }
 
+      const dx = gx - c.x;
+      const dy = gy - c.y;
+      const d = Math.hypot(dx, dy);
+      if (d < 1e-6) continue;
       const step = Math.min(d, speed * dt);
       c.x += (dx / d) * step;
       c.y += (dy / d) * step;

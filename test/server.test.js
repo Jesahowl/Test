@@ -10,7 +10,7 @@ test('client can load the page, join and receive state', async () => {
   await new Promise((r) => srv.server.once('listening', r));
   const { port } = srv.server.address();
   try {
-    for (const path of ['/', '/client.js', '/style.css', '/shared/config.js']) {
+    for (const path of ['/', '/client.js', '/style.css', '/shared/config.js', '/shared/pathfinding.js']) {
       const res = await fetch(`http://localhost:${port}${path}`);
       assert.strictEqual(res.status, 200, path);
     }
