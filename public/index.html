@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Territory Siege</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="stats" class="panel"></div>
+    <div id="leaderboard" class="panel"></div>
+    <div id="feed"></div>
+    <div id="toast"></div>
+    <div id="selection" class="panel hidden"></div>
+
+    <div id="bar" class="panel">
+      <div class="group" id="build-buttons"></div>
+      <div class="divider"></div>
+      <div class="group" id="send-buttons"></div>
+      <div id="target-label"></div>
+    </div>
+
+    <canvas id="minimap" width="170" height="170"></canvas>
+
+    <div id="help" class="panel">
+      <b>Build</b> 1-5 · click land &nbsp; <b>Cancel</b> Esc / right-click<br>
+      <b>Send creeps</b> Z X C (Shift = ×5) · click an enemy core to target it<br>
+      <b>Camera</b> WASD / arrows / right-drag · wheel zoom · Space = home<br>
+      <b>Selected tower</b> U upgrade · Del sell
+    </div>
+  </div>
+
+  <div id="menu" class="overlay">
+    <div class="card">
+      <h1>Territory <span>Siege</span></h1>
+      <p class="tag">Defend your core. Grow your land. Siege your neighbours.</p>
+      <input id="name" maxlength="16" placeholder="Your name" autocomplete="off">
+      <button id="play">Play</button>
+      <ul class="how">
+        <li>Build towers on <b>your land</b> to protect your core.</li>
+        <li><b>Beacons</b> expand your land. More land = more gold.</li>
+        <li>Send <b>creeps</b> at other players. Destroying a core pays a big bounty.</li>
+        <li>Fallen bases leave <b>ruins</b> you can capture cheaply.</li>
+      </ul>
+      <div id="conn"></div>
+    </div>
+  </div>
+
+  <div id="death" class="overlay hidden">
+    <div class="card">
+      <h2>Your core has fallen</h2>
+      <p id="death-by"></p>
+      <div id="death-stats"></div>
+      <button id="again">Play again</button>
+    </div>
+  </div>
+
+  <script src="shared/config.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>
