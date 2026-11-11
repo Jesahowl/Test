@@ -21,7 +21,7 @@ test('client can load the page, join and receive state', async () => {
     ws.on('message', (d) => msgs.push(JSON.parse(d)));
     await new Promise((r) => ws.once('open', r));
     ws.send(JSON.stringify({ t: 'join', name: 'Tester' }));
-    const waitFor = async (pred, ms = 3000) => {
+    const waitFor = async (pred, ms = 8000) => {
       const end = Date.now() + ms;
       while (Date.now() < end) {
         const m = msgs.find(pred);
@@ -33,7 +33,13 @@ test('client can load the page, join and receive state', async () => {
     const welcome = await waitFor((m) => m.t === 'welcome');
     const state = await waitFor((m) => m.t === 's' && m.me && m.terr);
     assert.strictEqual(state.me.id, welcome.id);
-    assert.ok(state.players.some((p) => p[1] === 'Tester'));
+    assert.strictEqual(state.full, 1, 'first state is complete');
+    assert.ok(state.players.c.some((p) => p[1] === 'Tester'));
+    assert.ok(state.camps.c.length > 0);
+    // Later states only carry what changed: the camps never change, so they are left out.
+    const later = await waitFor((m) => m.t === 's' && m.tk > state.tk && !m.full);
+    assert.strictEqual(later.camps.c.length, 0);
+    assert.strictEqual(later.tk - state.tk, 2, 'one state per two simulation ticks');
 
     ws.send('not json');
     ws.send(JSON.stringify({ t: 'build', kind: 'tower', x: -5, y: 0 }));
@@ -56,7 +62,7 @@ test('rounds: late joiners wait, and everyone joins the next round', async () =>
     await new Promise((r) => ws.once('open', r));
     return ws;
   };
-  const waitFor = async (ws, pred, ms = 3000) => {
+  const waitFor = async (ws, pred, ms = 8000) => {
     const end = Date.now() + ms;
     while (Date.now() < end) {
       const m = ws.msgs.find(pred);

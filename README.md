@@ -26,9 +26,9 @@ AI bots fill the server up to 6 players, so it's playable alone too.
 | **Orders** | **Right-click** an enemy tower or core to attack it, or one of your own towers or your core to defend there. Who goes depends on the **Send slider** in the bar (5% steps; it shows how many of your troops that is, e.g. "12 of 20"): at 100% every troop goes and every future wave follows; below 100% only that share of your current troops goes (nearest to the target first, keeping your army's mix of types) and new waves keep their orders, so you can split your forces. Select specific troops first (click, Shift-click, `Q` = all) to command exactly those. `H` brings everyone home. |
 | **The push** | Troops march across the map (pathfinding around structures), fight whatever they meet, then hit the target. When a tower falls, the push rolls on to that player's next tower, then their core. |
 | **Towers** | Claim land and shoot enemy troops. Your core shoots too. Place them on your land, or **leapfrog** up to 3 tiles past your border onto unclaimed ground. |
-| **Taking towers** | **Destroy** one and it becomes yours (+120g): it keeps its level, comes back at 70% health, and its land switches to you. Or **capture** it without a fight: troops standing near an enemy tower with none of its owner's troops around flip it in ~10s (faster with more troops). Either way the attackers stay on as its garrison and your waves push on to that player's next tower. Towers only become ruins when their owner's core falls. |
+| **Taking towers** | **Destroy** one and it becomes yours (+250g): it keeps its level, comes back at 70% health, and its land switches to you. Or **capture** it without a fight: troops standing near an enemy tower with none of its owner's troops around flip it in ~10s (faster with more troops, up to 3x; each tower level adds 50% to the time). Either way the attackers stay on as its garrison and your waves push on to that player's next tower. Towers only become ruins when their owner's core falls. |
 | **Gold** | Land only pays a trickle (1.5g/s + a little per tile). **Most gold comes from fighting**: 14g per enemy troop killed (+6 per troop level), 55g per raptor and 250g per golem in the jungle, 250g for a tower, and 250g plus all of their gold for a core. Each bounty pops up where you earned it, and the death screen breaks down where your gold came from. |
-| **Jungle** | Neutral camps sit around the map. They're passive until attacked, then the whole camp fights back. Clearing them pays well; they respawn after 45s. Right-click a camp to send troops. |
+| **Jungle** | Neutral camps sit around the map. They're passive until attacked, then the whole camp fights back. Clearing them pays well; they respawn after 45s (golem camps after 90s). Right-click a camp to send troops. |
 | **Jungle buff** | Clearing a **golem camp** (marked 🔥 buff) empowers all your troops for 60s: **+30% damage and 25% less damage taken**. Buffed troops glow orange and a 🔥 shows next to your name. |
 | **Rounds** | **Last core standing wins.** Joining is open for the first 60s of a round (bots fill in during that time too). After that, newcomers watch and join the next round automatically. After **10 minutes, sudden death** starts: no home-turf bonus, troops deal double damage to towers and cores, and cores slowly crumble, so every round ends. Then a scoreboard shows everyone's placing and a new round starts on a fresh map 15s later. If only bots are left, pressing *New round* starts one straight away. |
 | **Home turf** | Troops on their own land heal 2% HP/s and deal +30% damage, so defending is cheaper than attacking. |
@@ -42,8 +42,8 @@ AI bots fill the server up to 6 players, so it's playable alone too.
 |---|---|---|---|---|
 | `1` | Guard | 42g+ | 420 | Melee tank. Enemy troops nearby are taunted into fighting it first |
 | `2` | Archer | 36g+ | 120 | Ranged damage, fragile |
-| `3` | Frost | 54g+ | 160 | Pulses damage and slows every enemy around it |
-| `4` | Mortar | 78g+ | 170 | Long-range splash, **double damage to towers and cores** |
+| `3` | Frost | 54g+ | 220 | Pulses damage and slows every enemy around it |
+| `4` | Mortar | 78g+ | 140 | Long-range splash, **double damage to towers and cores** |
 | `5` | Medic | 54g+ | 130 | Heals nearby troops, never attacks |
 
 Adding a troop gets pricier the more of that type you already have. `Shift`+number levels a type up
@@ -84,8 +84,13 @@ test/                  node:test suite (game rules, waves & orders, jungle, path
 ```
 
 - **Authoritative server.** Clients only send intents (`build`, `upgrade`, `sell`, `capture`, `army`, `order` with optional `ids` or `share`). The server validates everything.
-- **State sync.** Shared state (players, towers, troops, monsters, camps, effects) is broadcast every tick as compact arrays; each player
-  also gets their own gold, army plan, standing order and wave timer. Territory is sent run-length encoded, only when it changes.
+- **State sync.** The game simulates 20 times a second and sends state 10 times a second. Entity lists (players, towers, troops,
+  monsters, camps) go out as compact arrays containing only the rows that changed since the last update, plus removed ids; a
+  client that just joined gets everything once. Positions are sent in tenths of a tile, and WebSocket compression
+  (permessage-deflate) shrinks the rest about 7x: roughly 7 KB/s per player with 12 players. Each player also gets their own
+  gold, army plan, standing order and wave timer. Territory is sent run-length encoded, only when it changes.
+- **Spatial grid.** Troops are bucketed into 4x4-tile cells each tick, so targeting, tower fire, splash, healing and
+  captures only look at nearby troops (24 players: about 4 ms per tick).
 - **Territory.** Each tile belongs to whichever core/tower claims it most strongly; cores hold nearby land twice as strongly.
   Borders are traced, smoothed and drawn as vector paths on the client.
 - **Troop movement.** Attacking troops follow a flow field toward their target (Dijkstra from the goal tile, one per

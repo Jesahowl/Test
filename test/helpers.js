@@ -56,6 +56,7 @@ function troops(g, p, kind, n, x, y, level = 1) {
     u.y = y + Math.floor(i / 3) * 0.3;
     out.push(u);
   }
+  g.buildUnitGrid(); // troops were teleported: refresh the spatial grid
   return out;
 }
 

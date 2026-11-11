@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const C = require('../shared/config');
-const { duel, outpost, troops, run } = require('./helpers');
+const { Game, seeded, duel, outpost, troops, run } = require('./helpers');
 
 const mine = (g, p) => [...g.units.values()].filter((u) => u.owner === p.id);
 
@@ -237,4 +237,42 @@ test('a percentage of a tiny army still sends at least one troop', () => {
   assert.strictEqual(g.order(a.id, null, { k: 'c', id: b.id }, 0.25), null);
   assert.strictEqual(g.lastOrderCount, 1);
   assert.match(g.order(a.id, null, { k: 'c', id: b.id }, 0.25), /No troops available/);
+});
+
+test('capture speed is capped, and higher-level towers take longer to capture', () => {
+  assert.strictEqual(C.captureSpeed(1), 1);
+  assert.strictEqual(C.captureSpeed(20), C.CAPTURE_MAX_SPEED);
+  assert.ok(C.captureTime(3) > C.captureTime(1));
+  const { g, a, b } = duel(14);
+  const t = outpost(g, b);
+  troops(g, a, 'guard', 12, t.x + 0.5, t.y + 2);
+  // 12 troops on an unguarded level-1 tower: no faster than the capped speed allows
+  const minTime = C.captureTime(1) / C.CAPTURE_MAX_SPEED;
+  let secs = 0;
+  run(g, 30, () => {
+    secs += 0.05;
+    for (const u of g.units.values()) if (u.owner === a.id) u.attack = null;
+    return t.owner === a.id;
+  });
+  assert.strictEqual(t.owner, a.id);
+  assert.ok(secs >= minTime - 0.1, `took ${secs.toFixed(2)}s, at least ${minTime}s`);
+});
+
+test('the spatial grid finds the same nearby troops as a full scan', () => {
+  const g = new Game({ botTarget: 6, rand: seeded(21) });
+  let checks = 0;
+  for (let i = 0; i < 20 * 150; i++) {
+    g.update(0.05);
+    if (i % 40) continue;
+    for (const u of [...g.units.values()].slice(0, 30)) {
+      const near = new Set(g.nearUnits(u.x, u.y, 5));
+      for (const v of g.units.values()) {
+        if (Math.hypot(v.x - u.x, v.y - u.y) <= 5) {
+          assert.ok(near.has(v), 'grid missed a troop');
+          checks++;
+        }
+      }
+    }
+  }
+  assert.ok(checks > 100);
 });

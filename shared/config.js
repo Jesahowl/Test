@@ -4,7 +4,8 @@
   'use strict';
 
   const CONFIG = {
-    TICK_RATE: 20,
+    TICK_RATE: 20, // simulation steps per second
+    SNAPSHOT_RATE: 10, // state updates sent to players per second (clients interpolate in between)
     MAP_W: 110,
     MAP_H: 110,
 
@@ -89,13 +90,13 @@
         color: '#4fc3f7', desc: 'Ranged damage, fragile',
       },
       frost: {
-        name: 'Frost', key: '3', cost: 90, hp: 160, range: 3, damage: 7, rate: 1, speed: 2.2,
+        name: 'Frost', key: '3', cost: 90, hp: 220, range: 3.5, damage: 12, rate: 1, speed: 2.2,
         aoe: true, slow: 0.5, slowTime: 1.5,
         color: '#b3e5fc', desc: 'Pulses damage and slows every enemy nearby',
       },
       mortar: {
-        name: 'Mortar', key: '4', cost: 130, hp: 170, range: 6, minRange: 1.5, damage: 40, rate: 0.5, speed: 1.8,
-        splash: 1.6, siege: 2,
+        name: 'Mortar', key: '4', cost: 130, hp: 140, range: 6, minRange: 1.5, damage: 24, rate: 0.5, speed: 1.8,
+        splash: 1.2, siege: 2,
         color: '#ff8a65', desc: 'Long-range splash. Double damage to towers and cores',
       },
       medic: {
@@ -118,11 +119,14 @@
     // CAPTURE_TIME seconds (faster with more troops) - unless any of the owner's troops are there too.
     CAPTURE_RANGE: 4.5,
     CAPTURE_TIME: 10,
-    CAPTURE_EXTRA_UNIT_SPEED: 0.5, // each extra troop adds 50% capture speed
+    CAPTURE_EXTRA_UNIT_SPEED: 0.5, // each extra troop adds 50% capture speed...
+    CAPTURE_MAX_SPEED: 3, // ...up to 3x
+    CAPTURE_TIME_PER_LEVEL: 0.5, // each tower level above 1 adds 50% to the capture time
 
     // ---- Jungle: neutral camps that sit still, fight back when attacked, and pay out when cleared.
     CAMP_COUNT: 12,
     CAMP_RESPAWN: 45,
+    BUFF_CAMP_RESPAWN: 90, // golem camps (which give the jungle buff) take longer to come back
     CAMP_LEASH: 4.5, // monsters chase attackers this far from their camp, then reset
     CAMP_TYPES: {
       small: { raptor: 3 },
@@ -193,6 +197,14 @@
   // How many troops a player with this much land may have alive at once.
   CONFIG.unitCap = function (territory) {
     return Math.min(CONFIG.MAX_UNITS, Math.max(CONFIG.MIN_UNITS, Math.floor(territory / CONFIG.LAND_PER_UNIT)));
+  };
+
+  // Capture speed multiplier for `n` capturing troops, and the base capture time of a tower level.
+  CONFIG.captureSpeed = function (n) {
+    return Math.min(CONFIG.CAPTURE_MAX_SPEED, 1 + CONFIG.CAPTURE_EXTRA_UNIT_SPEED * (n - 1));
+  };
+  CONFIG.captureTime = function (level) {
+    return CONFIG.CAPTURE_TIME * (1 + CONFIG.CAPTURE_TIME_PER_LEVEL * (level - 1));
   };
 
   CONFIG.income = function (territory) {

@@ -30,6 +30,7 @@
   let units = new Map(); // id -> troop (with rx/ry render positions)
   let creeps = new Map(); // id -> jungle monster (with rx/ry render positions)
   let camps = [];
+  let campMap = new Map();
   let effects = [];
   const feed = [];
   const terr = new Int32Array(C.MAP_W * C.MAP_H);
@@ -145,15 +146,16 @@
   // ---- smooth movement
   // Troops and monsters are drawn INTERP_DELAY ms in the past, interpolating between the last
   // server snapshots, so they glide at a steady speed however unevenly packets arrive.
-  const TICK_MS = 1000 / C.TICK_RATE;
-  const INTERP_DELAY = TICK_MS * 2;
+  const TICK_MS = 1000 / C.TICK_RATE; // simulation tick (snapshots carry the tick number)
+  const SNAP_MS = 1000 / C.SNAPSHOT_RATE; // how often snapshots arrive
+  const INTERP_DELAY = SNAP_MS * 1.7;
   let snapClock = 0; // server time (ms) of the latest snapshot, from its tick number
   let clockOffset = null; // estimated server time minus local time
   function stampSnapshot(now, tk) {
     snapClock = tk * TICK_MS;
     const target = snapClock - now;
     // follow arrival times loosely (absorbs network jitter); resync after a stall or a burst
-    if (clockOffset === null || Math.abs(target - clockOffset) > 250) clockOffset = target;
+    if (clockOffset === null || Math.abs(target - clockOffset) > 400) clockOffset = target;
     else clockOffset += (target - clockOffset) * 0.05;
   }
   const renderTime = () => performance.now() + (clockOffset || 0) - INTERP_DELAY;
@@ -174,7 +176,7 @@
       if (rt >= a.t) {
         const span = b.t - a.t || 1;
         // past the newest snapshot: keep moving for up to one tick, then hold
-        const f = Math.min((rt - a.t) / span, i === smp.length - 1 ? 1 + TICK_MS / span : 1);
+        const f = Math.min((rt - a.t) / span, i === smp.length - 1 ? 1 + SNAP_MS / span : 1);
         return [a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f];
       }
     }
@@ -195,23 +197,29 @@
       }
     }
 
-    const oldPlayers = new Map(players);
-    players.clear();
-    for (const a of msg.players) {
-      const old = oldPlayers.get(a[0]);
+    // Collections arrive as { c: changed rows, r: removed ids }; `full` replaces everything.
+    const full = !!msg.full;
+    const merge = (prev, part, build) => {
+      const next = full ? new Map() : new Map(prev);
+      if (!full) for (const id of part.r) next.delete(id);
+      for (const a of part.c) next.set(a[0], build(a, prev.get(a[0])));
+      return next;
+    };
+
+    const np = merge(players, msg.players, (a, old) => {
       const p = { id: a[0], name: a[1], hue: a[2], x: a[3], y: a[4], hp: a[5], maxHp: a[6], territory: a[7], kills: a[8], isBot: !!a[9],
         shield: a[10] || 0, buff: a[11] || 0, hitAt: old ? old.hitAt : 0, trail: old ? old.trail : undefined, shotAt: old ? old.shotAt : 0 };
       if (old && p.hp < old.hp) p.hitAt = now;
-      players.set(p.id, p);
-    }
+      return p;
+    });
+    players.clear();
+    for (const [id, p] of np) players.set(id, p);
     if (msg.terr) drawTerritory();
 
-    const nt = new Map();
-    grid.clear();
-    for (const a of msg.towers) {
-      const t = { id: a[0], kind: KIND_KEYS[a[1]], x: a[2], y: a[3], owner: a[4], level: a[5], hp: a[6], maxHp: a[7], ruinOf: a[8], capBy: a[9], cap: a[10] };
+    towers = merge(towers, msg.towers, (a, old) => {
+      const t = { id: a[0], kind: KIND_KEYS[a[1]], x: a[2], y: a[3], owner: a[4], level: a[5], hp: a[6], maxHp: a[7], ruinOf: a[8] || '',
+        capBy: a[9], cap: a[10] / 100 };
       t.ruin = !t.owner;
-      const old = towers.get(t.id);
       if (old) {
         // remember render state: when it was last hit, when it changed hands, where its turret points
         for (const k of ['hitAt', 'flipAt', 'prevOwner', 'aim', 'shotAt', 'trail']) t[k] = old[k];
@@ -222,29 +230,38 @@
           t.trail = t.hp;
         }
       }
-      nt.set(t.id, t);
-      grid.set(`${t.x},${t.y}`, t.id);
-    }
-    towers = nt;
+      return t;
+    });
+    grid.clear();
+    for (const t of towers.values()) grid.set(`${t.x},${t.y}`, t.id);
     if (selectedId && !towers.has(selectedId)) selectedId = null;
 
-    const nu = new Map();
-    for (const a of msg.units) {
-      const old = units.get(a[0]);
-      nu.set(a[0], { id: a[0], kind: UNIT_KEYS[a[1]], x: a[2], y: a[3], owner: a[4], level: a[5], hp: a[6], maxHp: a[7], anchor: a[8], attack: a[9],
-        rx: old ? old.rx : a[2], ry: old ? old.ry : a[3], samples: addSample(old, a[2], a[3]) });
-    }
-    units = nu;
+    // Troops and monsters: positions come in tenths of a tile. Ones that didn't change still get a
+    // sample at this snapshot's time, so interpolation knows they stood still.
+    const moved = new Set();
+    units = merge(units, msg.units, (a, old) => {
+      moved.add(a[0]);
+      const kind = UNIT_KEYS[a[1]];
+      const x = a[2] / 10;
+      const y = a[3] / 10;
+      return { id: a[0], kind, x, y, owner: a[4], level: a[5], hp: a[6], maxHp: C.towerStats(kind, a[5]).hp, anchor: a[7], attack: a[8] || '',
+        rx: old ? old.rx : x, ry: old ? old.ry : y, samples: addSample(old, x, y) };
+    });
+    for (const u of units.values()) if (!moved.has(u.id)) addSample(u, u.x, u.y);
     for (const id of selUnits) if (!units.has(id)) selUnits.delete(id);
 
-    const nc = new Map();
-    for (const a of msg.creeps) {
-      const old = creeps.get(a[0]);
-      nc.set(a[0], { id: a[0], kind: CREEP_KEYS[a[1]], x: a[2], y: a[3], angry: a[4], hp: a[5], camp: a[6], rx: old ? old.rx : a[2], ry: old ? old.ry : a[3],
-        samples: addSample(old, a[2], a[3]) });
-    }
-    creeps = nc;
-    camps = msg.camps.map((a) => ({ id: a[0], x: a[1], y: a[2], type: CAMP_KEYS[a[3]], alive: !!a[4], respawn: a[5] }));
+    moved.clear();
+    creeps = merge(creeps, msg.creeps, (a, old) => {
+      moved.add(a[0]);
+      const x = a[2] / 10;
+      const y = a[3] / 10;
+      return { id: a[0], kind: CREEP_KEYS[a[1]], x, y, angry: a[4], hp: a[5] / 100, camp: a[6], rx: old ? old.rx : x, ry: old ? old.ry : y,
+        samples: addSample(old, x, y) };
+    });
+    for (const c of creeps.values()) if (!moved.has(c.id)) addSample(c, c.x, c.y);
+
+    campMap = merge(campMap, msg.camps, (a) => ({ id: a[0], x: a[1], y: a[2], type: CAMP_KEYS[a[3]], alive: !!a[4], respawn: a[5] }));
+    camps = [...campMap.values()];
 
     for (const f of msg.fx) {
       effects.push({ ...f, born: now + INTERP_DELAY }); // shown in step with the delayed troops
@@ -1676,7 +1693,7 @@
     const n = shareCount(sendShare);
     $('share-pct').textContent = `${pct}%`;
     $('share-count').innerHTML = sendShare >= 1
-      ? `<b>All ${total}</b> troop${total === 1 ? '' : 's'} + new waves`
+      ? `<b>All ${total}</b> + new waves`
       : `<b>${n}</b> of ${total} troop${total === 1 ? '' : 's'}`;
     slider.title = sendShare >= 1
       ? 'Right-click orders send every troop, and new waves follow too (Z/X/C/V = 25/50/75/100%, wheel to adjust)'

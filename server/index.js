@@ -18,10 +18,38 @@ const STATIC = {
 };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 
+// Remembers the last rows sent for one entity list (rows are arrays whose first item is the id)
+// and reports which rows changed or disappeared since then.
+class RowTracker {
+  constructor() {
+    this.prev = new Map();
+  }
+
+  diff(rows) {
+    const next = new Map();
+    const changed = [];
+    for (const row of rows) {
+      const str = JSON.stringify(row);
+      next.set(row[0], str);
+      if (this.prev.get(row[0]) !== str) changed.push(str);
+    }
+    const removed = [];
+    for (const id of this.prev.keys()) if (!next.has(id)) removed.push(id);
+    this.prev = next;
+    return { changed, removed, all: () => [...next.values()] };
+  }
+}
+
 function createServer({ port = 3000, botTarget } = {}) {
   const clients = new Set();
   let game = null;
   let tick = 0;
+  const SEND_EVERY = Math.max(1, Math.round(C.TICK_RATE / C.SNAPSHOT_RATE));
+  const COLLECTIONS = ['players', 'towers', 'units', 'creeps', 'camps'];
+  let trackers = null;
+  const resetTrackers = () => {
+    trackers = Object.fromEntries(COLLECTIONS.map((k) => [k, new RowTracker()]));
+  };
   let resetAt = 0; // when the scoreboard of a finished round gives way to the next round (ms)
 
   const server = http.createServer((req, res) => {
@@ -43,7 +71,12 @@ function createServer({ port = 3000, botTarget } = {}) {
     });
   });
 
-  const wss = new WebSocketServer({ server, maxPayload: 2048 });
+  // permessage-deflate: state messages are repetitive JSON and shrink about 7x. Level 1 keeps it cheap.
+  const wss = new WebSocketServer({
+    server,
+    maxPayload: 2048,
+    perMessageDeflate: { zlibDeflateOptions: { level: 1 }, threshold: 256 },
+  });
 
   function send(client, obj) {
     if (client.ws.readyState === client.ws.OPEN) client.ws.send(JSON.stringify(obj));
@@ -72,7 +105,9 @@ function createServer({ port = 3000, botTarget } = {}) {
       }
     };
     resetAt = 0;
+    resetTrackers(); // entity ids start over on a new map
     for (const client of clients) {
+      client.synced = false;
       client.pid = null;
       client.terrVersion = -1;
       if (client.name) addToGame(client);
@@ -81,7 +116,7 @@ function createServer({ port = 3000, botTarget } = {}) {
   newRound();
 
   wss.on('connection', (ws) => {
-    const client = { ws, pid: null, terrVersion: -1, name: null, queued: false };
+    const client = { ws, pid: null, terrVersion: -1, name: null, queued: false, synced: false };
     clients.add(client);
 
     ws.on('message', (raw) => {
@@ -153,12 +188,32 @@ function createServer({ port = 3000, botTarget } = {}) {
         newRound();
       }
     }
+    tick++;
+    if (tick % SEND_EVERY === 0) broadcast();
+  }, 1000 / C.TICK_RATE);
+
+  // Send the state: entity lists go out as changes since the previous broadcast (shared by every
+  // client that is in sync); clients that just connected or started a round get everything once.
+  function broadcast() {
     const snap = game.snapshot();
-    snap.tk = ++tick; // server tick counter: lets clients time snapshots exactly
-    const body = JSON.stringify(snap).slice(1, -1);
+    let deltaParts = '';
+    const fullParts = [];
+    for (const key of COLLECTIONS) {
+      const d = trackers[key].diff(snap[key]);
+      deltaParts += `"${key}":{"c":[${d.changed.join(',')}],"r":[${d.removed.join(',')}]},`;
+      fullParts.push(d.all);
+    }
+    let fullBody = null;
+    const rest = JSON.stringify({ tk: tick, fx: snap.fx, feed: snap.feed, round: snap.round }).slice(1, -1);
     let terrJson = null;
     for (const client of clients) {
       if (client.ws.readyState !== client.ws.OPEN) continue;
+      let body = deltaParts;
+      if (!client.synced) {
+        if (!fullBody) fullBody = COLLECTIONS.map((key, i) => `"${key}":{"c":[${fullParts[i]().join(',')}],"r":[]},`).join('') + '"full":1,';
+        body = fullBody;
+        client.synced = true;
+      }
       let extra = '';
       if (client.terrVersion !== game.terrVersion) {
         if (!terrJson) terrJson = JSON.stringify(game.encodeTerritory());
@@ -167,9 +222,9 @@ function createServer({ port = 3000, botTarget } = {}) {
       }
       const p = client.pid ? game.players.get(client.pid) : null;
       const me = p ? JSON.stringify(game.personal(p)) : 'null';
-      client.ws.send(`{"t":"s","me":${me},${extra}${body}}`);
+      client.ws.send(`{"t":"s","me":${me},${extra}${body}${rest}}`);
     }
-  }, 1000 / C.TICK_RATE);
+  }
 
   server.listen(port);
 

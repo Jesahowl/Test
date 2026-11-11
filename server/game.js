@@ -26,6 +26,9 @@ const CAMP_KEYS = Object.keys(C.CAMP_TYPES);
 // 8-way neighbour offsets for unit path planning.
 const DIRS8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
+const UGRID = 4; // spatial grid cell size (tiles)
+const UGRID_SLACK = 1; // how far a troop can have moved since the grid was built
+
 function dist(ax, ay, bx, by) {
   return Math.hypot(ax - bx, ay - by);
 }
@@ -103,6 +106,43 @@ class Game {
 
   idx(x, y) {
     return y * this.w + x;
+  }
+
+  // ---- spatial grid for troops: rebuilt once per tick so "who is near here?" checks only look at
+  // nearby cells instead of every troop on the map. Troops move < UGRID_SLACK tiles per tick, and
+  // every candidate is still distance-checked exactly, so lookups pad the radius by that much.
+  buildUnitGrid() {
+    const gw = Math.ceil(this.w / UGRID);
+    const gh = Math.ceil(this.h / UGRID);
+    if (!this.ucells) this.ucells = Array.from({ length: gw * gh }, () => []);
+    for (const c of this.ucells) c.length = 0;
+    for (const u of this.units.values()) this.ucells[this.ucellOf(u.x, u.y)].push(u);
+  }
+
+  ucellOf(x, y) {
+    const gw = Math.ceil(this.w / UGRID);
+    const cx = Math.min(gw - 1, Math.max(0, Math.floor(x / UGRID)));
+    const cy = Math.min(Math.ceil(this.h / UGRID) - 1, Math.max(0, Math.floor(y / UGRID)));
+    return cy * gw + cx;
+  }
+
+  // Living troops that may be within r of (x, y) (callers check the exact distance).
+  nearUnits(x, y, r) {
+    if (!this.ucells) this.buildUnitGrid();
+    const gw = Math.ceil(this.w / UGRID);
+    const gh = Math.ceil(this.h / UGRID);
+    const pad = r + UGRID_SLACK;
+    const x0 = Math.max(0, Math.floor((x - pad) / UGRID));
+    const x1 = Math.min(gw - 1, Math.floor((x + pad) / UGRID));
+    const y0 = Math.max(0, Math.floor((y - pad) / UGRID));
+    const y1 = Math.min(gh - 1, Math.floor((y + pad) / UGRID));
+    const out = [];
+    for (let cy = y0; cy <= y1; cy++) {
+      for (let cx = x0; cx <= x1; cx++) {
+        for (const u of this.ucells[cy * gw + cx]) if (this.units.has(u.id)) out.push(u);
+      }
+    }
+    return out;
   }
 
   inBounds(x, y) {
@@ -686,6 +726,7 @@ class Game {
     };
     this.applyOrder(u, p.order);
     this.units.set(id, u);
+    if (this.ucells) this.ucells[this.ucellOf(u.x, u.y)].push(u); // findable before the next grid rebuild
     return u;
   }
 
@@ -739,7 +780,7 @@ class Game {
         // Fight back against the player who attacked the camp, without leaving the camp area.
         let foe = null;
         let foeD = Infinity;
-        for (const u of this.units.values()) {
+        for (const u of this.nearUnits(c.hx, c.hy, C.CAMP_LEASH + 2)) {
           if (u.owner !== c.angry || dist(u.x, u.y, c.hx, c.hy) > C.CAMP_LEASH + 2) continue;
           const d = dist(u.x, u.y, c.x, c.y);
           if (d < foeD) {
@@ -780,7 +821,7 @@ class Game {
     for (const camp of this.camps) {
       if (camp.alive && !living.has(camp.id)) {
         camp.alive = false;
-        camp.respawnAt = this.time + C.CAMP_RESPAWN;
+        camp.respawnAt = this.time + (C.BUFF_CAMPS.includes(camp.type) ? C.BUFF_CAMP_RESPAWN : C.CAMP_RESPAWN);
       } else if (!camp.alive && this.time >= camp.respawnAt) {
         this.spawnCamp(camp);
       }
@@ -902,7 +943,7 @@ class Game {
       if (sh.obj.cd > 0) continue;
       let target = null;
       let bestD = Infinity;
-      for (const u of this.units.values()) {
+      for (const u of this.nearUnits(sh.x, sh.y, sh.range)) {
         if (u.owner === sh.owner) continue;
         const d = dist(sh.x, sh.y, u.x, u.y);
         if (d <= sh.range && d < bestD) {
@@ -1004,7 +1045,7 @@ class Game {
     const minR = def.minRange || 0;
     let best = null;
     let bestScore = Infinity;
-    for (const v of this.units.values()) {
+    for (const v of this.nearUnits(u.x, u.y, reach)) {
       if (v.owner === u.owner) continue;
       const d = dist(u.x, u.y, v.x, v.y);
       if (d > reach || d < minR) continue;
@@ -1065,7 +1106,7 @@ class Game {
     const dmg = base * home * siege;
     if (def.aoe) {
       // Frost pulse: every enemy troop and monster around us.
-      for (const v of [...this.units.values()]) {
+      for (const v of this.nearUnits(u.x, u.y, s.range)) {
         if (v.owner === u.owner || dist(u.x, u.y, v.x, v.y) > s.range) continue;
         v.slowT = def.slowTime;
         v.slowF = def.slow;
@@ -1081,7 +1122,7 @@ class Game {
       this.fx.push({ k: 'frost', x: round2(u.x), y: round2(u.y), r: s.range });
     } else if (def.splash) {
       this.hurt(target, dmg, u.owner);
-      for (const v of [...this.units.values()]) {
+      for (const v of this.nearUnits(tx, ty, def.splash)) {
         if (v !== target && v.owner !== u.owner && dist(tx, ty, v.x, v.y) <= def.splash) this.damageUnit(v, base, u.owner);
       }
       for (const c of this.creeps.values()) {
@@ -1278,7 +1319,7 @@ class Game {
         // Chase intruders near what we guard, staying on the leash.
         let foe = null;
         let foeD = Infinity;
-        for (const v of this.units.values()) {
+        for (const v of this.nearUnits(a.x, a.y, a.leash + s.range)) {
           if (v.owner === u.owner || dist(a.x, a.y, v.x, v.y) > a.leash + s.range) continue;
           const d = dist(u.x, u.y, v.x, v.y);
           if (d < foeD) {
@@ -1328,7 +1369,7 @@ class Game {
     let worst = 1;
     let buddy = null;
     let buddyD = Infinity;
-    for (const f of this.units.values()) {
+    for (const f of this.nearUnits(u.x, u.y, 12)) { // patients within 10, buddies within 12
       if (f.owner !== u.owner) continue;
       const fd = dist(u.x, u.y, f.x, f.y);
       if (f.hp < f.maxHp) {
@@ -1369,7 +1410,7 @@ class Game {
       const cx = t.x + 0.5;
       const cy = t.y + 0.5;
       const counts = new Map();
-      for (const u of this.units.values()) {
+      for (const u of this.nearUnits(cx, cy, C.CAPTURE_RANGE)) {
         if (dist(u.x, u.y, cx, cy) <= C.CAPTURE_RANGE) counts.set(u.owner, (counts.get(u.owner) || 0) + 1);
       }
       const defended = (counts.get(t.owner) || 0) > 0;
@@ -1387,11 +1428,11 @@ class Game {
           t.capBy = attacker; // a new challenger starts from scratch
           t.cap = 0;
         }
-        t.cap += (dt * (1 + C.CAPTURE_EXTRA_UNIT_SPEED * (most - 1))) / C.CAPTURE_TIME;
+        t.cap += (dt * C.captureSpeed(most)) / C.captureTime(t.level);
         if (t.cap >= 1) this.transferTower(t, attacker);
       } else if (t.cap) {
         // Contested or abandoned: progress drains away.
-        t.cap = Math.max(0, t.cap - dt / C.CAPTURE_TIME);
+        t.cap = Math.max(0, t.cap - dt / C.captureTime(t.level));
         if (!t.cap) t.capBy = 0;
       }
     }
@@ -1602,6 +1643,7 @@ class Game {
     }
 
     this.updateWaves();
+    this.buildUnitGrid();
     this.updateBots();
     this.updateUnits(dt);
     this.updateStructures(dt);
@@ -1630,18 +1672,19 @@ class Game {
     }
     const towers = [];
     for (const t of this.towers.values()) {
-      towers.push([t.id, KIND_KEYS.indexOf(t.kind), t.x, t.y, t.owner, t.level, Math.round(t.hp), t.maxHp, t.ruinOf || '',
-        t.capBy || 0, t.cap ? round2(t.cap) : 0]);
+      towers.push([t.id, KIND_KEYS.indexOf(t.kind), t.x, t.y, t.owner, t.level, Math.ceil(t.hp), t.maxHp, t.ruinOf || 0,
+        t.capBy || 0, t.cap ? Math.round(t.cap * 100) : 0]);
     }
     const units = [];
     for (const u of this.units.values()) {
       const a = u.attack;
-      units.push([u.id, UNIT_KEYS.indexOf(u.kind), round2(u.x), round2(u.y), u.owner, u.level, Math.round(u.hp), u.maxHp, u.anchor,
-        a ? `${a.k}:${a.id}` : '']);
+      // positions in tenths of a tile; max HP follows from kind + level on the client
+      units.push([u.id, UNIT_KEYS.indexOf(u.kind), Math.round(u.x * 10), Math.round(u.y * 10), u.owner, u.level, Math.ceil(u.hp), u.anchor,
+        a ? `${a.k}:${a.id}` : 0]);
     }
     const creeps = [];
     for (const c of this.creeps.values()) {
-      creeps.push([c.id, CREEP_KEYS.indexOf(c.kind), round2(c.x), round2(c.y), c.angry, round2(c.hp / c.maxHp), c.camp]);
+      creeps.push([c.id, CREEP_KEYS.indexOf(c.kind), Math.round(c.x * 10), Math.round(c.y * 10), c.angry, Math.ceil((100 * c.hp) / c.maxHp), c.camp]);
     }
     const camps = this.camps.map((c) => [c.id, c.x, c.y, CAMP_KEYS.indexOf(c.type), c.alive ? 1 : 0,
       c.alive ? 0 : Math.max(0, Math.ceil(c.respawnAt - this.time))]);
