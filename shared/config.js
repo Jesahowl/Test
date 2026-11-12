@@ -24,7 +24,7 @@
     CORE_KILL_BOUNTY: 250, // plus all of the victim's gold
     SPAWN_MARGIN: 10, // cores spawn at least this far from the map edge
     SPAWN_CANDIDATES: 300, // random spots tried per spawn; the one furthest from other bases wins
-    SPAWN_SHIELD: 90, // seconds after spawning during which your core and towers can't be damaged
+    SPAWN_SHIELD: 120, // seconds after spawning during which your core and towers can't be damaged
 
     MAX_LEVEL: 5, // troops and towers
     // Levels past this one get steeply more expensive (x LATE_LEVEL_PRICE per extra level) - a late-game gold sink.
@@ -82,14 +82,14 @@
     ROUND_JOIN_WINDOW: 60, // seconds after a round starts during which players (and bots) can join
     // Sudden death after this many seconds: no home-turf bonuses, troops hit structures harder,
     // and cores slowly crumble - so every round ends.
-    ROUND_SUDDEN_DEATH: 600,
+    ROUND_SUDDEN_DEATH: 1140, // 19 minutes: rounds run about 15-22 minutes
     SUDDEN_DEATH_SIEGE: 2, // troop damage multiplier against towers and cores
     // Pacing: cores take less damage for the first minutes, and troop damage to buildings
     // ramps up from SIEGE_RAMP_START so pushes get easier as the round goes on.
-    CORE_FORTIFY: 0, // fraction of core damage blocked... (tuning in progress)
+    CORE_FORTIFY: 0.7, // fraction of core damage blocked...
     CORE_FORTIFY_TIME: 420, // ...until this many seconds into the round
     SIEGE_RAMP_START: 480,
-    SIEGE_RAMP_PER_MIN: 0, // extra building damage per minute after that (tuning in progress)
+    SIEGE_RAMP_PER_MIN: 0.1, // +10% building damage per minute after that (x2 at 18 min)
     SUDDEN_DEATH_DECAY: 0.002, // fraction of core max HP lost per second in sudden death (never below 1 HP)
     ROUND_RESET_DELAY: 15, // seconds the scoreboard shows before the next round starts
 

@@ -36,11 +36,11 @@ AI bots fill the server up to 6 players, so it's playable alone too.
 | **Gold** | Land only pays a trickle (1.5g/s + a little per tile). **Most gold comes from fighting**: 14g per enemy troop killed (+6 per troop level), 40–250g per barbarian (a whole camp pays 120–370g), 250g for a tower, and 250g plus all of their gold for a core. Each bounty pops up where you earned it, and the death screen breaks down where your gold came from. |
 | **Barbarian camps** | 12 neutral barbarian camps in three sizes: **Raider Camp** (3 axe raiders, 120g), **Barbarian Outpost** (a club-wielding brute + 2 raiders, 190g) and **Warlord's Fort** (a crowned warlord + 2 spearmen, 370g + buff). Barbarians are red-rimmed tokens with horned helmets; the weapon tells you the type. They're passive until attacked, then the whole camp fights back. Hover a camp to see what it pays; right-click it to send troops. They come back after 45s (the Warlord's Fort after 90s) **in a new random spot**, shown on the map and minimap with a countdown ring, and camps nobody touches for 2½ minutes move on too. |
 | **Jungle buff** | Defeating a **Warlord's Fort** (marked 🔥 buff) empowers all your troops for 60s: **+30% damage and 25% less damage taken**. Buffed troops glow orange and a 🔥 shows next to your name. |
-| **Rounds** | **Last core standing wins.** Joining is open for the first 60s of a round (bots fill in during that time too). After that, newcomers watch and join the next round automatically. After **10 minutes, sudden death** starts: no home-turf bonus, troops deal double damage to towers and cores, and cores slowly crumble, so every round ends. Then a scoreboard shows everyone's placing and a new round starts on a fresh map 15s later. If only bots are left, pressing *New round* starts one straight away. |
+| **Rounds** | **Last core standing wins.** Joining is open for the first 60s of a round (bots fill in during that time too). After that, newcomers watch and join the next round automatically. Cores are **fortified for the first 7 minutes** (they take 70% less damage), and from minute 8 troops hit buildings **10% harder every minute**, so early rushes can't knock anyone out but pushes keep getting stronger. After **19 minutes, sudden death** starts: no home-turf bonus, troops deal double damage to towers and cores, and cores slowly crumble, so every round ends. Then a scoreboard shows everyone's placing and a new round starts on a fresh map 15s later. If only bots are left, pressing *New round* starts one straight away. |
 | **Home turf** | Troops on their own land heal 2% HP/s and deal +30% damage, so defending is cheaper than attacking. |
 | **Army size** | You can have 1 troop alive per 10 tiles of land (min 10, max 45), and always at least one full wave. Waves stop spawning at the cap. |
 | **Spawning** | Each base spawns at a random spot, as far as possible from everyone already playing (and their buildings), so bases spread evenly over the map with a different layout every game. |
-| **Spawn protection** | For 90s after spawning your core and towers can't be damaged. |
+| **Spawn protection** | For 2 minutes after spawning your core and towers can't be damaged. |
 | **Losing** | If your core falls you're **out of the round**. Whoever destroyed it takes the spoils: **all your gold** (plus a 250g bounty), **every troop you still had standing**, and your core site, which becomes **one of their towers** garrisoned by your former troops. Your other towers become ruins. You can then **spectate** (follow any player with Tab, free camera with WASD, Space to follow again) and you join the next round automatically. If you disconnect instead, your troops vanish and nobody gets anything. |
 
 ### Troops
@@ -83,7 +83,7 @@ All numbers live in [`shared/config.js`](shared/config.js), shared by server and
 The most useful knobs: economy (`BASE_INCOME`, `INCOME_PER_TILE`, `TROOP_BOUNTY`, `TOWER_BOUNTY`, `CORE_KILL_BOUNTY`,
 monster `bounty`, `CAMP_RESPAWN`, `CAMP_RELOCATE`), `WAVE_INTERVAL`, `BASE_WAVE`, `BARRACKS_TROOPS`, `MAX_BARRACKS`, `BARRACKS_COST_STEP`, `LAND_PER_UNIT`, troop and tower stats,
 `CORE_DAMAGE`, `HOME_DAMAGE_BONUS`, `SPAWN_SHIELD`, `CAPTURE_TIME`, `TOWER_CLAIM_HP`, `CAMP_*`, jungle buff (`BUFF_CAMPS`, `JUNGLE_BUFF_*`),
-rounds (`ROUND_JOIN_WINDOW`, `ROUND_SUDDEN_DEATH`, `SUDDEN_DEATH_*`, `ROUND_RESET_DELAY`).
+rounds (`ROUND_JOIN_WINDOW`, `ROUND_SUDDEN_DEATH`, `SUDDEN_DEATH_*`, `CORE_FORTIFY*`, `SIEGE_RAMP_*`, `ROUND_RESET_DELAY`).
 
 ## Architecture
 

@@ -104,3 +104,24 @@ test('small camps give no buff', () => {
   for (const m of [...g.creeps.values()].filter((m) => m.camp === camp.id)) g.damageCreep(m, 1e6, a.id);
   assert.ok(!g.buffed(a.id));
 });
+
+test('pacing: cores are fortified early, and siege damage ramps up later', () => {
+  const { g, a, b } = roundGame(9);
+  for (const p of [a, b]) p.spawnTime = -1e4;
+  g.time = 60;
+  const hp = a.core.hp;
+  g.damageCore(a, 100, b.id);
+  assert.ok(Math.abs(hp - a.core.hp - 100 * (1 - C.CORE_FORTIFY)) < 1e-6, 'fortified early on');
+  g.time = C.CORE_FORTIFY_TIME + 1;
+  const hp2 = a.core.hp;
+  g.damageCore(a, 100, b.id);
+  assert.strictEqual(hp2 - a.core.hp, 100, 'full damage later');
+  g.time = C.SIEGE_RAMP_START;
+  assert.strictEqual(g.siegeRamp(), 1);
+  g.time = C.SIEGE_RAMP_START + 300;
+  assert.ok(Math.abs(g.siegeRamp() - (1 + 5 * C.SIEGE_RAMP_PER_MIN)) < 1e-9, 'ramps per minute');
+  // outside rounds (free play) none of this applies
+  const free = new Game({ botTarget: 0 });
+  assert.strictEqual(free.coreArmor(), 0);
+  assert.strictEqual(free.siegeRamp(), 1);
+});

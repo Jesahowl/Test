@@ -2781,6 +2781,8 @@
     el.classList.remove('hidden');
     let sub = '';
     if (round.join > 0) sub = `<div class="sub">Joining open for ${fmtTime(round.join)} · last core standing wins</div>`;
+    else if (round.t < C.CORE_FORTIFY_TIME) sub = `<div class="sub">🛡 Cores fortified for ${fmtTime(C.CORE_FORTIFY_TIME - round.t)} (${Math.round(C.CORE_FORTIFY * 100)}% less damage)</div>`;
+    else if (round.t >= C.SIEGE_RAMP_START && round.sd > 120) sub = `<div class="sub">⚔ Siege power ×${(1 + (round.t - C.SIEGE_RAMP_START) / 60 * C.SIEGE_RAMP_PER_MIN).toFixed(1)} · sudden death in ${fmtTime(round.sd)}</div>`;
     else if (round.sd <= 0) sub = '<div class="sd">☠ Sudden death: cores crumble · troops hit buildings ×2 · no home turf</div>';
     else if (round.sd <= 120) sub = `<div class="sd">Sudden death in ${fmtTime(round.sd)}</div>`;
     el.innerHTML = `Round <b>${round.n}</b> · <b>${players.size}</b> core${players.size === 1 ? '' : 's'} left · ${fmtTime(round.t)}${sub}`;
