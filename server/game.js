@@ -454,12 +454,16 @@ class Game {
     if (!Number.isInteger(x) || !Number.isInteger(y) || !this.inBounds(x, y)) return 'Out of bounds';
     const k = this.idx(x, y);
     if (this.terr[k] !== pid) {
+      if (def.ownLandOnly) return `${def.name} must be built on your own land`;
       if (this.terr[k] !== 0) return 'You cannot build on enemy land';
       if (!this.withinLeap(pid, x, y)) return `Towers can leap at most ${C.TOWER_LEAP} tiles beyond your border`;
     }
     if (this.grid[k] !== 0) return 'Tile is occupied';
-    if (p.gold < def.cost) return 'Not enough gold';
-    p.gold -= def.cost;
+    const owned = this.countOwned(pid, kind);
+    if (kind === 'barracks' && owned >= C.MAX_BARRACKS) return `You can have at most ${C.MAX_BARRACKS} barracks`;
+    const cost = C.buildCost(kind, owned);
+    if (p.gold < cost) return 'Not enough gold';
+    p.gold -= cost;
     const id = this.nextId++;
     const stats = C.towerStats(kind, 1);
     this.towers.set(id, {
@@ -472,6 +476,12 @@ class Game {
   }
 
   // Is unclaimed tile (x, y) within TOWER_LEAP tiles of pid's land?
+  countOwned(pid, kind) {
+    let n = 0;
+    for (const t of this.towers.values()) if (t.owner === pid && t.kind === kind) n++;
+    return n;
+  }
+
   withinLeap(pid, x, y) {
     const r = C.TOWER_LEAP;
     for (let dy = -r; dy <= r; dy++) {
@@ -487,7 +497,7 @@ class Game {
     const p = this.players.get(pid);
     const t = this.towers.get(id);
     if (!p || !p.alive || !t || t.owner !== pid) return 'Invalid upgrade';
-    if (t.level >= C.MAX_LEVEL) return 'Already max level';
+    if (t.level >= C.maxLevel(t.kind)) return t.kind === 'tower' ? 'Already max level' : `A ${C.TOWERS[t.kind].name} can't be upgraded`;
     const cost = C.upgradeCost(t.kind, t.level);
     if (p.gold < cost) return 'Not enough gold';
     p.gold -= cost;
@@ -529,14 +539,27 @@ class Game {
 
   // ---------------------------------------------------------------- army plan
 
+  // Wave slots: BASE_WAVE from the core plus BARRACKS_TROOPS per barracks.
+  waveSize(p) {
+    return C.waveSize(this.countOwned(p.id, 'barracks'));
+  }
+
+  // The troops of the next wave, in order: assigned slots first, the rest guards and archers.
+  waveList(p) {
+    const size = this.waveSize(p);
+    const list = [];
+    for (const kind of UNIT_KEYS) for (let i = 0; i < p.army[kind] && list.length < size; i++) list.push(kind);
+    let i = 0;
+    while (list.length < size) list.push(i++ % 2 ? 'archer' : 'guard');
+    return list;
+  }
+
+  // Assigning wave slots is free; barracks are what add slots.
   armyAdd(pid, kind) {
     const p = this.players.get(pid);
     if (!p || !p.alive || !C.UNITS[kind]) return 'Invalid troop type';
     const total = UNIT_KEYS.reduce((n, k) => n + p.army[k], 0);
-    if (total >= C.ARMY_MAX_PER_WAVE) return `Waves are capped at ${C.ARMY_MAX_PER_WAVE} troops`;
-    const cost = C.armyAddCost(kind, p.army[kind]);
-    if (p.gold < cost) return 'Not enough gold';
-    p.gold -= cost;
+    if (total >= this.waveSize(p)) return 'Every wave slot is assigned: build a barracks for more, or remove a troop';
     p.army[kind]++;
     return null;
   }
@@ -545,8 +568,6 @@ class Game {
     const p = this.players.get(pid);
     if (!p || !p.alive || !C.UNITS[kind]) return 'Invalid troop type';
     if (p.army[kind] <= 0) return 'None to remove';
-    const total = UNIT_KEYS.reduce((n, k) => n + p.army[k], 0);
-    if (total <= 1) return 'A wave needs at least one troop';
     p.army[kind]--;
     return null;
   }
@@ -706,35 +727,46 @@ class Game {
     }
   }
 
+  // The core sends BASE_WAVE troops; each barracks sends its BARRACKS_TROOPS from where it stands.
   spawnWave(p) {
     if (!this.orderValid(p.id, p.order)) p.order = { type: 'defend', anchor: 0 };
     let alive = 0;
     for (const u of this.units.values()) if (u.owner === p.id) alive++;
-    const cap = C.unitCap(p.territory);
+    const cap = C.unitCap(p.territory, this.waveSize(p));
+    const barracks = [...this.towers.values()].filter((t) => t.owner === p.id && t.kind === 'barracks')
+      .sort((a, b) => a.id - b.id).slice(0, C.MAX_BARRACKS);
+    const list = this.waveList(p);
     let spawned = 0;
-    for (const kind of UNIT_KEYS) {
-      for (let i = 0; i < p.army[kind]; i++) {
-        if (alive >= cap) break;
-        this.spawnTroop(p, kind);
-        alive++;
-        spawned++;
-      }
+    for (let i = 0; i < list.length && alive < cap; i++) {
+      const slot = i - C.BASE_WAVE;
+      const from = slot < 0 ? null : barracks[Math.floor(slot / C.BARRACKS_TROOPS)];
+      this.spawnTroop(p, list[i], from);
+      alive++;
+      spawned++;
     }
-    if (spawned) this.fx.push({ k: 'wave', x: p.core.x + 0.5, y: p.core.y + 0.5, o: p.id });
+    if (spawned) {
+      this.fx.push({ k: 'wave', x: p.core.x + 0.5, y: p.core.y + 0.5, o: p.id });
+      for (const b of barracks) this.fx.push({ k: 'wave', x: b.x + 0.5, y: b.y + 0.5, o: p.id });
+    }
   }
 
-  spawnTroop(p, kind) {
+  // Spawn one troop at the core, or at barracks `from`.
+  spawnTroop(p, kind, from = null) {
     const id = this.nextId++;
     const level = p.levels[kind];
     const stats = C.towerStats(kind, level);
     const a = this.rand() * Math.PI * 2;
-    const x = Math.max(0.5, Math.min(this.w - 0.5, p.core.x + 0.5 + Math.cos(a) * 1.3));
-    const y = Math.max(0.5, Math.min(this.h - 0.5, p.core.y + 0.5 + Math.sin(a) * 1.3));
+    const ox = from ? from.x : p.core.x;
+    const oy = from ? from.y : p.core.y;
+    const x = Math.max(0.5, Math.min(this.w - 0.5, ox + 0.5 + Math.cos(a) * (from ? 1 : 1.3)));
+    const y = Math.max(0.5, Math.min(this.h - 0.5, oy + 0.5 + Math.sin(a) * (from ? 1 : 1.3)));
     const u = {
       isUnit: true, id, kind, owner: p.id, x, y, level, hp: stats.hp, maxHp: stats.hp, cd: 0,
       anchor: 0, attack: null, path: [], dest: null, repathAt: 0, idleUntil: this.time + 0.5, slowT: 0, slowF: 1,
     };
     this.applyOrder(u, p.order);
+    // Troops from a barracks guard it when the standing order is "defend the core".
+    if (from && p.order.type === 'defend' && !p.order.anchor) u.anchor = from.id;
     this.units.set(id, u);
     if (this.ucells) this.ucells[this.ucellOf(u.x, u.y)].push(u); // findable before the next grid rebuild
     return u;
@@ -988,6 +1020,7 @@ class Game {
     for (const t of this.towers.values()) {
       if (!t.owner) continue;
       const s = C.towerStats(t.kind, t.level);
+      if (!s.damage) continue; // barracks don't shoot
       shooters.push({ obj: t, x: t.x + 0.5, y: t.y + 0.5, owner: t.owner, range: s.range, damage: s.damage, rate: s.rate });
     }
     for (const p of this.players.values()) {
@@ -1626,7 +1659,9 @@ class Game {
 
   botThink(p) {
     const age = this.time - p.spawnTime;
-    const towers = [...this.towers.values()].filter((t) => t.owner === p.id);
+    const structures = [...this.towers.values()].filter((t) => t.owner === p.id);
+    const towers = structures.filter((t) => t.kind === 'tower');
+    const barracks = structures.length - towers.length;
     const troops = [...this.units.values()].filter((u) => u.owner === p.id);
     const roll = this.rand();
 
@@ -1644,17 +1679,28 @@ class Game {
       return;
     }
 
-    // Grow the army: more troops per wave first, then levels.
-    if (p.gold >= 120 && roll < 0.7) {
-      const total = UNIT_KEYS.reduce((n, k) => n + p.army[k], 0);
-      if (total < Math.min(C.ARMY_MAX_PER_WAVE, 4 + age / 30)) {
-        const r = this.rand();
-        const kind = r < 0.3 ? 'guard' : r < 0.65 ? 'archer' : r < 0.75 ? 'frost' : r < 0.88 ? 'mortar' : 'medic';
-        this.armyAdd(p.id, kind);
-      } else {
-        const kinds = UNIT_KEYS.filter((k) => p.army[k] > 0 && p.levels[k] < C.MAX_LEVEL);
-        if (kinds.length) this.armyLevel(p.id, kinds[Math.floor(this.rand() * kinds.length)]);
+    // Bigger waves: build barracks near the core once a couple of towers are up.
+    const bCost = C.buildCost('barracks', barracks);
+    if (barracks < C.MAX_BARRACKS && towers.length >= Math.min(2, 1 + barracks) && p.gold >= bCost && roll < 0.6) {
+      for (let i = 0; i < 25; i++) {
+        const ang = this.rand() * Math.PI * 2;
+        const r = 2 + this.rand() * 3;
+        const x = Math.round(p.core.x + Math.cos(ang) * r);
+        const y = Math.round(p.core.y + Math.sin(ang) * r);
+        if (this.inBounds(x, y) && this.build(p.id, x, y, 'barracks') === null) break;
       }
+      return;
+    }
+
+    // Shape the wave: assign free slots to a mix of troop types (free), then buy levels.
+    const assigned = UNIT_KEYS.reduce((n, k) => n + p.army[k], 0);
+    if (assigned < this.waveSize(p)) {
+      const r = this.rand();
+      const kind = r < 0.3 ? 'guard' : r < 0.6 ? 'archer' : r < 0.72 ? 'frost' : r < 0.86 ? 'mortar' : 'medic';
+      this.armyAdd(p.id, kind);
+    } else if (p.gold >= 120 && roll < 0.7) {
+      const kinds = UNIT_KEYS.filter((k) => p.army[k] > 0 && p.levels[k] < C.MAX_LEVEL);
+      if (kinds.length) this.armyLevel(p.id, kinds[Math.floor(this.rand() * kinds.length)]);
     }
 
     // Upgrade towers when rich.
@@ -1706,7 +1752,7 @@ class Game {
       this.order(p.id, null, { k: 'c', id: enemy.id });
       return;
     }
-    if (enemy && home.length >= Math.max(8, C.unitCap(p.territory) * 0.5)) {
+    if (enemy && home.length >= Math.max(8, C.unitCap(p.territory, this.waveSize(p)) * 0.5)) {
       let target = { k: 'c', id: enemy.id };
       let bestD = Infinity;
       for (const t of this.towers.values()) {
@@ -1808,6 +1854,7 @@ class Game {
       id: p.id,
       gold: Math.floor(p.gold),
       nextWave: Math.max(0, Math.ceil(p.nextWaveAt - this.time)),
+      waveSize: this.waveSize(p),
       army: p.army,
       levels: p.levels,
       order,

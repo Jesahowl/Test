@@ -3,52 +3,97 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const C = require('../shared/config');
-const { Game, seeded, duel, outpost, troops, run } = require('./helpers');
+const { Game, seeded, duel, edgeTile, outpost, troops, run } = require('./helpers');
 
 const mine = (g, p) => [...g.units.values()].filter((u) => u.owner === p.id);
 
-test('the core sends a free wave built from the army plan every interval', () => {
+test('the core sends a free wave of 5 every interval', () => {
   const { g, a } = duel(1);
   a.nextWaveAt = g.time;
   g.update(0.05);
   const w1 = mine(g, a);
-  assert.strictEqual(w1.length, 4);
-  assert.deepStrictEqual(w1.map((u) => u.kind).sort(), ['archer', 'archer', 'guard', 'guard']);
+  assert.strictEqual(w1.length, C.BASE_WAVE);
+  assert.deepStrictEqual(w1.map((u) => u.kind).sort(), ['archer', 'archer', 'guard', 'guard', 'guard']);
   assert.ok(Math.abs(a.nextWaveAt - (g.time - 0.05 + C.WAVE_INTERVAL)) < 0.1);
   run(g, C.WAVE_INTERVAL);
-  assert.strictEqual(mine(g, a).length, 8);
+  assert.strictEqual(mine(g, a).length, C.BASE_WAVE * 2);
 });
 
 test('waves stop at the land-based troop cap', () => {
   const { g, a } = duel(2);
-  const cap = C.unitCap(a.territory);
-  a.army.archer = 10;
-  for (let i = 0; i < 5; i++) {
+  const cap = C.unitCap(a.territory, g.waveSize(a));
+  for (let i = 0; i < 8; i++) {
     a.nextWaveAt = g.time;
     g.update(0.05);
   }
   assert.strictEqual(mine(g, a).length, cap);
 });
 
-test('the army plan: add, remove and level troop types', () => {
+function barracksAt(g, p, dx, dy) {
+  const err = g.build(p.id, p.core.x + dx, p.core.y + dy, 'barracks');
+  if (err) throw new Error(err);
+  return [...g.towers.values()].find((t) => t.x === p.core.x + dx && t.y === p.core.y + dy);
+}
+
+test('each barracks adds 5 troops to every wave, spawning at the barracks', () => {
+  const { g, a } = duel(16);
+  const gold = a.gold;
+  const b1 = barracksAt(g, a, 4, 0);
+  assert.strictEqual(a.gold, gold - C.buildCost('barracks', 0));
+  const b2 = barracksAt(g, a, -4, 0);
+  assert.strictEqual(a.gold, gold - C.buildCost('barracks', 0) - C.buildCost('barracks', 1));
+  assert.ok(C.buildCost('barracks', 1) > C.buildCost('barracks', 0), 'each one costs more');
+  assert.strictEqual(g.waveSize(a), C.BASE_WAVE + 2 * C.BARRACKS_TROOPS);
+  a.nextWaveAt = g.time;
+  g.update(0.05);
+  const wave = mine(g, a);
+  assert.strictEqual(wave.length, 15);
+  const near = (t) => wave.filter((u) => Math.hypot(u.x - t.x - 0.5, u.y - t.y - 0.5) < 1.6).length;
+  assert.strictEqual(near(b1), 5);
+  assert.strictEqual(near(b2), 5);
+  assert.ok(wave.filter((u) => u.anchor === b1.id).length === 5, 'barracks troops guard their barracks');
+  // rules: own land only, a maximum count, no upgrades, and they don't shoot
+  const out = edgeTile(g, a, 0, 1, 1);
+  assert.match(g.build(a.id, out.x, out.y, 'barracks'), /own land/);
+  assert.match(g.upgrade(a.id, b1.id), /can't be upgraded/);
+  for (let i = 2; i < C.MAX_BARRACKS; i++) barracksAt(g, a, 0, i === 2 ? 2 : i === 3 ? -2 : 3);
+  assert.match(g.build(a.id, a.core.x + 3, a.core.y + 3, 'barracks'), /at most/);
+  assert.strictEqual(g.waveSize(a), C.BASE_WAVE + C.MAX_BARRACKS * C.BARRACKS_TROOPS);
+});
+
+test('losing a barracks shrinks your waves; the player who takes it gets the troops', () => {
+  const { g, a, b } = duel(17);
+  const bar = barracksAt(g, a, 2, 0);
+  assert.strictEqual(g.waveSize(b), C.BASE_WAVE);
+  g.transferTower(bar, b.id, 'destroyed');
+  assert.strictEqual(g.waveSize(a), C.BASE_WAVE);
+  assert.strictEqual(g.waveSize(b), C.BASE_WAVE + C.BARRACKS_TROOPS);
+});
+
+test('the army plan sets the wave mix for free; levels cost gold', () => {
   const { g, a } = duel(3);
   const gold = a.gold;
   assert.strictEqual(g.armyAdd(a.id, 'mortar'), null);
-  assert.strictEqual(a.army.mortar, 1);
-  assert.strictEqual(a.gold, gold - C.armyAddCost('mortar', 0));
   assert.strictEqual(g.armyAdd(a.id, 'mortar'), null);
-  assert.strictEqual(a.gold, gold - C.armyAddCost('mortar', 0) - C.armyAddCost('mortar', 1));
+  assert.strictEqual(a.army.mortar, 2);
+  assert.strictEqual(a.gold, gold, 'assigning slots is free');
+  assert.deepStrictEqual(g.waveList(a), ['mortar', 'mortar', 'guard', 'archer', 'guard']);
   assert.strictEqual(g.armyLevel(a.id, 'archer'), null);
   assert.strictEqual(a.levels.archer, 2);
+  assert.ok(a.gold < gold);
   assert.match(g.armyAdd(a.id, 'dragon'), /Invalid/);
-  while (!g.armyAdd(a.id, 'guard'));
-  assert.match(g.armyAdd(a.id, 'guard'), /capped/);
+  while (!g.armyAdd(a.id, 'medic'));
+  assert.match(g.armyAdd(a.id, 'medic'), /barracks/);
+  assert.deepStrictEqual(g.waveList(a), ['mortar', 'mortar', 'medic', 'medic', 'medic']);
+  assert.strictEqual(g.armyRemove(a.id, 'medic'), null);
+  assert.strictEqual(g.armyAdd(a.id, 'archer'), null);
   a.nextWaveAt = g.time;
   g.update(0.05);
   const archers = mine(g, a).filter((u) => u.kind === 'archer');
-  assert.ok(archers.length && archers.every((u) => u.level === 2), 'new archers spawn at the new level');
+  assert.ok(archers.length === 1 && archers[0].level === 2, 'new archers spawn at the new level');
   for (const k of Object.keys(a.army)) while (a.army[k] && !g.armyRemove(a.id, k));
-  assert.match(g.armyRemove(a.id, 'guard'), /at least one|None/);
+  assert.match(g.armyRemove(a.id, 'guard'), /None/);
+  assert.strictEqual(g.waveList(a).length, C.BASE_WAVE, 'unassigned slots are still filled');
 });
 
 test('orders: everyone plus future waves, or only selected troops', () => {

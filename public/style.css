@@ -107,7 +107,7 @@ canvas#game { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
 #help-toggle { position: absolute; bottom: 190px; right: 10px; width: 26px; height: 26px; border-radius: 50%; border: 1px solid #30363d;
   background: rgba(13, 17, 23, 0.85); color: #8b949e; cursor: pointer; }
 #bar .share { display: flex; flex-direction: column; gap: 3px; }
-#bar .share-head { display: flex; align-items: baseline; gap: 5px; white-space: nowrap; }
+#bar .share-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 5px; white-space: nowrap; }
 #bar .share-head > span:first-child { color: #8b949e; }
 #bar #share-pct { color: #ffd54f; font-size: 14px; min-width: 34px; }
 #bar #share-count { margin-left: auto; color: #8b949e; font-size: 11px; }

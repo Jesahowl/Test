@@ -37,12 +37,17 @@
     // Every WAVE_INTERVAL seconds your core sends out a free wave built from your army plan.
     WAVE_INTERVAL: 20,
     FIRST_WAVE_DELAY: 6,
-    START_ARMY: { guard: 2, archer: 2 }, // troops per wave at the start
-    ARMY_MAX_PER_WAVE: 12,
+    // Wave size: BASE_WAVE troops from the core, plus BARRACKS_TROOPS from each barracks you own.
+    // The army panel only sets the mix; slots left unassigned are filled with guards and archers.
+    BASE_WAVE: 5,
+    BARRACKS_TROOPS: 5,
+    MAX_BARRACKS: 5,
+    BARRACKS_COST_STEP: 150, // each extra barracks costs this much more than the last
+    START_ARMY: {}, // wave slots assigned at the start (the rest are guards/archers)
     // How many troops can be alive at once grows with land: one per LAND_PER_UNIT tiles.
     LAND_PER_UNIT: 10,
     MIN_UNITS: 10,
-    MAX_UNITS: 30,
+    MAX_UNITS: 45,
     HUNT_ROLL_RANGE: 6, // when a hunted troop dies, hunters go after its squadmates within this range
     TROOP_AGGRO: 2, // troops on the march engage enemies within (attack range + this)
     TROOP_BOUNTY: 14, // gold for killing an enemy troop
@@ -79,7 +84,7 @@
     BOT_JUNGLE_SHARE: 0.35, // share of its home troops a bot sends to farm jungle camps
     MAX_PLAYERS: 24,
 
-    // Troop types. `cost` is the base price of adding one to every wave (see armyAddCost).
+    // Troop types. `cost` sets the price of levelling the type up (see armyLevelCost).
     UNITS: {
       guard: {
         name: 'Guard', key: '1', cost: 70, hp: 420, range: 1.5, damage: 14, rate: 1, speed: 2.2,
@@ -111,6 +116,10 @@
       tower: {
         name: 'Tower', key: 'B', cost: 120, hp: 1400, claim: 5, range: 5, damage: 32, rate: 1,
         color: '#ffd54f', desc: 'Claims land and shoots enemy troops',
+      },
+      barracks: {
+        name: 'Barracks', key: 'R', cost: 250, hp: 1600, claim: 2, maxLevel: 1, ownLandOnly: true,
+        color: '#d7a86e', desc: `+5 troops in every wave, spawning here. Build on your own land`,
       },
     },
 
@@ -175,6 +184,22 @@
     return level > CONFIG.CHEAP_LEVELS ? Math.pow(CONFIG.LATE_LEVEL_PRICE, level - CONFIG.CHEAP_LEVELS) : 1;
   };
 
+  // Highest level a structure kind can reach.
+  CONFIG.maxLevel = function (kind) {
+    return CONFIG.defOf(kind).maxLevel || CONFIG.MAX_LEVEL;
+  };
+
+  // Price of building a structure when you already own `owned` of that kind (barracks get pricier).
+  CONFIG.buildCost = function (kind, owned) {
+    const d = CONFIG.TOWERS[kind];
+    return kind === 'barracks' ? d.cost + CONFIG.BARRACKS_COST_STEP * owned : d.cost;
+  };
+
+  // Troops per wave for a player owning this many barracks.
+  CONFIG.waveSize = function (barracks) {
+    return CONFIG.BASE_WAVE + CONFIG.BARRACKS_TROOPS * Math.min(barracks, CONFIG.MAX_BARRACKS);
+  };
+
   // Tower upgrades: cost to go from `level` to `level + 1`.
   CONFIG.upgradeCost = function (kind, level) {
     return Math.round(CONFIG.defOf(kind).cost * level * CONFIG.latePrice(level));
@@ -191,19 +216,15 @@
     return Math.floor(CONFIG.totalSpent(kind, level) * CONFIG.SELL_REFUND);
   };
 
-  // Army plan: price of adding one more `kind` to every wave when you already have `count`.
-  CONFIG.armyAddCost = function (kind, count) {
-    return Math.round(CONFIG.UNITS[kind].cost * (0.6 + 0.4 * count));
-  };
-
   // Price of raising a troop type from `level` to `level + 1` (applies to troops spawned after).
   CONFIG.armyLevelCost = function (kind, level) {
     return Math.round(CONFIG.UNITS[kind].cost * 2 * level * CONFIG.latePrice(level));
   };
 
   // How many troops a player with this much land may have alive at once.
-  CONFIG.unitCap = function (territory) {
-    return Math.min(CONFIG.MAX_UNITS, Math.max(CONFIG.MIN_UNITS, Math.floor(territory / CONFIG.LAND_PER_UNIT)));
+  // (always enough for one full wave, so barracks are never wasted).
+  CONFIG.unitCap = function (territory, waveSize = 0) {
+    return Math.min(CONFIG.MAX_UNITS, Math.max(CONFIG.MIN_UNITS, waveSize, Math.floor(territory / CONFIG.LAND_PER_UNIT)));
   };
 
   // Capture speed multiplier for `n` capturing troops, and the base capture time of a tower level.

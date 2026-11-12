@@ -222,7 +222,7 @@
       t.ruin = !t.owner;
       if (old) {
         // remember render state: when it was last hit, when it changed hands, where its turret points
-        for (const k of ['hitAt', 'flipAt', 'prevOwner', 'aim', 'shotAt', 'trail']) t[k] = old[k];
+        for (const k of ['hitAt', 'flipAt', 'prevOwner', 'aim', 'shotAt', 'trail', 'waveAt']) t[k] = old[k];
         if (t.hp < old.hp && t.owner === old.owner) t.hitAt = now;
         if (t.owner && old.owner !== t.owner) {
           t.flipAt = now;
@@ -265,6 +265,10 @@
 
     for (const f of msg.fx) {
       effects.push({ ...f, born: now + INTERP_DELAY }); // shown in step with the delayed troops
+      if (f.k === 'wave') {
+        const t = towers.get(grid.get(`${Math.floor(f.x)},${Math.floor(f.y)}`));
+        if (t) t.waveAt = now + INTERP_DELAY;
+      }
       if (f.k === 'tshot') {
         // turn the shooting tower's turret (or flare the core) toward its target
         const tx = Math.floor(f.x1);
@@ -616,6 +620,18 @@
         ctx.arc(x, y, r * 0.4, 0, Math.PI * 2);
         ctx.fill();
         break;
+      case 'barracks':
+        // a hall with a pitched roof and a door
+        ctx.fillRect(x - r * 0.8, y - r * 0.2, r * 1.6, r * 0.95);
+        ctx.beginPath();
+        ctx.moveTo(x - r * 0.95, y - r * 0.15);
+        ctx.lineTo(x, y - r * 0.9);
+        ctx.lineTo(x + r * 0.95, y - r * 0.15);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.fillRect(x - r * 0.2, y + r * 0.2, r * 0.4, r * 0.55);
+        break;
       case 'tower':
         // battlemented turret
         ctx.moveTo(x - r * 0.8, y + r * 0.8);
@@ -914,6 +930,94 @@
     }
   }
 
+  // Barracks: a timber hall with a roof in the owner's colour, crossed swords over the door and a
+  // banner. Its doors glow and it pulses when a wave marches out.
+  function drawBarracksSprite(t, x, y, s, now) {
+    const r = s * 0.62;
+    const flip = t.flipAt ? (now - t.flipAt) / 900 : 1;
+    const bounce = flip < 1 ? 1 + 0.3 * Math.sin(flip * Math.PI * 3) * (1 - flip) : 1;
+    const out = t.waveAt ? Math.max(0, 1 - (now - t.waveAt) / 700) : 0;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(bounce * (1 + 0.06 * out), bounce * (1 + 0.06 * out));
+    // shadow and yard
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(r * 0.1, r * 0.45, r * 1.25, r * 0.7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    roundRect(-r * 1.15, -r * 0.55, r * 2.3, r * 1.45, r * 0.15);
+    ctx.fillStyle = colorOf(t.owner, 24);
+    ctx.fill();
+    ctx.strokeStyle = colorOf(t.owner, 62);
+    ctx.lineWidth = Math.max(1.5, s * 0.07);
+    ctx.stroke();
+    // timber walls
+    ctx.fillStyle = '#8d6e4f';
+    ctx.fillRect(-r * 0.85, -r * 0.15, r * 1.7, r * 0.85);
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = Math.max(1, s * 0.03);
+    ctx.beginPath();
+    for (let i = 1; i < 4; i++) {
+      ctx.moveTo(-r * 0.85 + (r * 1.7 * i) / 4, -r * 0.15);
+      ctx.lineTo(-r * 0.85 + (r * 1.7 * i) / 4, r * 0.7);
+    }
+    ctx.stroke();
+    // roof
+    ctx.fillStyle = colorOf(t.owner, 42);
+    ctx.beginPath();
+    ctx.moveTo(-r * 1.02, -r * 0.1);
+    ctx.lineTo(-r * 0.6, -r * 0.75);
+    ctx.lineTo(r * 0.6, -r * 0.75);
+    ctx.lineTo(r * 1.02, -r * 0.1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = colorOf(t.owner, 65);
+    ctx.lineWidth = Math.max(1, s * 0.04);
+    ctx.stroke();
+    // door (glows when a wave marches out)
+    ctx.fillStyle = out > 0 ? `rgba(255, 213, 79, ${0.5 + 0.5 * out})` : '#3b2a1c';
+    roundRect(-r * 0.22, r * 0.2, r * 0.44, r * 0.5, r * 0.18);
+    ctx.fill();
+    // crossed swords over the door
+    ctx.strokeStyle = '#e6edf3';
+    ctx.lineWidth = Math.max(1.2, s * 0.045);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.3, -r * 0.55);
+    ctx.lineTo(r * 0.12, -r * 0.2);
+    ctx.moveTo(r * 0.3, -r * 0.55);
+    ctx.lineTo(-r * 0.12, -r * 0.2);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+    // banner
+    const wave = Math.sin(now / 220 + t.id) * r * 0.08;
+    ctx.strokeStyle = '#3b3630';
+    ctx.lineWidth = Math.max(1, s * 0.04);
+    ctx.beginPath();
+    ctx.moveTo(r * 0.85, -r * 0.1);
+    ctx.lineTo(r * 0.85, -r * 1.05);
+    ctx.stroke();
+    ctx.fillStyle = colorOf(t.owner, 55);
+    ctx.beginPath();
+    ctx.moveTo(r * 0.85, -r * 1.05);
+    ctx.quadraticCurveTo(r * 1.15, -r * 1.05 + wave, r * 1.35, -r * 0.92 + wave);
+    ctx.lineTo(r * 0.85, -r * 0.72);
+    ctx.closePath();
+    ctx.fill();
+    drawCracks(0, r * 0.25, r * 0.7, 1 - t.hp / t.maxHp, t.id);
+    if (flip < 1) {
+      ctx.globalAlpha = (1 - flip) * 0.8;
+      ctx.fillStyle = '#fff';
+      roundRect(-r * 1.15, -r * 0.55, r * 2.3, r * 1.45, r * 0.15);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+    if (t.hp / t.maxHp < 0.3) drawSmoke(x, y, r, now, t.id);
+    // "+5" tag
+    if (s >= 14) label(`+${C.BARRACKS_TROOPS}`, x - r * 0.95, y - r * 0.75, Math.max(9, Math.round(s * 0.32)), '#ffd54f');
+  }
+
   // A ruin: scattered rubble and a broken stub.
   function drawRuin(t, x, y, s) {
     const r = s * 0.5;
@@ -971,7 +1075,8 @@
         ctx.stroke();
         ctx.setLineDash([]);
       }
-      drawTowerSprite(t, x, y, s, now);
+      if (t.kind === 'barracks') drawBarracksSprite(t, x, y, s, now);
+      else drawTowerSprite(t, x, y, s, now);
       const sieged = t.cap > 0 && t.capBy;
       structBar(t, x, y - r * (sieged ? 2.6 : 1.75), s * 1.0, now, t.id === selectedId || t.id === hover, dt);
       if (t.cap > 0 && t.capBy) {
@@ -1459,7 +1564,7 @@
   function canBuildAt(x, y) {
     if (!me || x < 0 || y < 0 || x >= C.MAP_W || y >= C.MAP_H) return false;
     const k = y * C.MAP_W + x;
-    if (terr[k] !== myId && !getLeapZone()[k]) return false;
+    if (terr[k] !== myId && (C.TOWERS[buildKind]?.ownLandOnly || !getLeapZone()[k])) return false;
     if (grid.has(`${x},${y}`)) return false;
     for (const p of players.values()) if (p.x === x && p.y === y) return false;
     return true;
@@ -1468,7 +1573,7 @@
   // Land a new tower at (bx, by) would win: mirrors the server's nearest-claim rule
   // (cores hold land at half distance, towers at full distance).
   function claimPreview(bx, by) {
-    const r = C.towerStats('tower', 1).claim + 0.25;
+    const r = C.towerStats(buildKind || 'tower', 1).claim + 0.25;
     const R = Math.ceil(r);
     const gained = [];
     const stolen = new Map();
@@ -1608,8 +1713,8 @@
       const tx = Math.floor(mouse.wx);
       const ty = Math.floor(mouse.wy);
       const ok = canBuildAt(tx, ty);
-      // Leap zone: unclaimed ground a tower can jump to.
-      const zone = getLeapZone();
+      // Leap zone: unclaimed ground a tower can jump to (barracks stay on your own land).
+      const zone = C.TOWERS[buildKind].ownLandOnly ? new Uint8Array(0) : getLeapZone();
       const [x0, y0] = toWorld(0, 0);
       const [x1, y1] = toWorld(canvas.width, canvas.height);
       ctx.fillStyle = 'rgba(255,213,79,0.10)';
@@ -1639,7 +1744,7 @@
         ctx.fillText(text, mouse.sx + 16, mouse.sy + 24);
       }
       const st = C.towerStats(buildKind, 1);
-      drawRange(tx + 0.5, ty + 0.5, st.range, ok ? 'rgba(88,166,255,A)' : 'rgba(248,81,73,A)');
+      if (st.range) drawRange(tx + 0.5, ty + 0.5, st.range, ok ? 'rgba(88,166,255,A)' : 'rgba(248,81,73,A)');
       const [x, y] = toScreen(tx + 0.5, ty + 0.5);
       ctx.globalAlpha = 0.6;
       drawShape(buildKind, x, y, s * 0.45, ok ? C.TOWERS[buildKind].color : '#f85149');
@@ -1702,6 +1807,11 @@
     tb.title = `${d.name} - ${d.desc}. Can leap ${C.TOWER_LEAP} tiles past your border.`;
     tb.innerHTML = `<span class="key">${d.key}</span><span class="icon" style="background:${d.color};border-radius:3px"></span>${d.name}<span class="cost">${d.cost}g</span>`;
     tb.onclick = () => toggleBuild('tower');
+    const bb = $('barracks-button');
+    const bd = C.TOWERS.barracks;
+    bb.title = `${bd.name} - ${bd.desc}. Max ${C.MAX_BARRACKS}; each one costs ${C.BARRACKS_COST_STEP}g more.`;
+    bb.innerHTML = `<span class="key">${bd.key}</span><span class="icon" style="background:${bd.color};border-radius:3px 3px 0 0"></span>${bd.name}<span class="cost"></span>`;
+    bb.onclick = () => toggleBuild('barracks');
 
     const army = $('army');
     for (const kind of UNIT_KEYS) {
@@ -1714,8 +1824,8 @@
         <div class="head"><span class="icon" style="background:${u.color}"></span><b>${u.name}</b><span class="lvl"></span></div>
         <div class="count"></div>
         <div class="btns">
-          <button class="rem" title="One fewer per wave (no refund)">−</button>
-          <button class="add" title="One more ${u.name} in every wave"></button>
+          <button class="rem" title="One fewer ${u.name} per wave (its slot goes back to guards/archers)">−</button>
+          <button class="add" title="Make one more wave slot a ${u.name} (free; barracks add slots)"></button>
           <button class="up" title="Level up: applies to ${u.name}s from the next wave"></button>
         </div>`;
       card.querySelector('.add').onclick = () => sendMsg({ t: 'army', op: 'add', kind });
@@ -1823,7 +1933,7 @@
     const sorted = [...players.values()].sort((a, b) => b.territory - a.territory);
     const rank = sorted.findIndex((q) => q.id === myId) + 1;
     const myTroops = [...units.values()].filter((u) => u.owner === myId).length;
-    const perWave = UNIT_KEYS.reduce((n, k) => n + me.army[k], 0);
+    const perWave = me.waveSize;
     updateRound();
     $('stats').innerHTML = `
       <div class="gold">${gold}g</div>
@@ -1834,7 +1944,7 @@
       <div>Core ${p.hp}/${p.maxHp}</div>
       <div class="hpbar"><div style="width:${(100 * p.hp) / p.maxHp}%"></div></div>`;
 
-    $('wave-info').innerHTML = `<b>Next wave ${me.nextWave}s</b><br>${perWave} troops per wave<br>Alive ${myTroops}/${C.unitCap(p.territory)} <span class="muted">(cap grows with land)</span>`;
+    $('wave-info').innerHTML = `<b>Next wave ${me.nextWave}s</b><br>${perWave} troops per wave <span class="muted">(${C.BASE_WAVE} + ${C.BARRACKS_TROOPS} per barracks)</span><br>Alive ${myTroops}/${C.unitCap(p.territory, perWave)}`;
 
     const o = me.order;
     $('order-info').innerHTML = o.type === 'attack'
@@ -1857,29 +1967,48 @@
       `<div style="opacity:${Math.min(1, (9000 - (now - f.born)) / 1500)}">${escapeHtml(f.text)}</div>`).join('');
   }
 
+  // Same as the server's waveList: assigned slots, then guards/archers.
+  function waveListOf(m) {
+    const list = [];
+    for (const kind of UNIT_KEYS) for (let i = 0; i < m.army[kind] && list.length < m.waveSize; i++) list.push(kind);
+    let i = 0;
+    while (list.length < m.waveSize) list.push(i++ % 2 ? 'archer' : 'guard');
+    return list;
+  }
+
   // Tower button, send-% buttons and the army panel.
   function updateTowerAndArmy(gold, perWave) {
     updateShareUi();
     const tb = $('tower-button');
     tb.classList.toggle('active', buildKind === 'tower');
     tb.classList.toggle('poor', gold < C.TOWERS.tower.cost);
-    const full = perWave >= C.ARMY_MAX_PER_WAVE;
+    const bb = $('barracks-button');
+    const owned = [...towers.values()].filter((t) => t.owner === myId && t.kind === 'barracks').length;
+    const bCost = C.buildCost('barracks', owned);
+    const maxed = owned >= C.MAX_BARRACKS;
+    bb.classList.toggle('active', buildKind === 'barracks');
+    bb.classList.toggle('poor', maxed || gold < bCost);
+    bb.querySelector('.cost').textContent = maxed ? `${owned}/${C.MAX_BARRACKS} max` : `${bCost}g · ${owned}/${C.MAX_BARRACKS}`;
+    // Wave slots: assigned ones per type; the rest are filled with guards and archers.
+    const assigned = UNIT_KEYS.reduce((n, k) => n + me.army[k], 0);
+    const full = assigned >= me.waveSize;
+    const list = waveListOf(me);
     for (const card of document.querySelectorAll('#army .troop')) {
       const kind = card.dataset.kind;
-      const n = me.army[kind];
+      const n = list.filter((k) => k === kind).length;
+      const set = me.army[kind];
       const lvl = me.levels[kind];
-      const addCost = C.armyAddCost(kind, n);
       const upCost = lvl < C.MAX_LEVEL ? C.armyLevelCost(kind, lvl) : 0;
       card.classList.toggle('off', n === 0);
       card.querySelector('.lvl').textContent = `Lv${lvl}`;
-      card.querySelector('.count').textContent = n ? `×${n} per wave` : 'not in waves';
+      card.querySelector('.count').textContent = n ? `×${n} per wave${n > set ? ` (${n - set} auto)` : ''}` : 'not in waves';
       const add = card.querySelector('.add');
-      add.textContent = `+ ${addCost}g`;
-      add.disabled = full || gold < addCost;
+      add.textContent = '+';
+      add.disabled = full;
       const up = card.querySelector('.up');
       up.textContent = lvl < C.MAX_LEVEL ? `▲ ${upCost}g` : 'MAX';
       up.disabled = lvl >= C.MAX_LEVEL || gold < upCost;
-      card.querySelector('.rem').disabled = n === 0 || perWave <= 1;
+      card.querySelector('.rem').disabled = set === 0;
     }
   }
 
@@ -1928,11 +2057,14 @@
         $('sel-capture').onclick = () => sendMsg({ t: 'capture', id: t.id });
       } else if (t.owner === myId) {
         const st = C.towerStats(t.kind, t.level);
-        const maxed = t.level >= C.MAX_LEVEL;
-        panel.innerHTML = `<h4>${d.name} · level ${t.level}</h4><div id="sel-info"></div>
-          <div>Damage ${st.damage.toFixed(0)}/s · range ${st.range} · claims ${st.claim}</div>
+        const maxed = t.level >= C.maxLevel(t.kind);
+        const what = t.kind === 'barracks'
+          ? `Adds ${C.BARRACKS_TROOPS} troops to every wave, marching out from here · claims ${st.claim}`
+          : `Damage ${st.damage.toFixed(0)}/s · range ${st.range} · claims ${st.claim}`;
+        panel.innerHTML = `<h4>${d.name}${t.kind === 'barracks' ? '' : ` · level ${t.level}`}</h4><div id="sel-info"></div>
+          <div>${what}</div>
           <div class="btns">
-            <button id="sel-up">${maxed ? 'Max level' : `Upgrade (${C.upgradeCost(t.kind, t.level)}g) [U]`}</button>
+            <button id="sel-up">${maxed ? (t.kind === 'barracks' ? 'No upgrades' : 'Max level') : `Upgrade (${C.upgradeCost(t.kind, t.level)}g) [U]`}</button>
             <button id="sel-sell">Sell +${C.sellValue(t.kind, t.level)}g</button>
           </div>
           <div class="btns"><button id="sel-defend">Defend here</button></div>`;
@@ -1951,7 +2083,7 @@
     } else {
       const garrison = [...units.values()].filter((u) => u.owner === t.owner && u.anchor === t.id && !u.attack).length;
       $('sel-info').textContent = `HP ${t.hp}/${t.maxHp} · garrison ${garrison}`;
-      if (t.owner === myId) $('sel-up').disabled = t.level >= C.MAX_LEVEL || gold < C.upgradeCost(t.kind, t.level);
+      if (t.owner === myId) $('sel-up').disabled = t.level >= C.maxLevel(t.kind) || gold < C.upgradeCost(t.kind, t.level);
     }
   }
 
@@ -2203,6 +2335,7 @@
     }
     if (!myId) return;
     if (k === 'b') toggleBuild('tower');
+    if (k === 'r') toggleBuild('barracks');
     if (k === 'escape') {
       buildKind = null;
       clearSelection();

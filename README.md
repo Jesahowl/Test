@@ -22,7 +22,9 @@ AI bots fill the server up to 6 players, so it's playable alone too.
 
 | | |
 |---|---|
-| **Waves** | Your core sends out a free wave every 20s, built from your **army plan**. Start: 2 Guards + 2 Archers. Spend gold to add troops to every wave, or level a troop type up. |
+| **Waves** | Every 20s your core sends out a free wave of **5 troops**. |
+| **Barracks** | Build **barracks** (`R`, on your own land) for **+5 troops in every wave**. Each barracks' 5 march out from the barracks itself and guard it while your standing order is "defend home". Up to 5 barracks (30 troops per wave). They cost 250g, then 150g more for each one you own. They don't shoot or level up, and like towers they can be destroyed or captured: whoever takes one gets its +5. |
+| **Army mix** | The army panel decides **which troops fill your wave slots**, for free (`1`–`5` / `+`). Unassigned slots are filled with guards and archers. Gold goes into **levelling troop types** (`Shift`+number), barracks and towers. |
 | **Orders** | **Right-click** an enemy tower or core to attack it, or one of your own towers or your core to defend there. Who goes depends on the **Send slider** in the bar (5% steps; it shows how many of your troops that is, e.g. "12 of 20"): at 100% every troop goes and every future wave follows; below 100% only that share of your current troops goes (nearest to the target first, keeping your army's mix of types) and new waves keep their orders, so you can split your forces. Select specific troops first (click, Shift-click, `Q` = all) to command exactly those. `H` brings everyone home. |
 | **Hunting** | **Right-click an enemy troop** to send your troops after it. They chase it down and focus it, ignoring other enemies on the way. When it dies they go after its squadmates within 6 tiles, then head home once the squad is gone. A red crosshair marks troops you're hunting. Hunts use the Send slider (or your selection) like other orders, but never redirect new waves. |
 | **The push** | Troops march across the map (pathfinding around structures), fight whatever they meet, then hit the target. When a tower falls, the push rolls on to that player's next tower, then their core. |
@@ -33,25 +35,24 @@ AI bots fill the server up to 6 players, so it's playable alone too.
 | **Jungle buff** | Clearing a **golem camp** (marked 🔥 buff) empowers all your troops for 60s: **+30% damage and 25% less damage taken**. Buffed troops glow orange and a 🔥 shows next to your name. |
 | **Rounds** | **Last core standing wins.** Joining is open for the first 60s of a round (bots fill in during that time too). After that, newcomers watch and join the next round automatically. After **10 minutes, sudden death** starts: no home-turf bonus, troops deal double damage to towers and cores, and cores slowly crumble, so every round ends. Then a scoreboard shows everyone's placing and a new round starts on a fresh map 15s later. If only bots are left, pressing *New round* starts one straight away. |
 | **Home turf** | Troops on their own land heal 2% HP/s and deal +30% damage, so defending is cheaper than attacking. |
-| **Army size** | You can have 1 troop alive per 10 tiles of land (min 10, max 30). Waves stop spawning at the cap. |
+| **Army size** | You can have 1 troop alive per 10 tiles of land (min 10, max 45), and always at least one full wave. Waves stop spawning at the cap. |
 | **Spawn protection** | For 90s after spawning your core and towers can't be damaged. |
 | **Losing** | If your core falls you're **out of the round**. Whoever destroyed it takes the spoils: **all your gold** (plus a 250g bounty), **every troop you still had standing**, and your core site, which becomes **one of their towers** garrisoned by your former troops. Your other towers become ruins. You can then **spectate** (follow any player with Tab, free camera with WASD, Space to follow again) and you join the next round automatically. If you disconnect instead, your troops vanish and nobody gets anything. |
 
 ### Troops
 
-| Key | Troop | Add to waves | HP | Role |
+| Key | Troop | Level 2 | HP | Role |
 |---|---|---|---|---|
-| `1` | Guard | 42g+ | 420 | Melee tank. Enemy troops nearby are taunted into fighting it first |
-| `2` | Archer | 36g+ | 120 | Ranged damage, fragile |
-| `3` | Frost | 54g+ | 220 | Pulses damage and slows every enemy around it |
-| `4` | Mortar | 78g+ | 140 | Long-range splash, **double damage to towers and cores** |
-| `5` | Medic | 54g+ | 130 | Heals nearby troops, never attacks |
+| `1` | Guard | 140g | 420 | Melee tank. Enemy troops nearby are taunted into fighting it first |
+| `2` | Archer | 120g | 120 | Ranged damage, fragile |
+| `3` | Frost | 180g | 220 | Pulses damage and slows every enemy around it |
+| `4` | Mortar | 260g | 140 | Long-range splash, **double damage to towers and cores** |
+| `5` | Medic | 180g | 130 | Heals nearby troops, never attacks |
 
-Adding a troop gets pricier the more of that type you already have. `Shift`+number levels a type up
+`Shift`+number levels a type up
 (+50% HP, +60% damage, +0.5 range per level, **max 5**); levels apply to troops spawned after.
 Levels 4 and 5 (for troops and towers) cost a lot more: a late-game place to spend gold. Towers stop gaining land after level 3,
 and get a turning gold rune ring at level 4 and a radiant aura at level 5.
-A wave holds at most 12 troops.
 
 ### Controls
 
@@ -62,14 +63,15 @@ A wave holds at most 12 troops.
 | Left-click | Select a troop (`Shift` adds), or a tower / ruin |
 | `Q` / `Esc` | Select all troops / clear selection |
 | `H` | All troops and new waves defend your core |
-| `1`–`5` (`Shift` = level up) | Add a troop type to every wave |
+| `1`–`5` (`Shift` = level up) | Put a troop type in one more wave slot (free) |
+| `R` | Place a barracks (your own land only): +5 troops per wave |
 | `B` | Place a tower (shows where you can leap, and the land you'd gain or take) |
 | `U` / `Del` | Upgrade / sell the selected tower |
 | `WASD` / arrows / right-drag | Pan. Wheel zooms. `Space` jumps home. Click the minimap to jump. `?` toggles help. |
 
 All numbers live in [`shared/config.js`](shared/config.js), shared by server and client, so tuning happens in one place.
 The most useful knobs: economy (`BASE_INCOME`, `INCOME_PER_TILE`, `TROOP_BOUNTY`, `TOWER_BOUNTY`, `CORE_KILL_BOUNTY`,
-monster `bounty`, `CAMP_RESPAWN`, `CAMP_RELOCATE`), `WAVE_INTERVAL`, `START_ARMY`, `ARMY_MAX_PER_WAVE`, `LAND_PER_UNIT`, troop and tower stats,
+monster `bounty`, `CAMP_RESPAWN`, `CAMP_RELOCATE`), `WAVE_INTERVAL`, `BASE_WAVE`, `BARRACKS_TROOPS`, `MAX_BARRACKS`, `BARRACKS_COST_STEP`, `LAND_PER_UNIT`, troop and tower stats,
 `CORE_DAMAGE`, `HOME_DAMAGE_BONUS`, `SPAWN_SHIELD`, `CAPTURE_TIME`, `TOWER_CLAIM_HP`, `CAMP_*`, jungle buff (`BUFF_CAMPS`, `JUNGLE_BUFF_*`),
 rounds (`ROUND_JOIN_WINDOW`, `ROUND_SUDDEN_DEATH`, `SUDDEN_DEATH_*`, `ROUND_RESET_DELAY`).
 
