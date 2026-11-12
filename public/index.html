@@ -10,70 +10,120 @@
   <canvas id="game"></canvas>
 
   <div id="hud" class="hidden">
+    <!-- top left: you -->
     <div id="stats" class="panel"></div>
-    <div id="leaderboard" class="panel"></div>
     <div id="feed"></div>
-    <div id="toast"></div>
-    <div id="selection" class="panel hidden"></div>
 
+    <!-- top centre: the round -->
     <div id="round" class="panel hidden"></div>
-    <div id="order-info" class="panel"></div>
     <div id="spec-bar" class="panel"></div>
 
-    <div id="bar" class="panel">
-      <button id="tower-button" class="build"></button>
-      <button id="barracks-button" class="build"></button>
-      <div class="divider"></div>
-      <div id="army"></div>
-      <div class="divider"></div>
-      <div class="side">
-        <div id="wave-info"></div>
-        <div class="share">
-          <div class="share-head"><span>Send</span><b id="share-pct"></b><span id="share-count"></span></div>
-          <input id="share-slider" type="range">
-        </div>
-        <button id="defend-home" title="All troops and new waves defend your core [H]">🛡 Defend home [H]</button>
+    <!-- top right: players -->
+    <div id="leaderboard" class="panel"></div>
+    <button id="help-toggle" class="round-btn" data-tip="Controls and how to play <kbd>?</kbd>">?</button>
+
+    <!-- bottom left: what you clicked, and first-game tips -->
+    <div id="selection" class="panel hidden"></div>
+    <div id="tips" class="panel hidden"></div>
+
+    <!-- bottom centre: commands -->
+    <div id="bottom">
+      <div id="toast"></div>
+      <div id="order-info" class="pill"></div>
+      <div id="bar" class="panel">
+        <section class="sec build">
+          <h5>Build</h5>
+          <div class="tiles">
+            <button id="tower-button" class="tile"></button>
+            <button id="barracks-button" class="tile"></button>
+          </div>
+        </section>
+        <section class="sec wave">
+          <h5>Your wave <span id="wave-size"></span></h5>
+          <div class="wave-top">
+            <div id="wave-timer" data-tip="Every 20 seconds your core and barracks send out a free wave"></div>
+            <div id="slots"></div>
+          </div>
+          <div id="army"></div>
+        </section>
+        <section class="sec orders">
+          <h5>Orders</h5>
+          <div class="share">
+            <div class="share-head"><span>Send</span><b id="share-pct"></b><span id="share-count"></span></div>
+            <input id="share-slider" type="range">
+          </div>
+          <button id="defend-home" class="wide-btn" data-tip="All troops and new waves go home to defend your core <kbd>H</kbd>">🛡 Defend home <kbd>H</kbd></button>
+          <div id="alive"></div>
+        </section>
       </div>
     </div>
 
-    <canvas id="minimap" width="170" height="170"></canvas>
+    <!-- bottom right: map -->
+    <div id="minimap-wrap"><canvas id="minimap" width="170" height="170"></canvas></div>
+  </div>
 
-    <button id="help-toggle" class="hidden" title="Show controls [?]">?</button>
-    <div id="help" class="panel">
-      <button class="close" title="Hide [?]">×</button>
-      <b>Waves</b> every 20s your core sends 5 troops, plus 5 from each barracks (R) · the army panel sets the mix for free (1-4, Shift = level up; a giant takes 3 slots) · scouts explore the fog on their own<br>
-      <b>Orders</b> right-click an enemy tower/core or a jungle camp to attack, or an enemy troop to hunt it · right-click your tower/core to defend · H = all home<br>
-      <b>Send %</b> slider in the bar (or wheel over it) sets how many of your troops each order sends · Z/X/C/V = 25/50/75/100% (100% also redirects new waves)<br>
-      <b>Select</b> click troops (Shift adds, Q = all) to command only them · Esc deselects<br>
-      <b>Towers</b> B, then click your land (or up to 3 tiles past it) · click a tower: U upgrade, Del sell<br>
-      <b>Camera</b> WASD / arrows / right-drag · wheel zoom · Space = home
+  <!-- controls window (? key) -->
+  <div id="help" class="overlay hidden">
+    <div class="card wide help-card">
+      <button class="close" data-tip="Close <kbd>Esc</kbd>">×</button>
+      <h2>How to play</h2>
+      <div class="how-grid">
+        <div><b>🏰 Waves</b>Every 20s your core sends <b>5 troops</b>, plus 5 from every <b>barracks</b>. Choose the mix in the wave panel. It's free; gold buys levels.</div>
+        <div><b>🎯 Orders</b><b>Right-click</b> an enemy tower, core, camp or troop to attack it, or your own building to defend it. The <b>Send</b> slider decides how many go.</div>
+        <div><b>🗺 Land</b><b>Towers</b> claim land and shoot. More land means more gold. Explore the <b>fog</b> with scouts.</div>
+        <div><b>🏆 Win</b>Take enemy towers, break their core, and be the <b>last core standing</b>. Golem camps power up your troops.</div>
+      </div>
+      <h3>Controls</h3>
+      <div class="keys">
+        <div><kbd>Right-click</kbd><span>Order troops at a target</span></div>
+        <div><kbd>Left-click</kbd><span>Select troops (<kbd>Shift</kbd> adds) or a building</span></div>
+        <div><kbd>Q</kbd><span>Select all troops</span></div>
+        <div><kbd>H</kbd><span>Everyone home</span></div>
+        <div><kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd><kbd>V</kbd><span>Send 25 / 50 / 75 / 100%</span></div>
+        <div><kbd>B</kbd><span>Build a tower</span></div>
+        <div><kbd>R</kbd><span>Build a barracks</span></div>
+        <div><kbd>1</kbd>–<kbd>4</kbd><span>Add a troop to your wave (<kbd>Shift</kbd> = level up)</span></div>
+        <div><kbd>U</kbd> / <kbd>Del</kbd><span>Upgrade / sell selected building</span></div>
+        <div><kbd>WASD</kbd><span>Move camera (or right-drag)</span></div>
+        <div><kbd>Wheel</kbd><span>Zoom</span></div>
+        <div><kbd>Space</kbd><span>Jump to your base</span></div>
+        <div><kbd>Esc</kbd><span>Cancel / deselect</span></div>
+        <div><kbd>?</kbd><span>This window</span></div>
+      </div>
+      <button id="tips-reset" class="link">Show the first-game tips again</button>
     </div>
   </div>
 
+  <div id="tip"></div>
+
   <div id="menu" class="overlay">
-    <div class="card">
+    <div class="card menu-card">
+      <div class="logo"><canvas id="logo" width="72" height="72"></canvas></div>
       <h1>Territory <span>Siege</span></h1>
       <p class="tag">Send your waves. Take their towers. Break their core.</p>
-      <input id="name" maxlength="16" placeholder="Your name" autocomplete="off">
-      <button id="play">Play</button>
-      <ul class="how">
-        <li>Your core sends out a <b>wave of 5 troops</b> every 20 seconds. Build <b>barracks</b> for +5 troops per wave each.</li>
-        <li><b>Right-click</b> an enemy tower or core to attack it, or one of yours to defend it.</li>
-        <li><b>Towers</b> claim land and shoot. More land = more gold and a bigger army.</li>
-        <li>Clear <b>jungle camps</b> for gold. Golem camps also <b>empower your troops</b> for 60s.</li>
-        <li><b>Last core standing wins the round.</b> After 10 minutes, sudden death makes sure it ends.</li>
-      </ul>
+      <div class="join">
+        <input id="name" maxlength="16" placeholder="Your name" autocomplete="off">
+        <button id="play">Play</button>
+      </div>
       <div id="conn"></div>
+      <div class="how-grid">
+        <div><b>🏰 Waves</b>Your core sends troops every 20s. Build <b>barracks</b> for bigger waves.</div>
+        <div><b>🎯 Orders</b><b>Right-click</b> enemy towers, cores, camps or troops to attack.</div>
+        <div><b>🗺 Land</b><b>Towers</b> claim land and shoot. Land means gold. Scout the <b>fog</b>.</div>
+        <div><b>🏆 Win</b>Be the <b>last core standing</b>. Rounds last about 10–12 minutes.</div>
+      </div>
+      <p class="foot">Bots fill the server, so you can play alone. Press <kbd>?</kbd> in game for controls.</p>
     </div>
   </div>
 
   <div id="death" class="overlay hidden">
     <div class="card">
+      <div class="death-icon">💥</div>
       <h2>Your core has fallen</h2>
       <p id="death-by"></p>
       <p id="death-spoils"></p>
       <div id="death-stats"></div>
-      <p id="death-gold"></p>
+      <div id="death-gold"></div>
       <p class="out">You're out of this round. The last core standing wins.</p>
       <div class="choices">
         <button id="spectate" class="secondary">👁 Spectate</button>

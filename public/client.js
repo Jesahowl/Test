@@ -14,7 +14,7 @@
   // ------------------------------------------------------------------ DOM
   const $ = (id) => document.getElementById(id);
   const canvas = $('game');
-  const ctx = canvas.getContext('2d');
+  let ctx = canvas.getContext('2d'); // swapped briefly when drawing UI icons
   const mini = $('minimap');
   const mctx = mini.getContext('2d');
 
@@ -1852,20 +1852,26 @@
       const zone = C.TOWERS[buildKind].ownLandOnly ? new Uint8Array(0) : getLeapZone();
       const [x0, y0] = toWorld(0, 0);
       const [x1, y1] = toWorld(canvas.width, canvas.height);
-      ctx.fillStyle = 'rgba(255,213,79,0.10)';
+      // a soft dot on every tile a tower could leap to
+      ctx.fillStyle = 'rgba(255,213,79,0.35)';
+      ctx.beginPath();
       for (let y = Math.max(0, Math.floor(y0)); y <= Math.min(C.MAP_H - 1, Math.ceil(y1)); y++) {
         for (let x = Math.max(0, Math.floor(x0)); x <= Math.min(C.MAP_W - 1, Math.ceil(x1)); x++) {
           if (!zone[y * C.MAP_W + x]) continue;
-          const [sx, sy] = toScreen(x, y);
-          ctx.fillRect(sx + 1, sy + 1, s - 2, s - 2);
+          const [sx, sy] = toScreen(x + 0.5, y + 0.5);
+          ctx.moveTo(sx + s * 0.09, sy);
+          ctx.arc(sx, sy, s * 0.09, 0, Math.PI * 2);
         }
       }
+      ctx.fill();
       if (ok) {
         const { gained, stolen } = claimPreview(tx, ty);
         for (const [gx, gy, o] of gained) {
           const [sx, sy] = toScreen(gx, gy);
-          ctx.fillStyle = o ? 'rgba(255,123,114,0.35)' : 'rgba(126,231,135,0.28)';
-          ctx.fillRect(sx + 2, sy + 2, s - 4, s - 4);
+          ctx.fillStyle = o ? 'rgba(255,123,114,0.32)' : 'rgba(126,231,135,0.22)';
+          ctx.beginPath();
+          ctx.roundRect(sx + 2, sy + 2, s - 4, s - 4, s * 0.25);
+          ctx.fill();
         }
         const taken = [...stolen].map(([o, n]) => `${n} from ${(players.get(o) || { name: '?' }).name}`).join(', ');
         const text = `+${gained.length} land${taken ? ` (taking ${taken})` : ''}`;
@@ -1937,16 +1943,86 @@
   }
 
   // ------------------------------------------------------------------ HUD
+  // ---- UI icons: the in-game shapes, drawn once into little images for the HUD.
+  const iconCache = new Map();
+  function iconURL(kind, size = 44) {
+    const key = `${kind}:${size}`;
+    if (iconCache.has(key)) return iconCache.get(key);
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const saved = ctx;
+    ctx = c.getContext('2d');
+    try {
+      const unit = C.UNITS[kind];
+      const color = unit ? unit.color : C.TOWERS[kind].color;
+      if (unit) {
+        ctx.fillStyle = '#0e1219';
+        ctx.beginPath();
+        ctx.arc(size / 2, size / 2, size * 0.46, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = 0.55;
+        ctx.lineWidth = Math.max(1.5, size * 0.05);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      drawShape(kind, size / 2, size / 2 + (unit ? 0 : size * 0.04), size * (unit ? 0.36 : 0.44), color);
+    } finally {
+      ctx = saved;
+    }
+    const url = c.toDataURL();
+    iconCache.set(key, url);
+    return url;
+  }
+
+  // ---- tooltips: any element with data-tip (trusted HTML) shows it on hover.
+  const tipEl = $('tip');
+  let tipFor = null;
+  let tipTimer = null;
+  function placeTip() {
+    if (!tipFor || !document.body.contains(tipFor)) return hideTip();
+    tipEl.innerHTML = tipFor.dataset.tip;
+    const r = tipFor.getBoundingClientRect();
+    const w = tipEl.offsetWidth;
+    const h = tipEl.offsetHeight;
+    let top = r.top - h - 8;
+    if (top < 8) top = r.bottom + 8;
+    const left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2));
+    tipEl.style.left = `${left}px`;
+    tipEl.style.top = `${top}px`;
+    tipEl.classList.add('show');
+  }
+  function hideTip() {
+    tipFor = null;
+    clearTimeout(tipTimer);
+    tipEl.classList.remove('show');
+  }
+  document.addEventListener('mouseover', (e) => {
+    const el = e.target.closest ? e.target.closest('[data-tip]') : null;
+    if (el === tipFor) return;
+    hideTip();
+    if (!el) return;
+    tipFor = el;
+    tipTimer = setTimeout(placeTip, 250);
+  });
+  document.addEventListener('mousedown', () => {
+    if (tipFor) tipEl.classList.remove('show');
+  });
+  const refreshTip = () => {
+    if (tipFor && tipEl.classList.contains('show')) placeTip();
+  };
+
   function buildBar() {
     const tb = $('tower-button');
     const d = C.TOWERS.tower;
-    tb.title = `${d.name} - ${d.desc}. Can leap ${C.TOWER_LEAP} tiles past your border.`;
-    tb.innerHTML = `<span class="key">${d.key}</span><span class="icon" style="background:${d.color};border-radius:3px"></span>${d.name}<span class="cost">${d.cost}g</span>`;
+    const st = C.towerStats('tower', 1);
+    tb.dataset.tip = `<span class="t">Tower <kbd>${d.key}</kbd></span>Claims land around it and shoots enemy troops (${st.damage} dmg/s, range ${st.range}). Build on your land or up to ${C.TOWER_LEAP} tiles past your border. <span class="m">More land = more gold and a bigger army.</span>`;
+    tb.innerHTML = `<kbd>${d.key}</kbd><img src="${iconURL('tower')}" alt="">${d.name}<span class="cost">${d.cost}g</span>`;
     tb.onclick = () => toggleBuild('tower');
     const bb = $('barracks-button');
     const bd = C.TOWERS.barracks;
-    bb.title = `${bd.name} - ${bd.desc}. Max ${C.MAX_BARRACKS}; each one costs ${C.BARRACKS_COST_STEP}g more.`;
-    bb.innerHTML = `<span class="key">${bd.key}</span><span class="icon" style="background:${bd.color};border-radius:3px 3px 0 0"></span>${bd.name}<span class="cost"></span>`;
+    bb.dataset.tip = `<span class="t">Barracks <kbd>${bd.key}</kbd></span><b>+${C.BARRACKS_TROOPS} troops in every wave</b>, marching out from the barracks. Build on your own land. Up to ${C.MAX_BARRACKS}; each costs ${C.BARRACKS_COST_STEP}g more than the last. <span class="m">Enemies who take one get its troops.</span>`;
+    bb.innerHTML = `<kbd>${bd.key}</kbd><span class="count"></span><img src="${iconURL('barracks')}" alt="">${bd.name}<span class="cost"></span>`;
     bb.onclick = () => toggleBuild('barracks');
 
     const army = $('army');
@@ -1955,20 +2031,25 @@
       const card = document.createElement('div');
       card.className = 'troop';
       card.dataset.kind = kind;
-      card.title = `${u.name}: ${u.desc}`;
+      const st1 = C.towerStats(kind, 1);
+      const role = u.heal ? `heals ${u.heal}/s` : u.scout ? `sees ${u.sight} tiles, never fights` : `${st1.damage} dmg, ${u.melee ? 'melee' : `range ${st1.range}`}`;
+      card.dataset.tip = `<span class="t">${u.name} <kbd>${u.key}</kbd></span>${u.desc}.<br><span class="m">${st1.hp} HP · ${role} · speed ${u.speed}${C.slotsOf(kind) > 1 ? ` · <b>${C.slotsOf(kind)} wave slots</b>` : ''}</span>`;
       card.innerHTML = `
-        <div class="head"><span class="icon" style="background:${u.color}"></span><b>${u.name}</b><span class="lvl"></span></div>
+        <div class="head"><img src="${iconURL(kind)}" alt=""><b>${u.name}</b><span class="lvl"></span></div>
         <div class="count"></div>
         <div class="btns">
-          <button class="rem" title="One fewer ${u.name} per wave (its slots go back to soldiers)">−</button>
-          <button class="add" title="Put one more ${u.name} in every wave (free; uses ${C.slotsOf(kind)} wave slot${C.slotsOf(kind) > 1 ? 's' : ''}; barracks add slots)"></button>
-          <button class="up" title="Level up: applies to ${u.name}s from the next wave"></button>
+          <button class="rem" data-tip="One fewer ${u.name} per wave (the slot goes back to soldiers)">−</button>
+          <button class="add" data-tip="One more ${u.name} in every wave. Free: it uses ${C.slotsOf(kind)} wave slot${C.slotsOf(kind) > 1 ? 's' : ''} <kbd>${u.key}</kbd>">+</button>
+          <button class="up"></button>
         </div>`;
       card.querySelector('.add').onclick = () => sendMsg({ t: 'army', op: 'add', kind });
       card.querySelector('.rem').onclick = () => sendMsg({ t: 'army', op: 'remove', kind });
       card.querySelector('.up').onclick = () => sendMsg({ t: 'army', op: 'level', kind });
       army.appendChild(card);
     }
+    $('slots').dataset.tip = `<span class="t">Wave slots</span>${C.BASE_WAVE} from your core, +${C.BARRACKS_TROOPS} per barracks. Bright slots are troops you picked; faded ones are filled with soldiers automatically. A giant fills ${C.slotsOf('giant')}.`;
+    $('alive').dataset.tip = 'Troops alive now / the most you can have. The cap grows with your land (and always fits one full wave). A giant counts as 3.';
+    buildStats();
     $('defend-home').onclick = () => orderAt({ k: 'c', id: myId }, 1);
 
     // Send slider: what share of your troops a right-click order sends.
@@ -2017,9 +2098,9 @@
     $('share-count').innerHTML = sendShare >= 1
       ? `<b>All ${total}</b> + new waves`
       : `<b>${n}</b> of ${total} troop${total === 1 ? '' : 's'}`;
-    slider.title = sendShare >= 1
-      ? 'Right-click orders send every troop, and new waves follow too (Z/X/C/V = 25/50/75/100%, wheel to adjust)'
-      : `Right-click orders send ${pct}% of your troops; new waves keep their orders (Z/X/C/V = 25/50/75/100%, wheel to adjust)`;
+    slider.parentElement.dataset.tip = `<span class="t">Send</span>${sendShare >= 1
+      ? 'Right-click orders send <b>every troop</b>, and new waves follow too.'
+      : `Right-click orders send <b>${pct}%</b> of your troops (nearest first); new waves keep their orders.`}<br><span class="m">Drag, scroll, or press <kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd><kbd>V</kbd> for 25/50/75/100%.</span>`;
   }
 
   function toggleBuild(kind) {
@@ -2032,6 +2113,8 @@
     if (!myId || !tg) return;
     const ids = selUnits.size ? [...selUnits] : null;
     sendMsg({ t: 'order', ids, target: tg, share: ids ? 1 : share });
+    if (!isMineTarget(tg)) tipDone('attack');
+    if (tg.k === 'j') tipDone('jungle');
     const verb = isMineTarget(tg) ? 'defending' : tg.k === 'j' ? 'clearing' : tg.k === 'u' ? 'hunting' : 'attacking';
     const what = targetName(`${tg.k}:${tg.id}`);
     pendingOrder = (n) => {
@@ -2071,33 +2154,90 @@
     const myTroops = [...units.values()].filter((u) => u.owner === myId).reduce((n, u) => n + C.slotsOf(u.kind), 0);
     const perWave = me.waveSize;
     updateRound();
-    $('stats').innerHTML = `
-      <div class="gold">${gold}g</div>
-      <div>+${C.income(p.territory).toFixed(1)}g/s <span class="muted">· land ${p.territory}</span></div>
-      <div class="muted">Rank #${rank} of ${players.size} · kills ${p.kills}</div>
-      ${p.shield ? `<div style="color:#79c0ff">Spawn protection: ${p.shield}s</div>` : ''}
-      ${p.buff ? `<div class="buff">🔥 Empowered ${p.buff}s: +${Math.round(C.JUNGLE_BUFF_DAMAGE * 100)}% dmg, −${Math.round(C.JUNGLE_BUFF_ARMOR * 100)}% taken</div>` : ''}
-      <div>Core ${p.hp}/${p.maxHp}</div>
-      <div class="hpbar"><div style="width:${(100 * p.hp) / p.maxHp}%"></div></div>`;
+    updateStats(p, gold, rank, sorted.length);
 
-    $('wave-info').innerHTML = `<b>Next wave ${me.nextWave}s</b><br>${perWave} troops per wave <span class="muted">(${C.BASE_WAVE} + ${C.BARRACKS_TROOPS} per barracks)</span><br>Alive ${myTroops}/${C.unitCap(p.territory, perWave)}`;
+    // wave: size, countdown ring, slot strip
+    $('wave-size').textContent = `${perWave} troops every ${C.WAVE_INTERVAL}s`;
+    const frac = Math.max(0, Math.min(1, me.nextWave / C.WAVE_INTERVAL));
+    $('wave-timer').innerHTML = `<svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="11" fill="none" stroke="#273041" stroke-width="3"/>
+      <circle cx="13" cy="13" r="11" fill="none" stroke="#ffd54f" stroke-width="3" stroke-linecap="round" stroke-dasharray="${(69.1 * (1 - frac)).toFixed(1)} 69.1"/></svg><span>${me.nextWave}</span>`;
+    $('wave-timer').dataset.tip = `<span class="t">Next wave in ${me.nextWave}s</span>Every ${C.WAVE_INTERVAL} seconds your core (and each barracks) sends out a free wave.`;
+    const list = waveListOf(me);
+    const assignedOf = { ...me.army };
+    const slotKey = list.join(',') + JSON.stringify(me.army);
+    if ($('slots').dataset.key !== slotKey) {
+      $('slots').dataset.key = slotKey;
+      $('slots').innerHTML = list.map((k) => {
+        const auto = !(assignedOf[k] > 0);
+        if (!auto) assignedOf[k]--;
+        return `<i class="${auto ? 'auto' : ''}" style="flex-grow:${C.slotsOf(k)};background:${C.UNITS[k].color}"></i>`;
+      }).join('');
+    }
+    const cap = C.unitCap(p.territory, perWave);
+    $('alive').innerHTML = `Troops alive <b>${myTroops}</b> / ${cap}`;
 
     const o = me.order;
-    $('order-info').innerHTML = o.type === 'attack'
-      ? `<span class="atk">⚔ Waves attacking ${escapeHtml(targetName(o.target))}</span>`
-      : `<span class="def">🛡 Waves defending ${escapeHtml(targetName(o.target))}</span>`;
+    const orderHtml = o.type === 'attack'
+      ? `<span class="atk">⚔ Waves attacking ${escapeHtml(targetName(o.target))}</span><span class="hint">press H to bring them home</span>`
+      : `<span class="def">🛡 Waves defending ${escapeHtml(targetName(o.target))}</span><span class="hint">right-click an enemy to attack</span>`;
+    if ($('order-info').dataset.html !== orderHtml) {
+      $('order-info').dataset.html = orderHtml;
+      $('order-info').innerHTML = orderHtml;
+    }
 
     updateBoards();
     updateTowerAndArmy(gold, perWave);
     updateSelectionPanel(gold);
+    updateTips();
+    refreshTip();
+  }
+
+  // The player card (built once; numbers updated in place so tooltips keep working).
+  function buildStats() {
+    $('stats').innerHTML = `
+      <div class="who"><span class="dot"></span><span class="name"></span><span class="rank" data-tip="Your place on the land leaderboard"></span></div>
+      <div class="gold-row" data-tip="<span class='t'>Gold</span>Earned from land (a trickle) and mostly from fighting: troop kills, jungle camps, towers and cores. Spend it on towers, barracks and troop levels.">
+        <span class="coin"></span><span class="gold"></span><span class="income"></span></div>
+      <div class="chips">
+        <span class="chip land" data-tip="Tiles you own. More land = more income and room for more troops.">🗺 <b></b> land</span>
+        <span class="chip kills" data-tip="Enemy troops and monsters your side has killed">⚔ <b></b> kills</span>
+        <span class="chip shield hidden" data-tip="Spawn protection: your core and buildings can't be damaged yet">🛡 <b></b></span>
+        <span class="chip buff hidden" data-tip="Jungle buff from a golem camp: your troops deal +${Math.round(C.JUNGLE_BUFF_DAMAGE * 100)}% damage and take ${Math.round(C.JUNGLE_BUFF_ARMOR * 100)}% less">🔥 <b></b></span>
+      </div>
+      <div class="meter" data-tip="Your core. If it falls, you're out of the round and whoever broke it takes your gold and troops."><i></i><span></span></div>`;
+  }
+
+  function updateStats(p, gold, rank, n) {
+    const el = $('stats');
+    el.querySelector('.who .dot').style.background = colorOf(p.id, 55);
+    el.querySelector('.who .name').textContent = p.name;
+    el.querySelector('.who .rank').textContent = `#${rank} of ${n}`;
+    el.querySelector('.gold').textContent = gold.toLocaleString();
+    el.querySelector('.income').textContent = `+${C.income(p.territory).toFixed(1)}/s`;
+    el.querySelector('.chip.land b').textContent = p.territory;
+    el.querySelector('.chip.kills b').textContent = p.kills;
+    const sh = el.querySelector('.chip.shield');
+    sh.classList.toggle('hidden', !p.shield);
+    sh.querySelector('b').textContent = `Protected ${p.shield}s`;
+    const bf = el.querySelector('.chip.buff');
+    bf.classList.toggle('hidden', !p.buff);
+    bf.querySelector('b').textContent = `Empowered ${p.buff}s`;
+    const frac = p.hp / p.maxHp;
+    const bar = el.querySelector('.meter i');
+    bar.style.width = `${100 * frac}%`;
+    bar.className = frac > 0.5 ? '' : frac > 0.25 ? 'mid' : 'low';
+    el.querySelector('.meter span').textContent = `Core ${p.hp.toLocaleString()} / ${p.maxHp.toLocaleString()}`;
   }
 
   // Leaderboard and kill feed (shown to players and spectators).
   function updateBoards() {
     const sorted = [...players.values()].sort((a, b) => b.territory - a.territory);
     const focus = spectating ? specTarget : myId;
-    $('leaderboard').innerHTML = '<h3>Leaderboard · land</h3>' + sorted.slice(0, 10).map((q, i) =>
-      `<div class="row${q.id === focus ? ' me' : ''}"><span>${i + 1}.</span><span class="dot" style="background:${colorOf(q.id, 55)}"></span><span class="n">${escapeHtml(q.name)}${q.isBot ? ' 🤖' : ''}${q.buff ? ' 🔥' : ''}</span><span>${q.territory}</span></div>`).join('');
+    const top = Math.max(1, ...sorted.map((q) => q.territory));
+    $('leaderboard').innerHTML = `<h3><span>Players</span><span>land</span></h3>` + sorted.slice(0, 10).map((q, i) =>
+      `<div class="row${q.id === focus ? ' me' : ''}"><span class="bg" style="width:${(100 * q.territory) / top}%;background:${colorOf(q.id, 55)}"></span>`
+      + `<span class="pos">${i + 1}</span><span class="dot" style="background:${colorOf(q.id, 55)}"></span>`
+      + `<span class="n">${escapeHtml(q.name)}${q.isBot ? ' <span class="muted">· bot</span>' : ''}${q.buff ? ' 🔥' : ''}${q.shield ? ' 🛡' : ''}</span><span class="v">${q.territory}</span></div>`).join('');
     const now = performance.now();
     $('feed').innerHTML = feed.filter((f) => now - f.born < 9000).map((f) =>
       `<div style="opacity:${Math.min(1, (9000 - (now - f.born)) / 1500)}">${escapeHtml(f.text)}</div>`).join('');
@@ -2129,8 +2269,11 @@
     const maxed = owned >= C.MAX_BARRACKS;
     bb.classList.toggle('active', buildKind === 'barracks');
     bb.classList.toggle('poor', maxed || gold < bCost);
-    bb.querySelector('.cost').textContent = maxed ? `${owned}/${C.MAX_BARRACKS} max` : `${bCost}g · ${owned}/${C.MAX_BARRACKS}`;
-    // Wave slots: assigned ones per type; the rest are filled with guards and archers.
+    const costEl = bb.querySelector('.cost');
+    costEl.textContent = maxed ? 'max' : `${bCost}g`;
+    costEl.classList.toggle('max', maxed);
+    bb.querySelector('.count').textContent = `${owned}/${C.MAX_BARRACKS}`;
+    // Troop cards: how many per wave, how many were picked vs auto-filled, level and its price.
     const assigned = UNIT_KEYS.reduce((n, k) => n + me.army[k] * C.slotsOf(k), 0);
     const list = waveListOf(me);
     for (const card of document.querySelectorAll('#army .troop')) {
@@ -2140,17 +2283,23 @@
       const lvl = me.levels[kind];
       const upCost = lvl < C.MAX_LEVEL ? C.armyLevelCost(kind, lvl) : 0;
       card.classList.toggle('off', n === 0);
-      card.querySelector('.lvl').textContent = `Lv${lvl}`;
+      card.querySelector('.lvl').textContent = `Lv ${lvl}`;
       const slots = C.slotsOf(kind);
-      card.querySelector('.count').textContent = n
-        ? `×${n} per wave${n > set ? ` (${n - set} auto)` : ''}${slots > 1 ? ` · ${n * slots} slots` : ''}`
-        : slots > 1 ? `not in waves · ${slots} slots each` : 'not in waves';
-      const add = card.querySelector('.add');
-      add.textContent = '+';
-      add.disabled = assigned + slots > me.waveSize;
+      const auto = Math.max(0, n - set);
+      const html = n
+        ? `<b>×${n}</b> <span class="muted">${auto ? (auto === n ? 'auto-filled' : `· ${auto} auto`) : 'per wave'}</span>`
+        : slots > 1 ? `none · ${slots} slots each` : 'none in waves';
+      const countEl = card.querySelector('.count');
+      if (countEl.innerHTML !== html) countEl.innerHTML = html;
+      card.querySelector('.add').disabled = assigned + slots > me.waveSize;
       const up = card.querySelector('.up');
       up.textContent = lvl < C.MAX_LEVEL ? `▲ ${upCost}g` : 'MAX';
       up.disabled = lvl >= C.MAX_LEVEL || gold < upCost;
+      const s1 = C.towerStats(kind, lvl);
+      const s2 = lvl < C.MAX_LEVEL ? C.towerStats(kind, lvl + 1) : null;
+      up.dataset.tip = s2
+        ? `<span class="t">Level ${C.UNITS[kind].name}s up to ${lvl + 1}: ${upCost}g</span>HP ${s1.hp} → <b>${s2.hp}</b>${s1.damage ? ` · damage ${Math.round(s1.damage)} → <b>${Math.round(s2.damage)}</b>` : ''}${s1.heal ? ` · healing ${Math.round(s1.heal)} → <b>${Math.round(s2.heal)}</b>` : ''}<br><span class="m">Applies to troops from the next wave. <kbd>Shift</kbd>+<kbd>${C.UNITS[kind].key}</kbd></span>`
+        : 'Max level';
       card.querySelector('.rem').disabled = set === 0;
     }
   }
@@ -2164,19 +2313,22 @@
       if (panel.dataset.key !== key) {
         panel.dataset.key = key;
         const counts = {};
-        for (const u of list) counts[C.UNITS[u.kind].name] = (counts[C.UNITS[u.kind].name] || 0) + 1;
-        panel.innerHTML = `<h4>${list.length} troop${list.length === 1 ? '' : 's'} selected</h4>
-          <div>${Object.entries(counts).map(([n, c]) => `${c}× ${n}`).join(' · ')}</div>
-          <div id="sel-info" class="muted"></div>
-          <div class="muted">Right-click a target to command just these troops. Esc to deselect.</div>`;
+        for (const u of list) counts[u.kind] = (counts[u.kind] || 0) + 1;
+        const first = list[0] ? list[0].kind : 'soldier';
+        panel.innerHTML = `<h4><img src="${iconURL(first)}" alt="">${list.length} troop${list.length === 1 ? '' : 's'} selected</h4>
+          <div class="muted">${Object.entries(counts).map(([k, c]) => `${c}× ${C.UNITS[k].name}`).join(' · ')}</div>
+          <div id="sel-info" class="stats"></div>
+          <div class="muted">Right-click a target to command just these. <kbd>Esc</kbd> to deselect.</div>`;
       }
       if (list.length === 1) {
         const u = list[0];
         const st = C.towerStats(u.kind, u.level);
         const d = C.UNITS[u.kind];
-        $('sel-info').textContent = `Lv${u.level} · HP ${u.hp}/${u.maxHp} · ${d.heal ? `heals ${st.heal.toFixed(0)}/s` : d.scout ? `sees ${d.sight} tiles, never fights` : `${st.damage.toFixed(0)} dmg, range ${st.range}`} · ${u.attack ? `attacking ${targetName(u.attack)}` : `defending ${targetName(u.anchor ? `t:${u.anchor}` : `c:${u.owner}`)}`}`;
+        $('sel-info').innerHTML = `<div>Level <b>${u.level}</b></div><div>HP <b>${u.hp}/${u.maxHp}</b></div>
+          <div>${d.heal ? `Heals <b>${st.heal.toFixed(0)}/s</b>` : d.scout ? `Sight <b>${d.sight}</b>` : `Damage <b>${st.damage.toFixed(0)}</b>`}</div>
+          <div>${u.attack ? `⚔ ${escapeHtml(targetName(u.attack))}` : '🛡 defending'}</div>`;
       } else {
-        $('sel-info').textContent = '';
+        $('sel-info').innerHTML = '';
       }
       return;
     }
@@ -2190,44 +2342,94 @@
     const d = C.TOWERS[t.kind];
     const ruined = t.ruin || !t.owner;
     const key = `${t.id}:${t.level}:${t.owner}`;
+    const img = `<img src="${iconURL(t.kind)}" alt="">`;
     if (panel.dataset.key !== key) {
       panel.dataset.key = key;
       if (ruined) {
-        panel.innerHTML = `<h4>Ruined ${d.name} (lvl ${t.level})</h4>
-          <div class="muted">Once owned by ${escapeHtml(t.ruinOf || 'someone')}</div>
-          <div id="sel-info"></div>
-          <div class="btns"><button id="sel-capture">Rebuild (${C.RUIN_CAPTURE_COST}g)</button></div>`;
+        panel.innerHTML = `<h4>${img}Ruined ${d.name}</h4>
+          <div class="muted">Once owned by ${escapeHtml(t.ruinOf || 'someone')} · level ${t.level}</div>
+          <div id="sel-info" class="muted"></div>
+          <div class="btns"><button id="sel-capture" class="primary">Rebuild for ${C.RUIN_CAPTURE_COST}g</button></div>`;
         $('sel-capture').onclick = () => sendMsg({ t: 'capture', id: t.id });
       } else if (t.owner === myId) {
         const st = C.towerStats(t.kind, t.level);
         const maxed = t.level >= C.maxLevel(t.kind);
-        const what = t.kind === 'barracks'
-          ? `Adds ${C.BARRACKS_TROOPS} troops to every wave, marching out from here · claims ${st.claim}`
-          : `Damage ${st.damage.toFixed(0)}/s · range ${st.range} · claims ${st.claim}`;
-        panel.innerHTML = `<h4>${d.name}${t.kind === 'barracks' ? '' : ` · level ${t.level}`}</h4><div id="sel-info"></div>
-          <div>${what}</div>
+        const isB = t.kind === 'barracks';
+        const next = !maxed ? C.towerStats(t.kind, t.level + 1) : null;
+        panel.innerHTML = `<h4>${img}Your ${d.name}${isB ? '' : ` · Lv ${t.level}`}</h4>
+          <div id="sel-info" class="stats"></div>
+          <div class="stats">${isB
+            ? `<div style="grid-column:span 2">+<b>${C.BARRACKS_TROOPS}</b> troops every wave, from here</div>`
+            : `<div>Damage <b>${st.damage.toFixed(0)}/s</b></div><div>Range <b>${st.range}</b></div>`}<div>Claims <b>${st.claim}</b></div><div>Sight <b>${C.structSight(t.kind, t.level)}</b></div></div>
           <div class="btns">
-            <button id="sel-up">${maxed ? (t.kind === 'barracks' ? 'No upgrades' : 'Max level') : `Upgrade (${C.upgradeCost(t.kind, t.level)}g) [U]`}</button>
-            <button id="sel-sell">Sell +${C.sellValue(t.kind, t.level)}g</button>
+            ${isB ? '' : `<button id="sel-up" class="primary" data-tip="${next ? `Level ${t.level + 1}: damage ${Math.round(next.damage)}, range ${next.range}, claims ${next.claim}, ${next.hp} HP <kbd>U</kbd>` : 'Max level'}">${maxed ? 'Max level' : `▲ Upgrade ${C.upgradeCost(t.kind, t.level)}g`}</button>`}
+            <button id="sel-sell" data-tip="Sell for ${C.sellValue(t.kind, t.level)}g. Its land goes too. <kbd>Del</kbd>">Sell +${C.sellValue(t.kind, t.level)}g</button>
           </div>
-          <div class="btns"><button id="sel-defend">Defend here</button></div>`;
-        $('sel-up').onclick = () => sendMsg({ t: 'upgrade', id: t.id });
+          <div class="btns"><button id="sel-defend">🛡 Defend here</button></div>`;
+        if (!isB) $('sel-up').onclick = () => sendMsg({ t: 'upgrade', id: t.id });
         $('sel-sell').onclick = () => sendMsg({ t: 'sell', id: t.id });
         $('sel-defend').onclick = () => orderAt({ k: 't', id: t.id });
       } else {
-        panel.innerHTML = `<h4>${escapeHtml((players.get(t.owner) || { name: '?' }).name)}'s ${d.name} · level ${t.level}</h4>
-          <div id="sel-info"></div><div class="muted">Right-click it to send your troops.</div>`;
+        panel.innerHTML = `<h4>${img}${escapeHtml((players.get(t.owner) || { name: '?' }).name)}'s ${d.name}${t.kind === 'barracks' ? '' : ` · Lv ${t.level}`}</h4>
+          <div id="sel-info" class="stats"></div><div class="muted">Right-click it to attack. Destroy it and it's yours; or stand next to it with no defenders around to capture it.</div>`;
       }
     }
     if (ruined) {
       const inLand = terr[t.y * C.MAP_W + t.x] === myId;
-      $('sel-info').textContent = inLand ? 'Inside your land - rebuild it!' : 'Grow your land over it to rebuild it.';
+      $('sel-info').textContent = inLand ? 'Inside your land: rebuild it!' : 'Grow your land over it to rebuild it.';
       $('sel-capture').disabled = !inLand || gold < C.RUIN_CAPTURE_COST;
     } else {
       const garrison = [...units.values()].filter((u) => u.owner === t.owner && u.anchor === t.id && !u.attack).length;
-      $('sel-info').textContent = `HP ${t.hp}/${t.maxHp} · garrison ${garrison}`;
-      if (t.owner === myId) $('sel-up').disabled = t.level >= C.maxLevel(t.kind) || gold < C.upgradeCost(t.kind, t.level);
+      $('sel-info').innerHTML = `<div>HP <b>${t.hp}/${t.maxHp}</b></div><div>Guards <b>${garrison}</b></div>`;
+      if (t.owner === myId && t.kind !== 'barracks') $('sel-up').disabled = t.level >= C.maxLevel(t.kind) || gold < C.upgradeCost(t.kind, t.level);
     }
+  }
+
+  // ---- first-game tips: one at a time, each ticks off when you do the thing.
+  const TIPS = [
+    { id: 'attack', text: 'Your core sends troops every 20 seconds. <b>Right-click</b> an enemy tower, core or camp to send them. Press <kbd>H</kbd> to bring everyone home.' },
+    { id: 'tower', text: 'Press <kbd>B</kbd>, then click near your border to build a <b>tower</b>. Towers claim land (land = gold) and shoot enemies.' },
+    { id: 'barracks', text: 'Press <kbd>R</kbd> and click your land for a <b>barracks</b>: <b>+5 troops</b> in every wave, marching out from it.' },
+    { id: 'mix', text: 'Choose your wave with <kbd>1</kbd>–<kbd>4</kbd> or the <b>+</b> buttons. <b>Scouts</b> explore the fog, <b>giants</b> smash bases, <b>medics</b> heal.' },
+    { id: 'send', text: 'The <b>Send</b> slider sets how many troops an order takes. Send some, keep the rest home to defend.' },
+    { id: 'jungle', text: 'Right-click <b>jungle camps</b> for gold. <b>Golem camps</b> (🔥) also power up your troops for 60s.' },
+  ];
+  let tipsDone = new Set();
+  let tipsOff = false;
+  try {
+    tipsDone = new Set(JSON.parse(localStorage.getItem('ts-tips') || '[]'));
+    tipsOff = localStorage.getItem('ts-tips-off') === '1';
+  } catch { /* ignore */ }
+  function tipDone(id) {
+    if (tipsDone.has(id)) return;
+    tipsDone.add(id);
+    try { localStorage.setItem('ts-tips', JSON.stringify([...tipsDone])); } catch { /* ignore */ }
+  }
+  function updateTips() {
+    const el = $('tips');
+    // tick off what the player has already done
+    const mine = [...towers.values()].filter((t) => t.owner === myId);
+    if (mine.some((t) => t.kind === 'tower')) tipDone('tower');
+    if (mine.some((t) => t.kind === 'barracks')) tipDone('barracks');
+    if (UNIT_KEYS.some((k) => me.army[k] > 0)) tipDone('mix');
+    if (sendShare < 1) tipDone('send');
+    const tip = !tipsOff && TIPS.find((t) => !tipsDone.has(t.id));
+    if (!tip || buildKind) {
+      el.classList.add('hidden');
+      return;
+    }
+    el.classList.remove('hidden');
+    if (el.dataset.key === tip.id) return;
+    el.dataset.key = tip.id;
+    const n = TIPS.indexOf(tip) + 1;
+    el.innerHTML = `<div class="t-head">💡 Tip ${n} of ${TIPS.length}<button class="x" data-tip="Hide tips (bring them back from the ? window)">×</button></div>
+      <p>${tip.text}</p><div class="t-foot"><span>${'●'.repeat(n)}${'○'.repeat(TIPS.length - n)}</span><button class="next">Next ›</button></div>`;
+    el.querySelector('.next').onclick = () => tipDone(tip.id);
+    el.querySelector('.x').onclick = () => {
+      tipsOff = true;
+      try { localStorage.setItem('ts-tips-off', '1'); } catch { /* ignore */ }
+      el.classList.add('hidden');
+    };
   }
 
   let toastTimer = null;
@@ -2266,11 +2468,14 @@
       <div><b>${mins}:${secs}</b><span>survived</span></div>
       <div><b>${info.peakTerritory}</b><span>peak land</span></div>
       <div><b>${info.kills}</b><span>kills</span></div>
-      <div><b>${info.towersDestroyed || 0} / ${info.coresDestroyed}</b><span>towers / cores destroyed</span></div>`;
+      <div><b>${(info.towersDestroyed || 0) + info.coresDestroyed}</b><span>buildings taken</span></div>`;
     const e = info.earned || {};
     const total = Object.values(e).reduce((a, b) => a + b, 0);
-    $('death-gold').innerHTML = total ? `<b>${total}g earned</b>: ${[['troops', 'troop kills'], ['camps', 'jungle'], ['towers', 'towers'], ['cores', 'cores'], ['income', 'land']]
-      .filter(([k]) => e[k]).map(([k, name]) => `${name} ${Math.round((100 * e[k]) / total)}%`).join(' · ')}` : '';
+    const parts = [['troops', 'troop kills', '#ff7b72'], ['camps', 'jungle', '#d7a86e'], ['towers', 'towers', '#ffd54f'], ['cores', 'cores', '#d2a8ff'], ['income', 'land', '#3fb950']]
+      .filter(([k]) => e[k]);
+    $('death-gold').innerHTML = total ? `<b>${total.toLocaleString()}g earned</b>
+      <div class="gbar">${parts.map(([k, , c]) => `<i style="width:${(100 * e[k]) / total}%;background:${c}"></i>`).join('')}</div>
+      <div class="legend">${parts.map(([k, name, c]) => `<span><i style="background:${c}"></i>${name} ${Math.round((100 * e[k]) / total)}%</span>`).join('')}</div>` : '';
   }
 
   let lastKiller = 0;
@@ -2521,18 +2726,67 @@
   window.addEventListener('blur', () => keys.clear());
   window.addEventListener('resize', resize);
 
-  // Controls help: closable, remembered per browser, ? toggles it.
+  // Controls / how-to-play window: ? toggles it, Esc or × closes it.
   function setHelp(show) {
     $('help').classList.toggle('hidden', !show);
-    $('help-toggle').classList.toggle('hidden', show);
-    try { localStorage.setItem('ts-help', show ? '1' : '0'); } catch { /* ignore */ }
+    hideTip();
   }
   $('help').querySelector('.close').onclick = () => setHelp(false);
-  $('help-toggle').onclick = () => setHelp(true);
-  window.addEventListener('keydown', (e) => {
-    if (e.key === '?' && document.activeElement?.tagName !== 'INPUT') setHelp($('help').classList.contains('hidden'));
+  $('help').addEventListener('mousedown', (e) => {
+    if (e.target === $('help')) setHelp(false);
   });
-  try { if (localStorage.getItem('ts-help') === '0') setHelp(false); } catch { /* ignore */ }
+  $('help-toggle').onclick = () => setHelp(true);
+  $('tips-reset').onclick = () => {
+    tipsDone = new Set();
+    tipsOff = false;
+    try {
+      localStorage.removeItem('ts-tips');
+      localStorage.removeItem('ts-tips-off');
+    } catch { /* ignore */ }
+    $('tips').dataset.key = '';
+    setHelp(false);
+  };
+  window.addEventListener('keydown', (e) => {
+    if (document.activeElement?.tagName === 'INPUT') return;
+    if (e.key === '?') setHelp($('help').classList.contains('hidden'));
+    else if (e.key === 'Escape') setHelp(false);
+  });
+
+  // Menu logo: a core crystal.
+  (function drawLogo() {
+    const c = $('logo');
+    const g = c.getContext('2d');
+    const x = 36;
+    const y = 36;
+    const glow = g.createRadialGradient(x, y, 4, x, y, 36);
+    glow.addColorStop(0, 'rgba(255, 213, 79, 0.55)');
+    glow.addColorStop(1, 'rgba(255, 213, 79, 0)');
+    g.fillStyle = glow;
+    g.fillRect(0, 0, 72, 72);
+    g.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = Math.PI / 8 + (Math.PI / 4) * i;
+      g.lineTo(x + Math.cos(a) * 24, y + Math.sin(a) * 24);
+    }
+    g.closePath();
+    g.fillStyle = '#3a3220';
+    g.fill();
+    g.strokeStyle = '#ffd54f';
+    g.lineWidth = 3;
+    g.stroke();
+    const cg = g.createLinearGradient(x - 9, y - 18, x + 9, y + 12);
+    cg.addColorStop(0, '#fff6c8');
+    cg.addColorStop(0.5, '#ffd54f');
+    cg.addColorStop(1, '#a8801c');
+    g.fillStyle = cg;
+    g.beginPath();
+    g.moveTo(x, y - 18);
+    g.lineTo(x + 10, y - 2);
+    g.lineTo(x, y + 12);
+    g.lineTo(x - 10, y - 2);
+    g.closePath();
+    g.fill();
+  })();
 
   $('play').onclick = join;
   $('again').onclick = () => sendMsg({ t: 'join', name: lastName });

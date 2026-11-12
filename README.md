@@ -68,7 +68,14 @@ and get a turning gold rune ring at level 4 and a radiant aura at level 5.
 | `R` | Place a barracks (your own land only): +5 troops per wave |
 | `B` | Place a tower (shows where you can leap, and the land you'd gain or take) |
 | `U` / `Del` | Upgrade / sell the selected tower |
-| `WASD` / arrows / right-drag | Pan. Wheel zooms. `Space` jumps home. Click the minimap to jump. `?` toggles help. |
+| `WASD` / arrows / right-drag | Pan. Wheel zooms. `Space` jumps home. Click the minimap to jump. `?` opens the controls & how-to-play window. |
+
+### Interface
+
+- **Player card** (top left): gold and income, land, kills, spawn protection / jungle buff, and your core's health.
+- **Command bar** (bottom): *Build* (tower, barracks), *Your wave* (countdown ring, a slot strip showing how the next wave is made up, one card per troop type with +/− and level-up), and *Orders* (Send slider, Defend home, troops alive).
+- **Hover anything** for a tooltip explaining it, with costs and what an upgrade would change.
+- **First-game tips** walk you through attacking, towers, barracks, the wave mix, the Send slider and the jungle; each ticks off when you do it. `?` shows the controls and can bring the tips back.
 
 All numbers live in [`shared/config.js`](shared/config.js), shared by server and client, so tuning happens in one place.
 The most useful knobs: economy (`BASE_INCOME`, `INCOME_PER_TILE`, `TROOP_BOUNTY`, `TOWER_BOUNTY`, `CORE_KILL_BOUNTY`,
