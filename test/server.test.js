@@ -10,11 +10,13 @@ test('client can load the page, join and receive state', async () => {
   await new Promise((r) => srv.server.once('listening', r));
   const { port } = srv.server.address();
   try {
-    for (const path of ['/', '/client.js', '/style.css', '/shared/config.js', '/shared/pathfinding.js']) {
+    for (const path of ['/', '/js/main.js', '/js/state.js', '/style.css', '/shared/config.js', '/shared/pathfinding.js', '/shared/vision.js']) {
       const res = await fetch(`http://localhost:${port}${path}`);
       assert.strictEqual(res.status, 200, path);
     }
     assert.strictEqual((await fetch(`http://localhost:${port}/../package.json`)).status, 404);
+    assert.strictEqual((await fetch(`http://localhost:${port}/js/..%2Fserver%2Findex.js`)).status, 404);
+    assert.strictEqual((await fetch(`http://localhost:${port}/js/nope.js`)).status, 404);
 
     const ws = new WebSocket(`ws://localhost:${port}`);
     const msgs = [];

@@ -11,7 +11,6 @@ const ROOT = path.join(__dirname, '..');
 const STATIC = {
   '/': 'public/index.html',
   '/index.html': 'public/index.html',
-  '/client.js': 'public/client.js',
   '/style.css': 'public/style.css',
   '/shared/config.js': 'shared/config.js',
   '/shared/pathfinding.js': 'shared/pathfinding.js',
@@ -79,7 +78,9 @@ function createServer({ port = 3000, botTarget } = {}) {
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
-    const rel = STATIC[url.pathname];
+    // client modules: /js/<name>.js (letters, digits, dashes only - no path tricks)
+    const mod = /^\/js\/([a-z0-9-]+)\.js$/.exec(url.pathname);
+    const rel = STATIC[url.pathname] || (mod ? `public/js/${mod[1]}.js` : null);
     if (!rel) {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       res.end('Not found');
@@ -87,8 +88,8 @@ function createServer({ port = 3000, botTarget } = {}) {
     }
     fs.readFile(path.join(ROOT, rel), (err, data) => {
       if (err) {
-        res.writeHead(500);
-        res.end('Server error');
+        res.writeHead(err.code === 'ENOENT' ? 404 : 500, { 'Content-Type': 'text/plain' });
+        res.end(err.code === 'ENOENT' ? 'Not found' : 'Server error');
         return;
       }
       res.writeHead(200, { 'Content-Type': MIME[path.extname(rel)], 'Cache-Control': 'no-cache' });

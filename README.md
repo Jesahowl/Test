@@ -89,13 +89,23 @@ rounds (`ROUND_JOIN_WINDOW`, `ROUND_SUDDEN_DEATH`, `SUDDEN_DEATH_*`, `CORE_FORTI
 ## Architecture
 
 ```
-shared/config.js       game constants + stat/cost helpers (used by Node and the browser)
-shared/pathfinding.js  flow-field Dijkstra used by marching troops
-shared/vision.js       fog of war: who can see which tiles (server filtering + client drawing)
-server/game.js         authoritative simulation: territory, waves, troops, towers, jungle, bots
-server/index.js        HTTP static server + WebSocket, 20 Hz tick, state broadcast
-public/                canvas client (index.html, client.js, style.css)
-test/                  node:test suite (game rules, waves & orders, jungle, pathfinding, server smoke test)
+shared/config.js        game constants + stat/cost helpers (used by Node and the browser)
+shared/pathfinding.js   flow-field Dijkstra used by marching troops
+shared/vision.js        fog of war: who can see which tiles (server filtering + client drawing)
+server/index.js         HTTP static server + WebSocket, 20 Hz tick, 10 Hz state broadcast, rounds
+server/game.js          the Game class core: state, spatial grid, tick, snapshots
+server/game/*.js        Game methods by topic, mixed into Game.prototype:
+                          players (joining, rounds, pacing, gold) · territory · structures (build,
+                          upgrade, sell) · army (wave mix, orders, waves) · jungle · combat (damage,
+                          towers/cores shooting) · troops (movement, targeting, pathfinding) · fog · bots
+                          common.js holds the shared constants and helpers
+public/index.html, style.css
+public/js/*.js          the browser client as ES modules (entry: main.js):
+                          state (shared data; values several modules reassign live on S) · net
+                          (WebSocket, interpolation) · fog · targets · territory · render · structures ·
+                          troops · camps · cores · effects · overlay (build preview, markers, minimap) ·
+                          ui (icons, tooltips) · bar (command bar) · hud · tips · screens · input · main
+test/                   node:test suite (game rules, waves & orders, jungle, rounds, pathfinding, server)
 ```
 
 - **Authoritative server.** Clients only send intents (`build`, `upgrade`, `sell`, `capture`, `army`, `order` with optional `ids`, `share`, `kinds`, `follow`). The server validates everything.
