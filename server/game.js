@@ -199,27 +199,33 @@ class Game {
     return p;
   }
 
+  // Where a new core goes: random, but as far as possible from everyone else. We sample many
+  // random open spots, score each by its distance to the nearest core (or other player's building),
+  // and pick at random among the best few, so bases spread evenly over the map without the
+  // same layout every game.
   findSpawn() {
-    const margin = 8;
-    let best = null;
-    let bestScore = -1;
-    for (let i = 0; i < 400; i++) {
+    const margin = C.SPAWN_MARGIN;
+    const others = [];
+    for (const p of this.players.values()) if (p.alive) others.push({ x: p.core.x, y: p.core.y, w: 0 });
+    for (const t of this.towers.values()) if (t.owner) others.push({ x: t.x, y: t.y, w: C.CORE_CLAIM });
+    const cands = [];
+    for (let i = 0; i < C.SPAWN_CANDIDATES; i++) {
       const x = margin + Math.floor(this.rand() * (this.w - margin * 2));
       const y = margin + Math.floor(this.rand() * (this.h - margin * 2));
       const k = this.idx(x, y);
       if (this.grid[k] !== 0 || this.terr[k] !== 0) continue;
-      if (this.camps.some((c) => dist(x, y, c.x, c.y) < 7)) continue;
-      let minD = Infinity;
-      for (const p of this.players.values()) {
-        if (p.alive) minD = Math.min(minD, dist(x, y, p.core.x, p.core.y));
-      }
-      if (minD >= C.SPAWN_MIN_DIST) return { x, y };
-      if (minD > bestScore) {
-        bestScore = minD;
-        best = { x, y };
-      }
+      if (this.camps.some((c) => c.alive && dist(x, y, c.x, c.y) < 7)) continue;
+      let score = Infinity; // distance to the nearest base (buildings count as a bit closer than they are)
+      for (const o of others) score = Math.min(score, dist(x, y, o.x, o.y) - o.w);
+      cands.push({ x, y, score });
     }
-    return bestScore >= C.CORE_CLAIM * 2 ? best : null;
+    if (!cands.length) return null;
+    cands.sort((a, b) => b.score - a.score);
+    if (cands[0].score < C.CORE_CLAIM * 2) return null; // no room left
+    // Any of the top few that are nearly as good as the best.
+    const good = cands.filter((c, i) => i < 3 && c.score >= cands[0].score * 0.95);
+    const pick = good[Math.floor(this.rand() * good.length)];
+    return { x: pick.x, y: pick.y };
   }
 
   // Whether new players may join right now.

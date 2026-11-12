@@ -22,7 +22,8 @@
     CORE_RATE: 1,
     CORE_CLAIM: 6, // territory radius around a core
     CORE_KILL_BOUNTY: 250, // plus all of the victim's gold
-    SPAWN_MIN_DIST: 24,
+    SPAWN_MARGIN: 10, // cores spawn at least this far from the map edge
+    SPAWN_CANDIDATES: 300, // random spots tried per spawn; the one furthest from other bases wins
     SPAWN_SHIELD: 90, // seconds after spawning during which your core and towers can't be damaged
 
     MAX_LEVEL: 5, // troops and towers

@@ -190,3 +190,20 @@ test('troops and towers level up to 5, with steep late levels', () => {
   assert.strictEqual(C.towerStats('tower', 5).claim, C.towerStats('tower', 3).claim);
   assert.strictEqual(C.sellValue('tower', 2), Math.floor((C.TOWERS.tower.cost + C.upgradeCost('tower', 1)) * C.SELL_REFUND));
 });
+
+test('bases spawn at random spots, spread far apart', () => {
+  const firsts = new Set();
+  for (let seed = 1; seed <= 6; seed++) {
+    const g = new Game({ botTarget: 0, rand: seeded(seed * 7) });
+    const ps = [];
+    for (let i = 0; i < 6; i++) ps.push(g.addPlayer(`P${i}`));
+    firsts.add(`${ps[0].core.x},${ps[0].core.y}`);
+    for (const a of ps) {
+      assert.ok(a.core.x >= C.SPAWN_MARGIN && a.core.y >= C.SPAWN_MARGIN && a.core.x < g.w - C.SPAWN_MARGIN && a.core.y < g.h - C.SPAWN_MARGIN);
+      for (const b of ps) {
+        if (a !== b) assert.ok(Math.hypot(a.core.x - b.core.x, a.core.y - b.core.y) >= 30, 'six bases at least 30 tiles apart');
+      }
+    }
+  }
+  assert.ok(firsts.size >= 5, 'a different layout each game');
+});
