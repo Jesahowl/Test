@@ -1713,14 +1713,13 @@
       const age = (now - f.born) / 1000;
       if (age < 0) continue; // not due yet (effects are delayed to match troop interpolation)
       switch (f.k) {
-        case 'bolt':
         case 'tshot': {
-          const life = f.k === 'tshot' ? 0.16 : 0.12;
+          const life = 0.16;
           if (age > life) break;
           const [x1, y1] = toScreen(f.x1, f.y1);
           const [x2, y2] = toScreen(f.x2, f.y2);
-          ctx.strokeStyle = f.k === 'tshot' ? colorOf(f.o, 70, 1 - age / life) : `rgba(160, 230, 255, ${1 - age / life})`;
-          ctx.lineWidth = f.k === 'tshot' ? 3.5 : 2;
+          ctx.strokeStyle = colorOf(f.o, 70, 1 - age / life);
+          ctx.lineWidth = 3.5;
           ctx.beginPath();
           ctx.moveTo(x1, y1);
           ctx.lineTo(x2, y2);
@@ -1750,36 +1749,6 @@
           ctx.font = `bold ${Math.round(s * 0.5)}px system-ui, sans-serif`;
           ctx.textAlign = 'center';
           ctx.fillText('+', x, y - s * (0.5 + p * 0.6));
-          break;
-        }
-        case 'frost': {
-          if (age > 0.35) break;
-          const [x, y] = toScreen(f.x, f.y);
-          ctx.strokeStyle = `rgba(179, 229, 252, ${0.8 * (1 - age / 0.35)})`;
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.arc(x, y, f.r * s * (0.3 + age / 0.5), 0, Math.PI * 2);
-          ctx.stroke();
-          break;
-        }
-        case 'shell': {
-          if (age > 0.45) break;
-          const [x1, y1] = toScreen(f.x1, f.y1);
-          const [x2, y2] = toScreen(f.x2, f.y2);
-          if (age < 0.15) {
-            const p = age / 0.15;
-            const arc = Math.sin(p * Math.PI) * s * 1.5;
-            ctx.fillStyle = '#ffccbc';
-            ctx.beginPath();
-            ctx.arc(x1 + (x2 - x1) * p, y1 + (y2 - y1) * p - arc, s * 0.12, 0, Math.PI * 2);
-            ctx.fill();
-          } else {
-            const p = (age - 0.15) / 0.3;
-            ctx.fillStyle = `rgba(255, 138, 101, ${0.6 * (1 - p)})`;
-            ctx.beginPath();
-            ctx.arc(x2, y2, f.r * s * (0.4 + p * 0.6), 0, Math.PI * 2);
-            ctx.fill();
-          }
           break;
         }
         case 'boom': {

@@ -816,7 +816,7 @@ class Game {
     const y = Math.max(0.5, Math.min(this.h - 0.5, oy + 0.5 + Math.sin(a) * (from ? 1 : 1.3)));
     const u = {
       isUnit: true, id, kind, owner: p.id, x, y, level, hp: stats.hp, maxHp: stats.hp, cd: 0,
-      anchor: 0, attack: null, path: [], dest: null, repathAt: 0, idleUntil: this.time + 0.5, slowT: 0, slowF: 1,
+      anchor: 0, attack: null, path: [], dest: null, repathAt: 0, idleUntil: this.time + 0.5,
     };
     this.applyOrder(u, p.order);
     // Troops from a barracks guard it when the standing order is "defend the core".
@@ -897,7 +897,7 @@ class Game {
         const hy = camp.y + 0.5 + (lead ? 0 : Math.sin(i * 2.1 + (kind === leader ? 0 : 1)) * 1);
         this.creeps.set(id, {
           isCreep: true, id, kind, owner: 0, camp: camp.id, hx, hy, x: hx, y: hy,
-          hp: def.hp, maxHp: def.hp, angry: 0, atkCd: 0, slowT: 0, slowF: 1, dead: false,
+          hp: def.hp, maxHp: def.hp, angry: 0, atkCd: 0, dead: false,
         });
       }
     }
@@ -909,8 +909,7 @@ class Game {
       if (c.dead) continue;
       const def = C.CREEPS[c.kind];
       c.atkCd -= dt;
-      if (c.slowT > 0) c.slowT -= dt;
-      const speed = def.speed * (c.slowT > 0 ? c.slowF : 1);
+      const speed = def.speed;
       const homeD = dist(c.x, c.y, c.hx, c.hy);
       if (c.angry && homeD > C.CAMP_LEASH + 1.5) c.angry = 0; // dragged too far: reset
 
@@ -1130,15 +1129,20 @@ class Game {
   }
 
   // Flow field toward a goal tile. Rebuilt lazily, at most every PATH_RECOMPUTE_INTERVAL.
+  // Flow field to a goal tile. At most PATH_FIELDS_PER_TICK new fields are built per tick (each
+  // costs ~2 ms); past that, a stale field is reused, or null is returned and the troop walks
+  // straight for now (the map has no walls, so that's always safe).
   getFieldTo(goal) {
     let f = this.fields.get(goal);
     const stale = !f || (f.version !== this.structVersion && this.time - f.at >= C.PATH_RECOMPUTE_INTERVAL);
-    if (stale) {
+    if (stale && this.fieldBudget > 0) {
+      this.fieldBudget--;
       f = { dist: Path.computeField(this.w, this.h, this.getExtra(), goal), goal, version: this.structVersion, at: this.time };
       this.fields.set(goal, f);
     } else {
       this.getExtra();
     }
+    if (!f) return null;
     f.used = this.time;
     return f;
   }
@@ -1217,21 +1221,17 @@ class Game {
     return this.resolveAttack(u);
   }
 
-  // Best thing for troop u to hit within `reach`. Enemy troops first (Guards that taunt come
-  // before anything else), then monsters fighting us (or the camp we were sent to), then -
-  // if `structures` - enemy towers and cores.
+  // Best thing for troop u to hit within `reach`: the nearest enemy troop, else monsters fighting
+  // us (or the camp we were sent to), else - if `structures` - enemy towers and cores.
   pickTarget(u, def, reach, structures) {
-    const minR = def.minRange || 0;
     let best = null;
     let bestScore = Infinity;
     for (const v of this.nearUnits(u.x, u.y, reach)) {
       if (v.owner === u.owner) continue;
       const d = dist(u.x, u.y, v.x, v.y);
-      if (d > reach || d < minR) continue;
-      const vd = C.UNITS[v.kind];
-      const score = vd.taunt && d <= vd.taunt ? d - 100 : d;
-      if (score < bestScore) {
-        bestScore = score;
+      if (d > reach) continue;
+      if (d < bestScore) {
+        bestScore = d;
         best = v;
       }
     }
@@ -1240,7 +1240,7 @@ class Game {
       if (c.dead) continue;
       if (c.angry !== u.owner && !(u.attack && u.attack.k === 'j' && u.attack.id === c.camp)) continue;
       const d = dist(u.x, u.y, c.x, c.y);
-      if (d > reach || d < minR) continue;
+      if (d > reach) continue;
       if (d < bestScore) {
         bestScore = d;
         best = c;
@@ -1250,7 +1250,7 @@ class Game {
     for (const t of this.towers.values()) {
       if (!t.owner || t.owner === u.owner || this.isShielded(this.players.get(t.owner))) continue;
       const d = dist(u.x, u.y, t.x + 0.5, t.y + 0.5);
-      if (d > reach || d < minR) continue;
+      if (d > reach) continue;
       if (d < bestScore) {
         bestScore = d;
         best = t;
@@ -1259,7 +1259,7 @@ class Game {
     for (const p of this.players.values()) {
       if (!p.alive || p.id === u.owner || this.isShielded(p)) continue;
       const d = dist(u.x, u.y, p.core.x + 0.5, p.core.y + 0.5);
-      if (d > reach || d < minR) continue;
+      if (d > reach) continue;
       if (d < bestScore) {
         bestScore = d;
         best = p;
@@ -1280,35 +1280,10 @@ class Game {
     const isStruct = target.isTower || target.isPlayer;
     const home = this.onHomeLand(u) ? 1 + C.HOME_DAMAGE_BONUS : 1;
     const buff = this.buffed(u.owner) ? 1 + C.JUNGLE_BUFF_DAMAGE : 1;
-    const base = s.damage * buff; // splash and frost pulses
+    const base = s.damage * buff; // what everything around a giant's target takes
     const siege = isStruct ? (def.siege || 1) * (this.suddenDeath() ? C.SUDDEN_DEATH_SIEGE : this.siegeRamp()) : 1;
     const dmg = base * home * siege;
-    if (def.aoe) {
-      // Frost pulse: every enemy troop and monster around us.
-      for (const v of this.nearUnits(u.x, u.y, s.range)) {
-        if (v.owner === u.owner || dist(u.x, u.y, v.x, v.y) > s.range) continue;
-        v.slowT = def.slowTime;
-        v.slowF = def.slow;
-        this.damageUnit(v, base, u.owner);
-      }
-      for (const c of this.creeps.values()) {
-        if (c.dead || dist(u.x, u.y, c.x, c.y) > s.range) continue;
-        c.slowT = def.slowTime;
-        c.slowF = def.slow;
-        this.damageCreep(c, base, u.owner);
-      }
-      if (isStruct) this.hurt(target, dmg, u.owner);
-      this.fx.push({ k: 'frost', x: round2(u.x), y: round2(u.y), r: s.range });
-    } else if (def.splash) {
-      this.hurt(target, dmg, u.owner);
-      for (const v of this.nearUnits(tx, ty, def.splash)) {
-        if (v !== target && v.owner !== u.owner && dist(tx, ty, v.x, v.y) <= def.splash) this.damageUnit(v, base, u.owner);
-      }
-      for (const c of this.creeps.values()) {
-        if (c !== target && !c.dead && dist(tx, ty, c.x, c.y) <= def.splash) this.damageCreep(c, base, u.owner);
-      }
-      this.fx.push({ k: 'shell', x1: round2(u.x), y1: round2(u.y), x2: round2(tx), y2: round2(ty), r: def.splash });
-    } else if (def.cleave) {
+    if (def.cleave) {
       // Giant: smash the target and everything around it, knocking troops back.
       const hit = [target];
       for (const v of this.nearUnits(tx, ty, def.cleave)) {
@@ -1328,12 +1303,9 @@ class Game {
         }
       }
       this.fx.push({ k: 'smash', x: round2(tx), y: round2(ty), r: def.cleave });
-    } else if (def.melee) {
-      this.hurt(target, dmg, u.owner);
-      this.fx.push({ k: 'slash', x: round2(tx), y: round2(ty) });
     } else {
       this.hurt(target, dmg, u.owner);
-      this.fx.push({ k: 'bolt', x1: round2(u.x), y1: round2(u.y), x2: round2(tx), y2: round2(ty), o: u.owner });
+      this.fx.push({ k: 'slash', x: round2(tx), y: round2(ty) });
     }
   }
 
@@ -1438,8 +1410,14 @@ class Game {
 
   // March across the map along the flow field toward goal tile (centre gx, gy).
   marchTo(u, goal, gx, gy, stop, speed, dt) {
-    if (dist(u.x, u.y, gx, gy) <= stop) return true;
-    const f = this.getFieldTo(goal);
+    const d = dist(u.x, u.y, gx, gy);
+    if (d <= stop) return true;
+    // Close by, or no field available this tick: just walk straight there.
+    const f = d < C.PATH_DIRECT_RANGE ? null : this.getFieldTo(goal);
+    if (!f) {
+      this.stepToward(u, gx, gy, stop, speed, dt);
+      return false;
+    }
     const tx = Math.max(0, Math.min(this.w - 1, Math.floor(u.x)));
     const ty = Math.max(0, Math.min(this.h - 1, Math.floor(u.y)));
     const next = Path.nextStep(f.dist, this.w, this.h, this.extra, this.idx(tx, ty), goal);
@@ -1459,8 +1437,7 @@ class Game {
       const def = C.UNITS[u.kind];
       const s = C.towerStats(u.kind, u.level);
       u.cd -= dt;
-      if (u.slowT > 0) u.slowT -= dt;
-      const speed = def.speed * (u.slowT > 0 ? u.slowF : 1);
+      const speed = def.speed;
       // Home turf: troops on their own land slowly heal.
       if (this.onHomeLand(u) && u.hp < u.maxHp) u.hp = Math.min(u.maxHp, u.hp + u.maxHp * C.HOME_REGEN * dt);
 
@@ -1485,12 +1462,10 @@ class Game {
         // Hunting: focus on the chosen troop, ignoring everything else until it's down.
         const v = tgt.unit;
         const d = dist(u.x, u.y, v.x, v.y);
-        if (d <= s.range && d >= (def.minRange || 0)) {
+        if (d <= s.range) {
           u.path = [];
           u.dest = null;
           if (u.cd <= 0) this.unitFire(u, v, s, def);
-        } else if (d < (def.minRange || 0)) {
-          this.stepToward(u, u.x * 2 - v.x, u.y * 2 - v.y, 0, speed, dt); // too close for a mortar: back off
         } else if (d < 10) {
           this.stepToward(u, v.x, v.y, s.range * 0.8, speed, dt);
         } else {
@@ -1613,8 +1588,8 @@ class Game {
       u.scoutTo = this.pickScoutSpot(u, p);
       u.scoutUntil = this.time + C.SCOUT_LEG_TIME;
     }
-    const { x, y } = u.scoutTo;
-    this.marchTo(u, this.idx(Math.floor(x), Math.floor(y)), x, y, 1, speed, dt);
+    // Straight there: scouts pick spots clear of enemy guns, so they don't need pathfinding.
+    this.stepToward(u, u.scoutTo.x, u.scoutTo.y, 1, speed, dt);
   }
 
   pickScoutSpot(u, p) {
@@ -1965,6 +1940,7 @@ class Game {
   update(dt) {
     if (this.phase === 'over') return; // the round is decided: the map freezes under the scoreboard
     this.time += dt;
+    this.fieldBudget = C.PATH_FIELDS_PER_TICK;
 
     if (this.suddenDeath()) {
       for (const p of this.players.values()) {
