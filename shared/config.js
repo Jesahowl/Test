@@ -43,6 +43,7 @@
     LAND_PER_UNIT: 10,
     MIN_UNITS: 10,
     MAX_UNITS: 30,
+    HUNT_ROLL_RANGE: 6, // when a hunted troop dies, hunters go after its squadmates within this range
     TROOP_AGGRO: 2, // troops on the march engage enemies within (attack range + this)
     TROOP_BOUNTY: 14, // gold for killing an enemy troop
     TROOP_BOUNTY_PER_LEVEL: 6, // extra gold per level of the troop killed

@@ -276,3 +276,31 @@ test('the spatial grid finds the same nearby troops as a full scan', () => {
   }
   assert.ok(checks > 100);
 });
+
+test('hunting: troops chase a chosen enemy troop, focus it, then move on to its squadmates', () => {
+  const { g, a, b } = duel(15);
+  const hunters = troops(g, a, 'archer', 4, 50, 50);
+  const prey = troops(g, b, 'guard', 3, 58, 50); // the target and two squadmates
+  const decoy = troops(g, b, 'archer', 1, 51, 52)[0]; // right next to the hunters
+  const [target] = prey;
+  for (const v of [...prey, decoy]) v.attack = { k: 'c', id: b.id }; // hold them still: no orders to follow
+  const before = a.order;
+  assert.strictEqual(g.order(a.id, null, { k: 'u', id: target.id }, 1), null);
+  assert.strictEqual(g.lastOrderCount, 4);
+  assert.deepStrictEqual(a.order, before, 'new waves keep their standing order');
+  assert.ok(hunters.every((u) => u.attack.k === 'u' && u.attack.id === target.id));
+  // pin the prey in place and let the hunters work
+  const pin = () => { for (const v of [...prey, decoy]) if (g.units.has(v.id)) { v.x = v === decoy ? 51 : 58 + prey.indexOf(v) * 0.4; v.y = v === decoy ? 52 : 50; v.path = []; } };
+  run(g, 30, () => { pin(); return !g.units.has(target.id); });
+  assert.ok(!g.units.has(target.id), 'target killed');
+  assert.ok(g.units.has(decoy.id) && decoy.hp > decoy.maxHp * 0.5, 'decoy ignored while hunting');
+  g.update(0.05);
+  const living = hunters.filter((u) => g.units.has(u.id));
+  assert.ok(living.length && living.every((u) => u.attack && u.attack.k === 'u' && prey.some((p) => p.id === u.attack.id)), 'rolled on to a squadmate');
+  run(g, 60, () => { pin(); return prey.every((v) => !g.units.has(v.id)); });
+  g.update(0.05);
+  assert.ok(hunters.filter((u) => g.units.has(u.id)).every((u) => !u.attack || u.attack.k !== 'u'), 'hunt over once the squad is gone');
+  const mine = troops(g, a, 'guard', 1, 40, 40)[0];
+  assert.match(g.order(a.id, null, { k: 'u', id: mine.id }), /own troop/);
+  assert.match(g.order(a.id, null, { k: 'u', id: 99999 }), /gone/);
+});

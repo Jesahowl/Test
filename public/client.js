@@ -303,6 +303,10 @@
       const p = players.get(id);
       return p ? { x: p.x + 0.5, y: p.y + 0.5 } : null;
     }
+    if (k === 'u') {
+      const u = units.get(id);
+      return u ? { x: u.rx, y: u.ry, unit: true } : null;
+    }
     const camp = camps[id];
     return camp ? { x: camp.x + 0.5, y: camp.y + 0.5 } : null;
   }
@@ -313,6 +317,10 @@
     const id = Number(raw);
     if (k === 'c') return id === myId ? 'your core' : `${(players.get(id) || { name: '?' }).name}'s core`;
     if (k === 'j') return 'a jungle camp';
+    if (k === 'u') {
+      const u = units.get(id);
+      return u ? `${(players.get(u.owner) || { name: '?' }).name}'s ${C.UNITS[u.kind].name}` : 'a troop';
+    }
     const t = towers.get(id);
     if (!t) return 'a tower';
     return t.owner === myId ? 'your tower' : `${(players.get(t.owner) || { name: '?' }).name}'s tower`;
@@ -320,6 +328,18 @@
 
   // What's under world point (wx, wy) that troops can be ordered at?
   function orderTargetAt(wx, wy) {
+    // Enemy troops first (they're small, so only right under the cursor).
+    let best = null;
+    let bestD = 0.55;
+    for (const u of units.values()) {
+      if (u.owner === myId) continue;
+      const d = Math.hypot(u.rx - wx, u.ry - wy);
+      if (d < bestD) {
+        bestD = d;
+        best = u;
+      }
+    }
+    if (best) return { k: 'u', id: best.id };
     for (const p of players.values()) {
       if (Math.hypot(p.x + 0.5 - wx, p.y + 0.5 - wy) < 1.1) return { k: 'c', id: p.id };
     }
@@ -1495,8 +1515,8 @@
   }
 
   // An animated marker on an order target: red crosshair for attack, green shield ring for defend.
-  function drawTargetMarker(pos, attack, strong) {
-    const s = scale();
+  function drawTargetMarker(pos, attack, strong, size = 1) {
+    const s = scale() * size;
     const [x, y] = toScreen(pos.x, pos.y);
     const t = performance.now() / 300;
     ctx.save();
@@ -1555,7 +1575,17 @@
       ctx.stroke();
       if (!shown.has(key)) {
         shown.add(key);
-        drawTargetMarker(pos, !!u.attack, true);
+        drawTargetMarker(pos, !!u.attack, true, pos.unit ? 0.6 : 1);
+      }
+    }
+
+    // Enemy troops my troops are hunting get a crosshair (selected or not).
+    if (myId) {
+      for (const u of units.values()) {
+        if (u.owner !== myId || !u.attack || !u.attack.startsWith('u:') || shown.has(u.attack)) continue;
+        shown.add(u.attack);
+        const pos = targetPos(u.attack);
+        if (pos) drawTargetMarker(pos, true, false, 0.6);
       }
     }
 
@@ -1567,9 +1597,10 @@
         const mine = isMineTarget(tg);
         const n = shareCount(sendShare);
         const who = selUnits.size ? `${selUnits.size} selected` : sendShare < 1 ? `${n} troop${n === 1 ? '' : 's'} (${Math.round(sendShare * 100)}%)` : 'all troops';
-        const verb = mine ? 'defend' : tg.k === 'j' ? 'clear' : 'attack';
+        const verb = mine ? 'defend' : tg.k === 'j' ? 'clear' : tg.k === 'u' ? `hunt ${targetName(`u:${tg.id}`)}` : 'attack';
         const [hx, hy] = toScreen(pos.x, pos.y);
-        label(`Right-click: ${who} ${verb}`, hx, hy - s * 2.4, 12, mine ? '#7ee787' : '#ffa198');
+        if (tg.k === 'u') drawTargetMarker(pos, true, false, 0.6);
+        label(`Right-click: ${who} ${verb}`, hx, hy - s * (tg.k === 'u' ? 1.2 : 2.4), 12, mine ? '#7ee787' : '#ffa198');
       }
     }
 
@@ -1755,12 +1786,13 @@
     if (!myId || !tg) return;
     const ids = selUnits.size ? [...selUnits] : null;
     sendMsg({ t: 'order', ids, target: tg, share: ids ? 1 : share });
-    const verb = isMineTarget(tg) ? 'defending' : tg.k === 'j' ? 'clearing' : 'attacking';
+    const verb = isMineTarget(tg) ? 'defending' : tg.k === 'j' ? 'clearing' : tg.k === 'u' ? 'hunting' : 'attacking';
     const what = targetName(`${tg.k}:${tg.id}`);
     pendingOrder = (n) => {
       const troopsTxt = `${n} troop${n === 1 ? '' : 's'}`;
       if (ids) return `${troopsTxt}: ${verb} ${what}`;
       if (share < 1) return `${troopsTxt} (${Math.round(share * 100)}%): ${verb} ${what}`;
+      if (tg.k === 'u') return `All ${troopsTxt}: ${verb} ${what}`; // new waves keep their orders
       return `All ${troopsTxt} and new waves: ${verb} ${what}`;
     };
   }

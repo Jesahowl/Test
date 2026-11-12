@@ -588,6 +588,13 @@ class Game {
       if (!camp || !camp.alive) return 'That camp is empty';
       return { type: 'attack', target: { k: 'j', id } };
     }
+    if (k === 'u') {
+      // Hunt an enemy troop: chase it down, then go after its nearby squadmates.
+      const v = this.units.get(id);
+      if (!v) return 'That troop is gone';
+      if (v.owner === pid) return 'That is your own troop';
+      return { type: 'attack', target: { k: 'u', id, owner: v.owner, lx: v.x, ly: v.y } };
+    }
     return 'Invalid target';
   }
 
@@ -608,7 +615,7 @@ class Game {
       chosen = ids.slice(0, C.MAX_UNITS).map((id) => this.units.get(id)).filter((u) => u && u.owner === pid);
       if (!chosen.length) return 'No troops selected';
     } else if (!(share < 1)) {
-      p.order = ord;
+      if (ord.target?.k !== 'u') p.order = ord; // new waves don't chase a single troop
       chosen = [...this.units.values()].filter((u) => u.owner === pid);
     } else {
       chosen = this.pickShare(pid, ord, Math.max(0.01, share));
@@ -661,6 +668,7 @@ class Game {
       const p = this.players.get(id);
       return { x: p.core.x + 0.5, y: p.core.y + 0.5 };
     }
+    if (k === 'u') return { x: ord.target.lx, y: ord.target.ly };
     const camp = this.camps[id];
     return { x: camp.x + 0.5, y: camp.y + 0.5 };
   }
@@ -684,6 +692,7 @@ class Game {
     const t = ord.target;
     if (t.k === 'c') return !!this.players.get(t.id)?.alive;
     if (t.k === 'j') return !!this.camps[t.id]?.alive;
+    if (t.k === 'u') return this.units.has(t.id);
     return !!this.players.get(t.owner)?.alive; // tower orders roll on to that player's next structure
   }
 
@@ -1057,6 +1066,28 @@ class Game {
   // structure when a tower falls or changes hands. Returns null when the order is finished.
   resolveAttack(u) {
     const a = u.attack;
+    if (a.k === 'u') {
+      let v = this.units.get(a.id);
+      if (!v || v.owner === u.owner) {
+        // The hunted troop is down (or changed sides): go after the nearest of its squadmates
+        // around where it fell; if there are none, the hunt is over.
+        v = null;
+        let best = C.HUNT_ROLL_RANGE;
+        for (const o of this.nearUnits(a.lx, a.ly, C.HUNT_ROLL_RANGE)) {
+          if (o.owner !== a.owner || o.owner === u.owner) continue;
+          const d = dist(a.lx, a.ly, o.x, o.y);
+          if (d <= best) {
+            best = d;
+            v = o;
+          }
+        }
+        if (!v) return null;
+        a.id = v.id;
+      }
+      a.lx = v.x;
+      a.ly = v.y;
+      return { x: v.x, y: v.y, goal: this.idx(Math.floor(v.x), Math.floor(v.y)), struct: false, unit: v };
+    }
     if (a.k === 'j') {
       const camp = this.camps[a.id];
       if (!camp || !camp.alive) return null;
@@ -1322,6 +1353,24 @@ class Game {
           u.path = [];
           u.dest = null;
         }
+      }
+
+      if (tgt && tgt.unit && !def.heal) {
+        // Hunting: focus on the chosen troop, ignoring everything else until it's down.
+        const v = tgt.unit;
+        const d = dist(u.x, u.y, v.x, v.y);
+        if (d <= s.range && d >= (def.minRange || 0)) {
+          u.path = [];
+          u.dest = null;
+          if (u.cd <= 0) this.unitFire(u, v, s, def);
+        } else if (d < (def.minRange || 0)) {
+          this.stepToward(u, u.x * 2 - v.x, u.y * 2 - v.y, 0, speed, dt); // too close for a mortar: back off
+        } else if (d < 10) {
+          this.stepToward(u, v.x, v.y, s.range * 0.8, speed, dt);
+        } else {
+          this.marchTo(u, tgt.goal, v.x, v.y, s.range * 0.8, speed, dt);
+        }
+        continue;
       }
 
       if (def.heal) {

@@ -24,6 +24,7 @@ AI bots fill the server up to 6 players, so it's playable alone too.
 |---|---|
 | **Waves** | Your core sends out a free wave every 20s, built from your **army plan**. Start: 2 Guards + 2 Archers. Spend gold to add troops to every wave, or level a troop type up. |
 | **Orders** | **Right-click** an enemy tower or core to attack it, or one of your own towers or your core to defend there. Who goes depends on the **Send slider** in the bar (5% steps; it shows how many of your troops that is, e.g. "12 of 20"): at 100% every troop goes and every future wave follows; below 100% only that share of your current troops goes (nearest to the target first, keeping your army's mix of types) and new waves keep their orders, so you can split your forces. Select specific troops first (click, Shift-click, `Q` = all) to command exactly those. `H` brings everyone home. |
+| **Hunting** | **Right-click an enemy troop** to send your troops after it. They chase it down and focus it, ignoring other enemies on the way. When it dies they go after its squadmates within 6 tiles, then head home once the squad is gone. A red crosshair marks troops you're hunting. Hunts use the Send slider (or your selection) like other orders, but never redirect new waves. |
 | **The push** | Troops march across the map (pathfinding around structures), fight whatever they meet, then hit the target. When a tower falls, the push rolls on to that player's next tower, then their core. |
 | **Towers** | Claim land and shoot enemy troops. Your core shoots too. Place them on your land, or **leapfrog** up to 3 tiles past your border onto unclaimed ground. |
 | **Taking towers** | **Destroy** one and it becomes yours (+250g): it keeps its level, comes back at 70% health, and its land switches to you. Or **capture** it without a fight: troops standing near an enemy tower with none of its owner's troops around flip it in ~10s (faster with more troops, up to 3x; each tower level adds 50% to the time). Either way the attackers stay on as its garrison and your waves push on to that player's next tower. Towers only become ruins when their owner's core falls. |
@@ -56,7 +57,7 @@ A wave holds at most 12 troops.
 
 | Key | Action |
 |---|---|
-| Right-click target | Order troops: attack an enemy tower/core/camp, or defend your own tower/core |
+| Right-click target | Order troops: attack an enemy tower/core/camp, hunt an enemy troop, or defend your own tower/core |
 | Send slider | How many of your troops each order sends: drag it, or scroll the wheel over it. `Z` `X` `C` `V` jump to 25% / 50% / 75% / 100% |
 | Left-click | Select a troop (`Shift` adds), or a tower / ruin |
 | `Q` / `Esc` | Select all troops / clear selection |
