@@ -31,11 +31,12 @@ test('client can load the page, join and receive state', async () => {
       throw new Error('timeout');
     };
     const welcome = await waitFor((m) => m.t === 'welcome');
-    const state = await waitFor((m) => m.t === 's' && m.me && m.terr);
+    const first = await waitFor((m) => m.t === 's');
+    assert.strictEqual(first.full, 1, 'the first state a client gets is complete');
+    assert.ok(first.camps.c.length > 0);
+    const state = await waitFor((m) => m.t === 's' && m.me && m.players.c.some((p) => p[1] === 'Tester'));
     assert.strictEqual(state.me.id, welcome.id);
-    assert.strictEqual(state.full, 1, 'first state is complete');
-    assert.ok(state.players.c.some((p) => p[1] === 'Tester'));
-    assert.ok(state.camps.c.length > 0);
+    assert.ok(msgs.some((m) => m.t === 's' && m.terr));
     // Later states only carry what changed: the camps never change, so they are left out.
     const later = await waitFor((m) => m.t === 's' && m.tk > state.tk && !m.full);
     assert.strictEqual(later.camps.c.length, 0);

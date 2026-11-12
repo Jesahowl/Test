@@ -1029,8 +1029,19 @@
       ctx.arc(x, y, s * 1.7, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
-      if (!c.alive) label(`${c.respawn}s`, x, y + 4, Math.max(10, Math.round(s * 0.4)), '#8b949e');
-      else if (C.BUFF_CAMPS.includes(c.type) && s >= 12) {
+      if (!c.alive) {
+        // An upcoming camp: a ring that fills in as it gets ready to appear here.
+        const total = C.BUFF_CAMPS.includes(c.type) ? C.BUFF_CAMP_RESPAWN : C.CAMP_RESPAWN;
+        const p = Math.max(0, Math.min(1, 1 - c.respawn / total));
+        ctx.strokeStyle = 'rgba(214, 180, 120, 0.55)';
+        ctx.lineWidth = Math.max(2, s * 0.08);
+        ctx.beginPath();
+        ctx.arc(x, y, s * 1.7, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p);
+        ctx.stroke();
+        const big = C.BUFF_CAMPS.includes(c.type);
+        label(big ? 'golem camp' : 'camp', x, y - 2, Math.max(9, Math.round(s * 0.32)), big ? '#ffab40' : '#c9a66b');
+        label(`in ${c.respawn}s`, x, y + Math.max(10, s * 0.45), Math.max(10, Math.round(s * 0.4)), '#8b949e');
+      } else if (C.BUFF_CAMPS.includes(c.type) && s >= 12) {
         // golem camps grant the jungle buff
         drawFlame(x + s * 1.2, y - s * 1.2, s * 0.32);
         label('buff', x + s * 1.2, y - s * 0.55, Math.max(9, Math.round(s * 0.3)), '#ffab40');
@@ -1216,7 +1227,7 @@
 
   function drawEffects(now) {
     const s = scale();
-    effects = effects.filter((f) => now - f.born < (f.k === 'coreDown' || f.k === 'buff' ? 1200 : f.k === 'wave' ? 700 : f.k === 'gold' ? 1100 : 450));
+    effects = effects.filter((f) => now - f.born < (f.k === 'coreDown' || f.k === 'buff' ? 1200 : f.k === 'campSpawn' || f.k === 'campLeave' ? 1000 : f.k === 'wave' ? 700 : f.k === 'gold' ? 1100 : 450));
     for (const f of effects) {
       const age = (now - f.born) / 1000;
       if (age < 0) continue; // not due yet (effects are delayed to match troop interpolation)
@@ -1317,6 +1328,34 @@
           ctx.globalAlpha = Math.max(0, 1 - p * p);
           label(`+${f.n}g`, x, y - s * (0.6 + p * 1.4), Math.round((big ? 18 : 13) + (big ? 4 : 0) * (1 - p)), '#ffd54f');
           ctx.globalAlpha = 1;
+          break;
+        }
+        case 'campSpawn': {
+          // monsters burst out of the ground: rising dust ring
+          const [x, y] = toScreen(f.x, f.y);
+          const p = age / 1;
+          ctx.strokeStyle = `rgba(214, 180, 120, ${0.9 * (1 - p)})`;
+          ctx.lineWidth = 4 * (1 - p) + 1;
+          ctx.beginPath();
+          ctx.arc(x, y, s * (0.5 + p * 2.4), 0, Math.PI * 2);
+          ctx.stroke();
+          for (let i = 0; i < 8; i++) {
+            const a = (Math.PI * 2 * i) / 8;
+            ctx.fillStyle = `rgba(160, 130, 90, ${0.7 * (1 - p)})`;
+            ctx.beginPath();
+            ctx.arc(x + Math.cos(a) * s * (0.4 + p * 1.8), y + Math.sin(a) * s * (0.4 + p * 1.8) - p * s * 0.6, s * 0.14 * (1 - p * 0.5), 0, Math.PI * 2);
+            ctx.fill();
+          }
+          break;
+        }
+        case 'campLeave': {
+          // a camp wandered off: dust settles where it was
+          const [x, y] = toScreen(f.x, f.y);
+          const p = age / 1;
+          ctx.fillStyle = `rgba(160, 130, 90, ${0.35 * (1 - p)})`;
+          ctx.beginPath();
+          ctx.arc(x, y, s * (1 + p * 1.2), 0, Math.PI * 2);
+          ctx.fill();
           break;
         }
         case 'buff': {
@@ -1588,8 +1627,14 @@
     mctx.clearRect(0, 0, W, H);
     mctx.drawImage(terrCanvas, 0, 0, W, H);
     for (const c of camps) {
-      if (!c.alive) continue;
-      mctx.fillStyle = '#c9a66b';
+      if (!c.alive) {
+        // where a camp will appear next
+        mctx.strokeStyle = 'rgba(201, 166, 107, 0.6)';
+        mctx.lineWidth = 1;
+        mctx.strokeRect((c.x + 0.5) * sx - 1.5, (c.y + 0.5) * sy - 1.5, 3, 3);
+        continue;
+      }
+      mctx.fillStyle = C.BUFF_CAMPS.includes(c.type) ? '#ffab40' : '#c9a66b';
       mctx.fillRect((c.x + 0.5) * sx - 1.5, (c.y + 0.5) * sy - 1.5, 3, 3);
     }
     for (const u of units.values()) {

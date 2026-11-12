@@ -26,6 +26,7 @@ const CAMP_KEYS = Object.keys(C.CAMP_TYPES);
 // 8-way neighbour offsets for unit path planning.
 const DIRS8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
+const BOT_JUNGLE_RANGE = 34; // how far from their core bots go to farm camps
 const UGRID = 4; // spatial grid cell size (tiles)
 const UGRID_SLACK = 1; // how far a troop can have moved since the grid was built
 
@@ -744,13 +745,46 @@ class Game {
         if (i >= C.CAMP_COUNT) break;
         const x = Math.round(margin + (c + 0.5) * cw + (this.rand() - 0.5) * cw * 0.5);
         const y = Math.round(margin + (r + 0.5) * ch + (this.rand() - 0.5) * ch * 0.5);
-        this.camps.push({ id: i, x, y, type: (r + c) % 3 === 0 ? 'big' : 'small', alive: false, respawnAt: 0 });
+        this.camps.push({ id: i, x, y, type: (r + c) % 3 === 0 ? 'big' : 'small', alive: false, respawnAt: 0, lastActive: 0 });
         i++;
       }
     }
   }
 
+  // Is (x, y) a good place for a camp? `strict` also requires unclaimed land and a real move.
+  campSpotOk(camp, x, y, strict) {
+    const k = this.idx(x, y);
+    if (this.grid[k] !== 0) return false;
+    if (strict && this.terr[k] !== 0) return false;
+    if (strict && dist(x, y, camp.x, camp.y) < C.CAMP_MOVE_MIN) return false;
+    for (const o of this.camps) if (o !== camp && dist(x, y, o.x, o.y) < C.CAMP_SPACING) return false;
+    for (const p of this.players.values()) if (p.alive && dist(x, y, p.core.x, p.core.y) < C.CAMP_CORE_DIST) return false;
+    for (const t of this.towers.values()) if (dist(x, y, t.x, t.y) < 3) return false;
+    return true;
+  }
+
+  // A new random spot for a camp: unclaimed land if possible, else anywhere clear.
+  pickCampSpot(camp) {
+    const margin = 6;
+    for (let i = 0; i < 400; i++) {
+      const x = margin + Math.floor(this.rand() * (this.w - margin * 2));
+      const y = margin + Math.floor(this.rand() * (this.h - margin * 2));
+      if (this.campSpotOk(camp, x, y, i < 250)) return { x, y };
+    }
+    return { x: camp.x, y: camp.y };
+  }
+
+  // Move a camp to a new spot (its monsters must already be gone).
+  moveCamp(camp) {
+    const spot = this.pickCampSpot(camp);
+    camp.x = spot.x;
+    camp.y = spot.y;
+  }
+
   spawnCamp(camp) {
+    if (!this.campSpotOk(camp, camp.x, camp.y, false)) this.moveCamp(camp); // someone built here meanwhile
+    camp.lastActive = this.time;
+    this.fx.push({ k: 'campSpawn', x: camp.x + 0.5, y: camp.y + 0.5 });
     for (const [kind, n] of Object.entries(C.CAMP_TYPES[camp.type])) {
       const def = C.CREEPS[kind];
       for (let i = 0; i < n; i++) {
@@ -820,8 +854,22 @@ class Game {
     }
     for (const camp of this.camps) {
       if (camp.alive && !living.has(camp.id)) {
+        // Cleared: it will come back somewhere new (players can see where and when).
         camp.alive = false;
         camp.respawnAt = this.time + (C.BUFF_CAMPS.includes(camp.type) ? C.BUFF_CAMP_RESPAWN : C.CAMP_RESPAWN);
+        this.moveCamp(camp);
+      } else if (camp.alive && this.time - camp.lastActive > C.CAMP_RELOCATE) {
+        // Left alone too long: if it's calm and unhurt, the camp wanders off to a new spot.
+        const members = [...this.creeps.values()].filter((m) => m.camp === camp.id);
+        if (members.every((m) => !m.angry && m.hp >= m.maxHp)) {
+          for (const m of members) this.creeps.delete(m.id);
+          const from = { x: camp.x + 0.5, y: camp.y + 0.5 };
+          this.moveCamp(camp);
+          this.fx.push({ k: 'campLeave', x: from.x, y: from.y });
+          this.spawnCamp(camp);
+        } else {
+          camp.lastActive = this.time;
+        }
       } else if (!camp.alive && this.time >= camp.respawnAt) {
         this.spawnCamp(camp);
       }
@@ -853,6 +901,8 @@ class Game {
   damageCreep(c, amount, byPid) {
     if (c.dead) return;
     c.hp -= amount;
+    const camp = this.camps[c.camp];
+    if (camp) camp.lastActive = this.time;
     if (byPid) {
       // The whole camp joins in.
       for (const m of this.creeps.values()) if (m.camp === c.camp && !m.angry) m.angry = byPid;
@@ -864,7 +914,6 @@ class Game {
       if (p && p.alive) {
         this.award(p, C.CREEPS[c.kind].bounty, 'camps', c.x, c.y);
         p.kills++;
-        const camp = this.camps[c.camp];
         const cleared = ![...this.creeps.values()].some((m) => m.camp === c.camp && !m.dead);
         if (cleared && camp && C.BUFF_CAMPS.includes(camp.type)) {
           p.buffUntil = this.time + C.JUNGLE_BUFF_TIME;
@@ -1591,7 +1640,7 @@ class Game {
     if (!jungling && home.length >= 4) {
       const campScore = (c) => dist(c.x, c.y, p.core.x, p.core.y) - (C.BUFF_CAMPS.includes(c.type) ? 8 : 0);
       const camp = this.camps
-        .filter((c) => c.alive && dist(c.x, c.y, p.core.x, p.core.y) < 26)
+        .filter((c) => c.alive && dist(c.x, c.y, p.core.x, p.core.y) < BOT_JUNGLE_RANGE)
         // Golem camps are worth a detour: they give the jungle buff.
         .sort((c1, c2) => campScore(c1) - campScore(c2))[0];
       if (camp) {

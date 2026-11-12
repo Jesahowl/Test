@@ -127,6 +127,12 @@
     CAMP_COUNT: 12,
     CAMP_RESPAWN: 45,
     BUFF_CAMP_RESPAWN: 90, // golem camps (which give the jungle buff) take longer to come back
+    // Camps wander: a cleared camp comes back somewhere new, and a camp nobody has touched for
+    // CAMP_RELOCATE seconds packs up and moves. New spots prefer unclaimed land.
+    CAMP_RELOCATE: 150,
+    CAMP_SPACING: 12, // minimum distance between camps
+    CAMP_CORE_DIST: 9, // minimum distance from any core
+    CAMP_MOVE_MIN: 15, // a camp moves at least this far when it can
     CAMP_LEASH: 4.5, // monsters chase attackers this far from their camp, then reset
     CAMP_TYPES: {
       small: { raptor: 3 },

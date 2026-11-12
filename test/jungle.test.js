@@ -53,3 +53,39 @@ test('monsters give up when dragged away from their camp', () => {
   assert.strictEqual(creep.angry, 0);
   assert.ok(Math.hypot(creep.x - creep.hx, creep.y - creep.hy) < 0.5, 'back home');
 });
+
+test('a cleared camp comes back somewhere new, away from cores and other camps', () => {
+  const { g, a, b } = duel(5);
+  run(g, 1);
+  for (let round = 0; round < 3; round++) {
+    const camp = g.camps.find((c) => c.alive && c.type === 'small');
+    const before = { x: camp.x, y: camp.y };
+    for (const m of [...g.creeps.values()].filter((m) => m.camp === camp.id)) g.damageCreep(m, 1e6, a.id);
+    g.update(0.05);
+    assert.ok(!camp.alive);
+    assert.ok(Math.hypot(camp.x - before.x, camp.y - before.y) >= C.CAMP_MOVE_MIN, 'moved far enough');
+    for (const p of [a, b]) assert.ok(Math.hypot(camp.x - p.core.x, camp.y - p.core.y) >= C.CAMP_CORE_DIST);
+    for (const o of g.camps) if (o !== camp) assert.ok(Math.hypot(camp.x - o.x, camp.y - o.y) >= C.CAMP_SPACING);
+    // the spot is known while it's empty, and monsters appear there when it respawns
+    run(g, C.CAMP_RESPAWN + 0.5);
+    assert.ok(camp.alive);
+    const members = [...g.creeps.values()].filter((m) => m.camp === camp.id);
+    assert.ok(members.length > 0 && members.every((m) => Math.hypot(m.hx - camp.x - 0.5, m.hy - camp.y - 0.5) < 1.5));
+  }
+});
+
+test('a camp left alone wanders to a new spot; a camp in a fight stays put', () => {
+  const { g, a } = duel(6);
+  run(g, 1);
+  const idle = g.camps[0];
+  const busy = g.camps[1];
+  const idleAt = { x: idle.x, y: idle.y };
+  const busyAt = { x: busy.x, y: busy.y };
+  for (let t = 0; t < C.CAMP_RELOCATE + 2; t += 5) {
+    const m = [...g.creeps.values()].find((c) => c.camp === busy.id);
+    if (m) g.damageCreep(m, 1, 0); // poked now and then (no attacker, so no aggro)
+    run(g, 5);
+  }
+  assert.ok(idle.alive && (idle.x !== idleAt.x || idle.y !== idleAt.y), 'idle camp moved');
+  assert.deepStrictEqual({ x: busy.x, y: busy.y }, busyAt, 'active camp stayed');
+});
