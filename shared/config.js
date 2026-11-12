@@ -139,7 +139,7 @@
     // ---- Jungle: neutral camps that sit still, fight back when attacked, and pay out when cleared.
     CAMP_COUNT: 12,
     CAMP_RESPAWN: 45,
-    BUFF_CAMP_RESPAWN: 90, // golem camps (which give the jungle buff) take longer to come back
+    BUFF_CAMP_RESPAWN: 90, // golem ruins (which give the jungle buff) take longer to come back
     // Camps wander: a cleared camp comes back somewhere new, and a camp nobody has touched for
     // CAMP_RELOCATE seconds packs up and moves. New spots prefer unclaimed land.
     CAMP_RELOCATE: 150,
@@ -147,17 +147,27 @@
     CAMP_CORE_DIST: 9, // minimum distance from any core
     CAMP_MOVE_MIN: 15, // a camp moves at least this far when it can
     CAMP_LEASH: 4.5, // monsters chase attackers this far from their camp, then reset
+    CAMP_MIX: { small: 5, medium: 4, large: 3 }, // how many of each camp size
+    CAMP_INFO: {
+      small: { name: 'Wolf Den' },
+      medium: { name: 'Bear Cave' },
+      large: { name: 'Golem Ruins' },
+    },
     CAMP_TYPES: {
-      small: { raptor: 3 },
-      big: { golem: 1, raptor: 2 },
+      // the first monster listed is the leader, standing in the middle
+      small: { wolf: 3 },
+      medium: { bear: 1, wolf: 2 },
+      large: { golem: 1, rockling: 2 },
     },
     CREEPS: {
-      raptor: { name: 'Raptor', hp: 170, speed: 2.6, damage: 10, bounty: 55, size: 0.3 },
-      golem: { name: 'Golem', hp: 900, speed: 1.6, damage: 30, bounty: 250, size: 0.5 },
+      wolf: { name: 'Wolf', hp: 150, speed: 2.9, damage: 9, bounty: 40, size: 0.32 },
+      bear: { name: 'Bear', hp: 650, speed: 2.0, damage: 22, bounty: 110, size: 0.48 },
+      golem: { name: 'Stone Golem', hp: 1100, speed: 1.5, damage: 32, bounty: 250, size: 0.58 },
+      rockling: { name: 'Rockling', hp: 240, speed: 2.3, damage: 13, bounty: 60, size: 0.3 },
     },
     CREEP_REACH: 0.9,
     // Jungle buff: whoever clears one of these camp types empowers all their troops for a while.
-    BUFF_CAMPS: ['big'],
+    BUFF_CAMPS: ['large'],
     JUNGLE_BUFF_TIME: 60,
     JUNGLE_BUFF_DAMAGE: 0.3, // +30% damage
     JUNGLE_BUFF_ARMOR: 0.25, // -25% damage taken
@@ -196,6 +206,11 @@
   // Wave slots a troop type takes.
   CONFIG.slotsOf = function (kind) {
     return CONFIG.UNITS[kind].slots || 1;
+  };
+
+  // Total gold for clearing a camp of this type.
+  CONFIG.campBounty = function (type) {
+    return Object.entries(CONFIG.CAMP_TYPES[type]).reduce((n, [k, c]) => n + CONFIG.CREEPS[k].bounty * c, 0);
   };
 
   // Highest level a structure kind can reach.

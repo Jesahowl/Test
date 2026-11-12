@@ -74,7 +74,7 @@ test('sudden death: cores crumble (never below 1 HP) and home turf stops helping
 
 test('clearing a golem camp buffs your troops: more damage dealt, less taken', () => {
   const { g, a, b } = duel(4);
-  const camp = g.camps.find((c) => c.type === 'big');
+  const camp = g.camps.find((c) => c.type === 'large');
   run(g, 1);
   const monsters = [...g.creeps.values()].filter((m) => m.camp === camp.id);
   assert.ok(monsters.length > 1);

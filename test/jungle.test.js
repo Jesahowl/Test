@@ -20,7 +20,7 @@ test('camps spawn across the map and stay passive until attacked', () => {
 
 test('clearing a camp pays out, angry monsters fight back, and the camp respawns', () => {
   const { g, a } = duel(2);
-  const camp = g.camps.find((c) => c.type === 'big');
+  const camp = g.camps.find((c) => c.type === 'large');
   const squad = troops(g, a, 'soldier', 6, camp.x - 2, camp.y + 0.5, 3);
   const gold = a.gold;
   assert.strictEqual(g.order(a.id, squad.map((u) => u.id), { k: 'j', id: camp.id }), null);
@@ -30,7 +30,7 @@ test('clearing a camp pays out, angry monsters fight back, and the camp respawns
     return !camp.alive;
   }), 'camp should be cleared');
   assert.ok(hurt, 'monsters fight back');
-  const bounty = Object.entries(C.CAMP_TYPES.big).reduce((n, [k, c]) => n + C.CREEPS[k].bounty * c, 0);
+  const bounty = Object.entries(C.CAMP_TYPES.large).reduce((n, [k, c]) => n + C.CREEPS[k].bounty * c, 0);
   assert.ok(a.gold - gold >= bounty - 1, `bounty paid (${a.gold - gold} >= ${bounty})`);
   g.update(0.05);
   assert.ok(squad.filter((u) => g.units.has(u.id)).every((u) => !u.attack), 'order finished');

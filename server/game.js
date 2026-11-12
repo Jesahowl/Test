@@ -818,6 +818,13 @@ class Game {
   // ---------------------------------------------------------------- jungle
 
   setupCamps() {
+    // A shuffled mix of camp sizes (CAMP_MIX), dealt out over a jittered grid.
+    const types = [];
+    for (const [type, n] of Object.entries(C.CAMP_MIX)) for (let k = 0; k < n; k++) types.push(type);
+    for (let k = types.length - 1; k > 0; k--) {
+      const j = Math.floor(this.rand() * (k + 1));
+      [types[k], types[j]] = [types[j], types[k]];
+    }
     const cols = 4;
     const rows = 3;
     const margin = 10;
@@ -829,7 +836,7 @@ class Game {
         if (i >= C.CAMP_COUNT) break;
         const x = Math.round(margin + (c + 0.5) * cw + (this.rand() - 0.5) * cw * 0.5);
         const y = Math.round(margin + (r + 0.5) * ch + (this.rand() - 0.5) * ch * 0.5);
-        this.camps.push({ id: i, x, y, type: (r + c) % 3 === 0 ? 'big' : 'small', alive: false, respawnAt: 0, lastActive: 0 });
+        this.camps.push({ id: i, x, y, type: types[i % types.length], alive: false, respawnAt: 0, lastActive: 0 });
         i++;
       }
     }
@@ -866,6 +873,7 @@ class Game {
   }
 
   spawnCamp(camp) {
+    const leader = Object.keys(C.CAMP_TYPES[camp.type])[0];
     if (!this.campSpotOk(camp, camp.x, camp.y, false)) this.moveCamp(camp); // someone built here meanwhile
     camp.lastActive = this.time;
     this.fx.push({ k: 'campSpawn', x: camp.x + 0.5, y: camp.y + 0.5 });
@@ -873,8 +881,9 @@ class Game {
       const def = C.CREEPS[kind];
       for (let i = 0; i < n; i++) {
         const id = this.nextId++;
-        const hx = camp.x + 0.5 + (kind === 'golem' ? 0 : Math.cos(i * 2.1) * 0.9);
-        const hy = camp.y + 0.5 + (kind === 'golem' ? 0 : Math.sin(i * 2.1) * 0.9);
+        const lead = kind === leader && i === 0 && camp.type !== 'small';
+        const hx = camp.x + 0.5 + (lead ? 0 : Math.cos(i * 2.1 + (kind === leader ? 0 : 1)) * 1);
+        const hy = camp.y + 0.5 + (lead ? 0 : Math.sin(i * 2.1 + (kind === leader ? 0 : 1)) * 1);
         this.creeps.set(id, {
           isCreep: true, id, kind, owner: 0, camp: camp.id, hx, hy, x: hx, y: hy,
           hp: def.hp, maxHp: def.hp, angry: 0, atkCd: 0, slowT: 0, slowF: 1, dead: false,
@@ -1002,7 +1011,7 @@ class Game {
         if (cleared && camp && C.BUFF_CAMPS.includes(camp.type)) {
           p.buffUntil = this.time + C.JUNGLE_BUFF_TIME;
           this.fx.push({ k: 'buff', x: camp.x + 0.5, y: camp.y + 0.5, o: p.id });
-          this.pushFeed(`${p.name} cleared a golem camp: troops empowered for ${C.JUNGLE_BUFF_TIME}s`);
+          this.pushFeed(`${p.name} cleared the Golem Ruins: troops empowered for ${C.JUNGLE_BUFF_TIME}s`);
         }
       }
     }
@@ -1500,6 +1509,18 @@ class Game {
             // Holding a spot: only chase enemies that come near it.
             const [fx0, fy0] = posOf(foe);
             if (dist(fx0, fy0, tgt.x, tgt.y) > C.HOLD_LEASH) foe = null;
+          }
+          if (!foe && tgt.hold) {
+            // ...and go after any enemy troop that steps within HOLD_LEASH of it.
+            let best = C.HOLD_LEASH;
+            for (const v of this.nearUnits(tgt.x, tgt.y, C.HOLD_LEASH)) {
+              if (v.owner === u.owner) continue;
+              const d = dist(v.x, v.y, tgt.x, tgt.y);
+              if (d <= best) {
+                best = d;
+                foe = v;
+              }
+            }
           }
           if (foe) {
             const [fx, fy] = posOf(foe);

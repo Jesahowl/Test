@@ -355,9 +355,12 @@ test('the spatial grid finds the same nearby troops as a full scan', () => {
 
 test('hunting: troops chase a chosen enemy troop, focus it, then move on to its squadmates', () => {
   const { g, a, b } = duel(15);
-  const hunters = troops(g, a, 'soldier', 4, 50, 50);
-  const prey = troops(g, b, 'soldier', 3, 58, 50); // the target and two squadmates
-  const decoy = troops(g, b, 'soldier', 1, 51, 52)[0]; // right next to the hunters
+  // fight in the open, between the two bases
+  const mx = Math.round((a.core.x + b.core.x) / 2) - 4;
+  const my = Math.round((a.core.y + b.core.y) / 2);
+  const hunters = troops(g, a, 'soldier', 4, mx, my);
+  const prey = troops(g, b, 'soldier', 3, mx + 8, my); // the target and two squadmates
+  const decoy = troops(g, b, 'soldier', 1, mx + 1, my + 2)[0]; // right next to the hunters
   const [target] = prey;
   for (const v of [...prey, decoy]) v.attack = { k: 'c', id: b.id }; // hold them still: no orders to follow
   const before = a.order;
@@ -366,7 +369,7 @@ test('hunting: troops chase a chosen enemy troop, focus it, then move on to its 
   assert.deepStrictEqual(a.order, before, 'new waves keep their standing order');
   assert.ok(hunters.every((u) => u.attack.k === 'u' && u.attack.id === target.id));
   // pin the prey in place and let the hunters work
-  const pin = () => { for (const v of [...prey, decoy]) if (g.units.has(v.id)) { v.x = v === decoy ? 51 : 58 + prey.indexOf(v) * 0.4; v.y = v === decoy ? 52 : 50; v.path = []; } };
+  const pin = () => { for (const v of [...prey, decoy]) if (g.units.has(v.id)) { v.x = v === decoy ? mx + 1 : mx + 8 + prey.indexOf(v) * 0.4; v.y = v === decoy ? my + 2 : my; v.path = []; } };
   run(g, 30, () => { pin(); return !g.units.has(target.id); });
   assert.ok(!g.units.has(target.id), 'target killed');
   assert.ok(g.units.has(decoy.id) && decoy.hp > decoy.maxHp * 0.5, 'decoy ignored while hunting');
@@ -417,7 +420,7 @@ test('right-clicking the ground sends troops to hold that spot', () => {
   for (const u of squad) assert.ok(Math.hypot(u.x - spot.x - 0.5, u.y - spot.y - 0.5) < 2.5, 'arrived and holding');
   // an enemy walks up: they fight it, then return to the spot
   const [foe] = troops(g, b, 'soldier', 1, spot.x + 3, spot.y + 0.5);
-  foe.attack = { k: 'c', id: b.id };
+  foe.attack = { k: 'p', id: g.idx(spot.x + 3, spot.y) }; // it holds its own spot nearby
   run(g, 20, () => !g.units.has(foe.id));
   assert.ok(!g.units.has(foe.id), 'enemy near the spot is dealt with');
   run(g, 5);

@@ -429,7 +429,10 @@
     const [k, raw] = key.split(':');
     const id = Number(raw);
     if (k === 'c') return id === myId ? 'your core' : `${(players.get(id) || { name: '?' }).name}'s core`;
-    if (k === 'j') return 'a jungle camp';
+    if (k === 'j') {
+      const c = campsView.find((o) => o.id === id);
+      return c ? `the ${C.CAMP_INFO[c.type].name}` : 'a jungle camp';
+    }
     if (k === 'p') return 'a rally point';
     if (k === 'u') {
       const u = units.get(id);
@@ -464,6 +467,13 @@
       if (c.alive && Math.hypot(c.x + 0.5 - wx, c.y + 0.5 - wy) < 1.8) return { k: 'j', id: c.id };
     }
     return null;
+  }
+
+  // "clear the Bear Cave (190g)" for hover labels.
+  function campVerb(id) {
+    const c = campsView.find((o) => o.id === id);
+    if (!c) return 'clear';
+    return `clear the ${C.CAMP_INFO[c.type].name} (${C.campBounty(c.type)}g${C.BUFF_CAMPS.includes(c.type) ? ' + buff' : ''})`;
   }
 
   function isMineTarget(tg) {
@@ -1276,7 +1286,7 @@
       if (!onScreen(x, y, s * 3)) continue;
       ctx.save();
       ctx.strokeStyle = c.alive ? 'rgba(214, 180, 120, 0.45)' : 'rgba(139, 148, 158, 0.3)';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = c.type === 'large' ? 2.5 : c.type === 'medium' ? 2 : 1.5;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
       ctx.arc(x, y, s * 1.7, 0, Math.PI * 2);
@@ -1292,9 +1302,10 @@
         ctx.arc(x, y, s * 1.7, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p);
         ctx.stroke();
         const big = C.BUFF_CAMPS.includes(c.type);
-        label(big ? 'golem camp' : 'camp', x, y - 2, Math.max(9, Math.round(s * 0.32)), big ? '#ffab40' : '#c9a66b');
+        label(C.CAMP_INFO[c.type].name, x, y - 2, Math.max(9, Math.round(s * 0.32)), big ? '#ffab40' : '#c9a66b');
         label(`in ${c.respawn}s`, x, y + Math.max(10, s * 0.45), Math.max(10, Math.round(s * 0.4)), '#8b949e');
-      } else if (C.BUFF_CAMPS.includes(c.type) && s >= 12) {
+      }
+      if (c.alive && C.BUFF_CAMPS.includes(c.type) && s >= 12) {
         // golem camps grant the jungle buff
         drawFlame(x + s * 1.2, y - s * 1.2, s * 0.32);
         label('buff', x + s * 1.2, y - s * 0.55, Math.max(9, Math.round(s * 0.3)), '#ffab40');
@@ -1322,32 +1333,220 @@
   function drawCreeps(dt) {
     const s = scale();
     const rt = renderTime();
+    const now = performance.now();
     for (const c of creeps.values()) {
+      const px = c.rx;
+      const py = c.ry;
       [c.rx, c.ry] = interpPos(c, rt);
       const [x, y] = toScreen(c.rx, c.ry);
-      if (!onScreen(x, y, s)) continue;
+      if (!onScreen(x, y, s * 2)) continue;
+      // facing and walking come from how the monster moved since the last frame
+      const vx = px === undefined ? 0 : c.rx - px;
+      const vy = py === undefined ? 0 : c.ry - py;
+      const moving = Math.hypot(vx, vy) > 0.002;
+      if (Math.abs(vx) > 0.002) c.face = vx > 0 ? 1 : -1;
+      c.walk = (c.walk || 0) + (moving ? dt * 9 : 0);
       const r = C.CREEPS[c.kind].size * s;
-      ctx.fillStyle = c.kind === 'golem' ? '#8d7b68' : '#c9a66b';
-      ctx.strokeStyle = c.angry ? '#f85149' : 'rgba(0,0,0,0.7)';
-      ctx.lineWidth = c.angry ? 2.5 : 1.5;
-      ctx.beginPath();
-      if (c.kind === 'golem') {
-        for (let i = 0; i < 5; i++) {
-          const a = (Math.PI * 2 * i) / 5 - Math.PI / 2;
-          ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
-        }
-        ctx.closePath();
-      } else {
-        ctx.moveTo(x, y - r * 1.1);
-        ctx.lineTo(x + r, y + r * 0.8);
-        ctx.lineTo(x - r, y + r * 0.8);
-        ctx.closePath();
-      }
-      ctx.fill();
-      ctx.stroke();
-      hpBar(x, y - r - 6, s * 0.6, c.hp);
+      drawMonster(c, x, y, r, now, moving, c.face || 1);
+      hpBar(x, y - r * 1.5 - 4, Math.max(s * 0.7, r * 1.8), c.hp);
     }
   }
+
+  // ---- monsters: wolves, bears, stone golems and rocklings, each with a little idle/walk animation.
+  function drawMonster(c, x, y, r, now, moving, face) {
+    const t = now / 1000 + c.id * 0.37;
+    const angry = !!c.angry;
+    const eye = angry ? '#ff5252' : '#1b1b1b';
+    // shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + r * 0.75, r * 1.1, r * 0.35, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.save();
+    ctx.translate(x, y);
+    if (c.kind === 'wolf' || c.kind === 'bear') {
+      const bear = c.kind === 'bear';
+      const breathe = 1 + Math.sin(t * 2.2) * 0.03;
+      const step = moving ? Math.sin(c.walk) : 0;
+      const bob = moving ? Math.abs(Math.sin(c.walk)) * r * 0.08 : 0;
+      ctx.scale(face, 1);
+      ctx.translate(0, -bob);
+      const body = bear ? '#6d4c41' : '#8e8e93';
+      const light = bear ? '#a1887f' : '#c7c7cc';
+      // legs (front pair and back pair swing opposite ways)
+      ctx.fillStyle = bear ? '#4e342e' : '#6b6b70';
+      for (const [lx, ph] of [[-0.55, 0], [-0.25, Math.PI], [0.35, Math.PI], [0.62, 0]]) {
+        const sw = Math.sin(c.walk + ph) * r * 0.16 * (moving ? 1 : 0);
+        roundRect(r * lx + sw - r * 0.09, r * 0.2, r * 0.18, r * (bear ? 0.5 : 0.55), r * 0.07);
+        ctx.fill();
+      }
+      // tail
+      if (!bear) {
+        ctx.strokeStyle = body;
+        ctx.lineWidth = r * 0.2;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.85, -r * 0.05);
+        ctx.quadraticCurveTo(-r * 1.25, -r * 0.35 + Math.sin(t * 6) * r * 0.15, -r * 1.35, -r * 0.55 + Math.sin(t * 6 + 1) * r * 0.2);
+        ctx.stroke();
+        ctx.lineCap = 'butt';
+      }
+      // body
+      ctx.fillStyle = body;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r * (bear ? 1.05 : 0.95) * breathe, r * (bear ? 0.72 : 0.5) * breathe, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = light;
+      ctx.beginPath();
+      ctx.ellipse(r * 0.1, r * 0.2, r * 0.6, r * 0.22, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // head
+      const hx = r * (bear ? 0.95 : 0.9);
+      const hy = -r * (bear ? 0.3 : 0.35) + step * r * 0.04;
+      ctx.fillStyle = body;
+      if (bear) {
+        for (const ex of [-0.28, 0.28]) {
+          ctx.beginPath();
+          ctx.arc(hx + r * ex, hy - r * 0.4, r * 0.17, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.beginPath();
+        ctx.arc(hx, hy, r * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = light;
+        ctx.beginPath();
+        ctx.ellipse(hx + r * 0.3, hy + r * 0.12, r * 0.24, r * 0.17, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#1b1b1b';
+        ctx.beginPath();
+        ctx.arc(hx + r * 0.48, hy + r * 0.06, r * 0.07, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // pointed ears and a long snout
+        ctx.beginPath();
+        ctx.moveTo(hx - r * 0.25, hy - r * 0.2);
+        ctx.lineTo(hx - r * 0.15, hy - r * 0.62);
+        ctx.lineTo(hx + r * 0.05, hy - r * 0.25);
+        ctx.moveTo(hx + r * 0.0, hy - r * 0.22);
+        ctx.lineTo(hx + r * 0.15, hy - r * 0.6);
+        ctx.lineTo(hx + r * 0.28, hy - r * 0.18);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(hx, hy, r * 0.38, r * 0.3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = light;
+        ctx.beginPath();
+        ctx.ellipse(hx + r * 0.35, hy + r * 0.08, r * 0.28, r * 0.14, 0.15, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#1b1b1b';
+        ctx.beginPath();
+        ctx.arc(hx + r * 0.6, hy + r * 0.05, r * 0.06, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = eye;
+      ctx.beginPath();
+      ctx.arc(hx + r * 0.12, hy - r * 0.08, r * (angry ? 0.09 : 0.07), 0, Math.PI * 2);
+      ctx.fill();
+    } else if (c.kind === 'golem') {
+      // a hunk of stone with a glowing core and two floating fists
+      const hover = Math.sin(t * 1.6) * r * 0.06;
+      const rnd = hashRand(c.id);
+      const pts = [];
+      for (let i = 0; i < 8; i++) {
+        const a = (Math.PI * 2 * i) / 8 + rnd() * 0.3;
+        pts.push([Math.cos(a) * r * (0.78 + rnd() * 0.18), Math.sin(a) * r * (0.72 + rnd() * 0.16)]);
+      }
+      for (const side of [-1, 1]) {
+        const fy = Math.sin(t * 2 + side) * r * 0.15 + (moving ? Math.sin(c.walk + side) * r * 0.12 : 0);
+        ctx.fillStyle = '#6f6a60';
+        polygon(side * r * 1.15, r * 0.05 + fy, r * 0.33, 6, t * 0.3 * side);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+        ctx.lineWidth = Math.max(1, r * 0.05);
+        ctx.stroke();
+      }
+      ctx.translate(0, hover);
+      ctx.fillStyle = '#8d8a80';
+      ctx.beginPath();
+      pts.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      ctx.lineWidth = Math.max(1, r * 0.06);
+      ctx.stroke();
+      // moss and cracks
+      ctx.fillStyle = 'rgba(110, 150, 80, 0.55)';
+      ctx.beginPath();
+      ctx.ellipse(-r * 0.35, -r * 0.5, r * 0.3, r * 0.12, -0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.moveTo(r * 0.2, -r * 0.6);
+      ctx.lineTo(r * 0.05, -r * 0.3);
+      ctx.lineTo(r * 0.25, -r * 0.1);
+      ctx.stroke();
+      // glowing core
+      const pulse = 0.6 + 0.4 * Math.sin(t * 3);
+      const core = angry ? '255, 112, 67' : '128, 222, 234';
+      const g2 = ctx.createRadialGradient(0, r * 0.12, 0, 0, r * 0.12, r * 0.45);
+      g2.addColorStop(0, `rgba(${core}, ${0.95 * pulse})`);
+      g2.addColorStop(1, `rgba(${core}, 0)`);
+      ctx.fillStyle = g2;
+      ctx.beginPath();
+      ctx.arc(0, r * 0.12, r * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgb(${core})`;
+      polygon(0, r * 0.12, r * 0.13, 4, 0);
+      ctx.fill();
+      // eyes
+      ctx.fillStyle = angry ? '#ff7043' : '#80deea';
+      for (const ex of [-0.22, 0.22]) {
+        ctx.fillRect(ex * r - r * 0.1, -r * 0.32, r * 0.2, r * 0.07);
+      }
+    } else {
+      // rockling: a hopping pebble with big eyes
+      const hop = Math.abs(Math.sin(t * (moving ? 7 : 2.5))) * r * (moving ? 0.35 : 0.12);
+      ctx.translate(0, -hop);
+      const squash = 1 + (hop < r * 0.03 ? 0.12 : 0);
+      ctx.fillStyle = '#9e9a8f';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r * 0.95 * squash, r * 0.8 / squash, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      ctx.lineWidth = Math.max(1, r * 0.07);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.beginPath();
+      ctx.ellipse(-r * 0.3, -r * 0.35, r * 0.3, r * 0.15, -0.4, 0, Math.PI * 2);
+      ctx.fill();
+      for (const ex of [-0.3, 0.3]) {
+        ctx.fillStyle = '#f5f5f5';
+        ctx.beginPath();
+        ctx.arc(ex * r + face * r * 0.12, -r * 0.05, r * 0.24, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = angry ? '#e53935' : '#212121';
+        ctx.beginPath();
+        ctx.arc(ex * r + face * r * 0.2, -r * 0.03, r * 0.11, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (angry) {
+        ctx.strokeStyle = '#212121';
+        ctx.lineWidth = Math.max(1, r * 0.08);
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.5, -r * 0.38);
+        ctx.lineTo(-r * 0.12, -r * 0.25);
+        ctx.moveTo(r * 0.5, -r * 0.38);
+        ctx.lineTo(r * 0.12, -r * 0.25);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+    if (angry && c.kind !== 'rockling') {
+      // a red "!" while it's fighting
+      label('!', x, y - r * 1.5 - 8, Math.max(11, Math.round(r * 0.9)), '#ff5252');
+    }
+  }
+
 
   // A core: a stone platform with a turning rune ring and a floating crystal in the player's colour.
   // It cracks and smokes as it takes damage, and flashes when hit.
@@ -1860,7 +2059,7 @@
         const n = shareCount(sendShare);
         const kindTxt = allKinds() ? `troop${n === 1 ? '' : 's'}` : kindsLabel(n);
         const who = selUnits.size ? `${selUnits.size} selected` : sendShare < 1 ? `${n} ${kindTxt} (${Math.round(sendShare * 100)}%)` : `all ${allKinds() ? 'troops' : kindsLabel(2)}`;
-        const verb = mine ? 'defend' : tg.k === 'j' ? 'clear' : tg.k === 'u' ? `hunt ${targetName(`u:${tg.id}`)}` : 'attack';
+        const verb = mine ? 'defend' : tg.k === 'j' ? campVerb(tg.id) : tg.k === 'u' ? `hunt ${targetName(`u:${tg.id}`)}` : 'attack';
         const [hx, hy] = toScreen(pos.x, pos.y);
         if (tg.k === 'u') drawTargetMarker(pos, true, false, 0.6);
         label(`Right-click: ${who} ${verb}`, hx, hy - s * (tg.k === 'u' ? 1.2 : 2.4), 12, mine ? '#7ee787' : '#ffa198');
