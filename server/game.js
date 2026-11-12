@@ -1011,7 +1011,7 @@ class Game {
         if (cleared && camp && C.BUFF_CAMPS.includes(camp.type)) {
           p.buffUntil = this.time + C.JUNGLE_BUFF_TIME;
           this.fx.push({ k: 'buff', x: camp.x + 0.5, y: camp.y + 0.5, o: p.id });
-          this.pushFeed(`${p.name} cleared the Golem Ruins: troops empowered for ${C.JUNGLE_BUFF_TIME}s`);
+          this.pushFeed(`${p.name} defeated a Warlord: troops empowered for ${C.JUNGLE_BUFF_TIME}s`);
         }
       }
     }
@@ -1915,7 +1915,7 @@ class Game {
       const campScore = (c) => dist(c.x, c.y, p.core.x, p.core.y) - (C.BUFF_CAMPS.includes(c.type) ? 8 : 0);
       const camp = this.camps
         .filter((c) => c.alive && dist(c.x, c.y, p.core.x, p.core.y) < BOT_JUNGLE_RANGE)
-        // Golem camps are worth a detour: they give the jungle buff.
+        // The warlord's fort is worth a detour: it gives the jungle buff.
         .sort((c1, c2) => campScore(c1) - campScore(c2))[0];
       if (camp) {
         const squad = home.slice(0, Math.max(3, Math.round(home.length * C.BOT_JUNGLE_SHARE)));

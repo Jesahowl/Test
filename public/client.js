@@ -469,7 +469,7 @@
     return null;
   }
 
-  // "clear the Bear Cave (190g)" for hover labels.
+  // "clear the Barbarian Outpost (190g)" for hover labels.
   function campVerb(id) {
     const c = campsView.find((o) => o.id === id);
     if (!c) return 'clear';
@@ -1305,10 +1305,11 @@
         label(C.CAMP_INFO[c.type].name, x, y - 2, Math.max(9, Math.round(s * 0.32)), big ? '#ffab40' : '#c9a66b');
         label(`in ${c.respawn}s`, x, y + Math.max(10, s * 0.45), Math.max(10, Math.round(s * 0.4)), '#8b949e');
       }
+      if (c.alive && s >= 8) drawCampDecor(c, x, y, s, performance.now());
       if (c.alive && C.BUFF_CAMPS.includes(c.type) && s >= 12) {
-        // golem camps grant the jungle buff
-        drawFlame(x + s * 1.2, y - s * 1.2, s * 0.32);
-        label('buff', x + s * 1.2, y - s * 0.55, Math.max(9, Math.round(s * 0.3)), '#ffab40');
+        // the warlord's fort grants the jungle buff
+        drawFlame(x - s * 0.35, y - s * 2.05, s * 0.26);
+        label('buff', x + s * 0.12, y - s * 1.9, Math.max(9, Math.round(s * 0.3)), '#ffab40');
       }
     }
   }
@@ -1352,200 +1353,228 @@
     }
   }
 
-  // ---- monsters: wolves, bears, stone golems and rocklings, each with a little idle/walk animation.
+  // ---- barbarians: a round token with a red rim (so they never look like a player's troops), a
+  // horned helmet, and the weapon that tells the types apart. They bob as they walk and swing
+  // their weapon when angry.
+  function drawWeapon(kind, r, swing) {
+    ctx.save();
+    ctx.rotate(swing);
+    ctx.lineCap = 'round';
+    const wood = '#7b4a2a';
+    const steel = '#cfd6dc';
+    if (kind === 'axe' || kind === 'greataxe') {
+      const big = kind === 'greataxe';
+      ctx.strokeStyle = wood;
+      ctx.lineWidth = r * (big ? 0.16 : 0.13);
+      ctx.beginPath();
+      ctx.moveTo(0, r * 0.45);
+      ctx.lineTo(0, -r * (big ? 0.95 : 0.8));
+      ctx.stroke();
+      ctx.fillStyle = steel;
+      for (const side of big ? [-1, 1] : [1]) {
+        ctx.beginPath();
+        ctx.moveTo(0, -r * (big ? 0.85 : 0.72));
+        ctx.quadraticCurveTo(side * r * (big ? 0.62 : 0.5), -r * (big ? 0.95 : 0.8), side * r * (big ? 0.55 : 0.45), -r * (big ? 0.42 : 0.38));
+        ctx.lineTo(0, -r * (big ? 0.5 : 0.45));
+        ctx.closePath();
+        ctx.fill();
+      }
+    } else if (kind === 'club') {
+      ctx.fillStyle = wood;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.07, r * 0.45);
+      ctx.lineTo(r * 0.07, r * 0.45);
+      ctx.lineTo(r * 0.2, -r * 0.75);
+      ctx.arc(0, -r * 0.75, r * 0.2, 0, Math.PI, true);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = steel;
+      for (const [sx, sy] of [[-0.22, -0.7], [0.22, -0.62], [0.05, -0.98], [-0.15, -0.45], [0.17, -0.35]]) {
+        polygon(r * sx, r * sy, r * 0.07, 3, sx * 4);
+        ctx.fill();
+      }
+    } else if (kind === 'spear') {
+      ctx.strokeStyle = wood;
+      ctx.lineWidth = r * 0.11;
+      ctx.beginPath();
+      ctx.moveTo(0, r * 0.6);
+      ctx.lineTo(0, -r * 0.95);
+      ctx.stroke();
+      ctx.fillStyle = steel;
+      ctx.beginPath();
+      ctx.moveTo(0, -r * 1.3);
+      ctx.lineTo(r * 0.14, -r * 0.92);
+      ctx.lineTo(-r * 0.14, -r * 0.92);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.lineCap = 'butt';
+    ctx.restore();
+  }
+
   function drawMonster(c, x, y, r, now, moving, face) {
+    const def = C.CREEPS[c.kind];
     const t = now / 1000 + c.id * 0.37;
     const angry = !!c.angry;
-    const eye = angry ? '#ff5252' : '#1b1b1b';
+    const bob = moving ? Math.abs(Math.sin(c.walk)) * r * 0.12 : Math.sin(t * 2) * r * 0.03;
     // shadow
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
-    ctx.ellipse(x, y + r * 0.75, r * 1.1, r * 0.35, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y + r * 0.85, r * 0.95, r * 0.3, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.save();
-    ctx.translate(x, y);
-    if (c.kind === 'wolf' || c.kind === 'bear') {
-      const bear = c.kind === 'bear';
-      const breathe = 1 + Math.sin(t * 2.2) * 0.03;
-      const step = moving ? Math.sin(c.walk) : 0;
-      const bob = moving ? Math.abs(Math.sin(c.walk)) * r * 0.08 : 0;
-      ctx.scale(face, 1);
-      ctx.translate(0, -bob);
-      const body = bear ? '#6d4c41' : '#8e8e93';
-      const light = bear ? '#a1887f' : '#c7c7cc';
-      // legs (front pair and back pair swing opposite ways)
-      ctx.fillStyle = bear ? '#4e342e' : '#6b6b70';
-      for (const [lx, ph] of [[-0.55, 0], [-0.25, Math.PI], [0.35, Math.PI], [0.62, 0]]) {
-        const sw = Math.sin(c.walk + ph) * r * 0.16 * (moving ? 1 : 0);
-        roundRect(r * lx + sw - r * 0.09, r * 0.2, r * 0.18, r * (bear ? 0.5 : 0.55), r * 0.07);
-        ctx.fill();
-      }
-      // tail
-      if (!bear) {
-        ctx.strokeStyle = body;
-        ctx.lineWidth = r * 0.2;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(-r * 0.85, -r * 0.05);
-        ctx.quadraticCurveTo(-r * 1.25, -r * 0.35 + Math.sin(t * 6) * r * 0.15, -r * 1.35, -r * 0.55 + Math.sin(t * 6 + 1) * r * 0.2);
-        ctx.stroke();
-        ctx.lineCap = 'butt';
-      }
-      // body
-      ctx.fillStyle = body;
+    ctx.translate(x, y - bob);
+    // weapon on the side it's facing; swings when fighting
+    ctx.save();
+    ctx.translate(face * r * 1.05, r * 0.05);
+    ctx.scale(1.3, 1.3);
+    const swing = angry ? -face * (0.3 + 0.7 * Math.max(0, Math.sin(t * 7))) : face * (0.25 + Math.sin(t * 1.5) * 0.06);
+    drawWeapon(def.weapon, r, swing);
+    ctx.restore();
+    // token
+    if (def.crown) {
+      // the warlord: a gold rim and a red cape
+      ctx.fillStyle = '#8e1b12';
       ctx.beginPath();
-      ctx.ellipse(0, 0, r * (bear ? 1.05 : 0.95) * breathe, r * (bear ? 0.72 : 0.5) * breathe, 0, 0, Math.PI * 2);
+      ctx.arc(0, r * 0.12, r * 1.08, 0.15 * Math.PI, 0.85 * Math.PI);
       ctx.fill();
-      ctx.fillStyle = light;
+    }
+    ctx.fillStyle = '#3b2418';
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = angry ? `rgba(255, 82, 82, ${0.75 + 0.25 * Math.sin(t * 10)})` : def.crown ? '#e0b43c' : '#c0392b';
+    ctx.lineWidth = Math.max(1.5, r * (def.crown ? 0.16 : 0.13));
+    ctx.stroke();
+    // face and beard
+    ctx.fillStyle = '#e2b48a';
+    ctx.beginPath();
+    ctx.arc(0, r * 0.08, r * 0.42, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = def.crown ? '#8d8d8d' : '#b5651d';
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.36, r * 0.15);
+    ctx.quadraticCurveTo(0, r * 0.95, r * 0.36, r * 0.15);
+    ctx.quadraticCurveTo(0, r * 0.4, -r * 0.36, r * 0.15);
+    ctx.fill();
+    // horns, then the helmet over the top of the head
+    ctx.fillStyle = '#efe3c4';
+    for (const side of [-1, 1]) {
       ctx.beginPath();
-      ctx.ellipse(r * 0.1, r * 0.2, r * 0.6, r * 0.22, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // head
-      const hx = r * (bear ? 0.95 : 0.9);
-      const hy = -r * (bear ? 0.3 : 0.35) + step * r * 0.04;
-      ctx.fillStyle = body;
-      if (bear) {
-        for (const ex of [-0.28, 0.28]) {
-          ctx.beginPath();
-          ctx.arc(hx + r * ex, hy - r * 0.4, r * 0.17, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.beginPath();
-        ctx.arc(hx, hy, r * 0.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = light;
-        ctx.beginPath();
-        ctx.ellipse(hx + r * 0.3, hy + r * 0.12, r * 0.24, r * 0.17, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#1b1b1b';
-        ctx.beginPath();
-        ctx.arc(hx + r * 0.48, hy + r * 0.06, r * 0.07, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        // pointed ears and a long snout
-        ctx.beginPath();
-        ctx.moveTo(hx - r * 0.25, hy - r * 0.2);
-        ctx.lineTo(hx - r * 0.15, hy - r * 0.62);
-        ctx.lineTo(hx + r * 0.05, hy - r * 0.25);
-        ctx.moveTo(hx + r * 0.0, hy - r * 0.22);
-        ctx.lineTo(hx + r * 0.15, hy - r * 0.6);
-        ctx.lineTo(hx + r * 0.28, hy - r * 0.18);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.ellipse(hx, hy, r * 0.38, r * 0.3, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = light;
-        ctx.beginPath();
-        ctx.ellipse(hx + r * 0.35, hy + r * 0.08, r * 0.28, r * 0.14, 0.15, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#1b1b1b';
-        ctx.beginPath();
-        ctx.arc(hx + r * 0.6, hy + r * 0.05, r * 0.06, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.fillStyle = eye;
-      ctx.beginPath();
-      ctx.arc(hx + r * 0.12, hy - r * 0.08, r * (angry ? 0.09 : 0.07), 0, Math.PI * 2);
-      ctx.fill();
-    } else if (c.kind === 'golem') {
-      // a hunk of stone with a glowing core and two floating fists
-      const hover = Math.sin(t * 1.6) * r * 0.06;
-      const rnd = hashRand(c.id);
-      const pts = [];
-      for (let i = 0; i < 8; i++) {
-        const a = (Math.PI * 2 * i) / 8 + rnd() * 0.3;
-        pts.push([Math.cos(a) * r * (0.78 + rnd() * 0.18), Math.sin(a) * r * (0.72 + rnd() * 0.16)]);
-      }
-      for (const side of [-1, 1]) {
-        const fy = Math.sin(t * 2 + side) * r * 0.15 + (moving ? Math.sin(c.walk + side) * r * 0.12 : 0);
-        ctx.fillStyle = '#6f6a60';
-        polygon(side * r * 1.15, r * 0.05 + fy, r * 0.33, 6, t * 0.3 * side);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-        ctx.lineWidth = Math.max(1, r * 0.05);
-        ctx.stroke();
-      }
-      ctx.translate(0, hover);
-      ctx.fillStyle = '#8d8a80';
-      ctx.beginPath();
-      pts.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+      ctx.moveTo(side * r * 0.32, -r * 0.12);
+      ctx.quadraticCurveTo(side * r * 0.85, -r * 0.2, side * r * 0.78, -r * 0.78);
+      ctx.quadraticCurveTo(side * r * 0.62, -r * 0.35, side * r * 0.22, -r * 0.3);
       ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    }
+    ctx.fillStyle = '#9aa0a6';
+    ctx.beginPath();
+    ctx.arc(0, -r * 0.02, r * 0.46, Math.PI, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#6e757c';
+    ctx.fillRect(-r * 0.46, -r * 0.06, r * 0.92, r * 0.1);
+    if (def.crown) {
+      ctx.fillStyle = '#e0b43c';
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.3, -r * 0.3);
+      for (let i = 0; i < 3; i++) {
+        ctx.lineTo(-r * 0.3 + r * 0.3 * i + r * 0.15, -r * 0.62);
+        ctx.lineTo(-r * 0.3 + r * 0.3 * (i + 1), -r * 0.3);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+    // eyes
+    ctx.fillStyle = angry ? '#ff1744' : '#2b1a10';
+    for (const ex of [-0.15, 0.15]) {
+      ctx.beginPath();
+      ctx.arc(ex * r + face * r * 0.04, r * 0.12, r * (angry ? 0.075 : 0.06), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (angry) {
+      ctx.strokeStyle = '#2b1a10';
       ctx.lineWidth = Math.max(1, r * 0.06);
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.27, r * 0.0);
+      ctx.lineTo(-r * 0.06, r * 0.06);
+      ctx.moveTo(r * 0.27, r * 0.0);
+      ctx.lineTo(r * 0.06, r * 0.06);
       ctx.stroke();
-      // moss and cracks
-      ctx.fillStyle = 'rgba(110, 150, 80, 0.55)';
-      ctx.beginPath();
-      ctx.ellipse(-r * 0.35, -r * 0.5, r * 0.3, r * 0.12, -0.3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-      ctx.beginPath();
-      ctx.moveTo(r * 0.2, -r * 0.6);
-      ctx.lineTo(r * 0.05, -r * 0.3);
-      ctx.lineTo(r * 0.25, -r * 0.1);
-      ctx.stroke();
-      // glowing core
-      const pulse = 0.6 + 0.4 * Math.sin(t * 3);
-      const core = angry ? '255, 112, 67' : '128, 222, 234';
-      const g2 = ctx.createRadialGradient(0, r * 0.12, 0, 0, r * 0.12, r * 0.45);
-      g2.addColorStop(0, `rgba(${core}, ${0.95 * pulse})`);
-      g2.addColorStop(1, `rgba(${core}, 0)`);
-      ctx.fillStyle = g2;
-      ctx.beginPath();
-      ctx.arc(0, r * 0.12, r * 0.45, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = `rgb(${core})`;
-      polygon(0, r * 0.12, r * 0.13, 4, 0);
-      ctx.fill();
-      // eyes
-      ctx.fillStyle = angry ? '#ff7043' : '#80deea';
-      for (const ex of [-0.22, 0.22]) {
-        ctx.fillRect(ex * r - r * 0.1, -r * 0.32, r * 0.2, r * 0.07);
-      }
-    } else {
-      // rockling: a hopping pebble with big eyes
-      const hop = Math.abs(Math.sin(t * (moving ? 7 : 2.5))) * r * (moving ? 0.35 : 0.12);
-      ctx.translate(0, -hop);
-      const squash = 1 + (hop < r * 0.03 ? 0.12 : 0);
-      ctx.fillStyle = '#9e9a8f';
-      ctx.beginPath();
-      ctx.ellipse(0, 0, r * 0.95 * squash, r * 0.8 / squash, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-      ctx.lineWidth = Math.max(1, r * 0.07);
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.18)';
-      ctx.beginPath();
-      ctx.ellipse(-r * 0.3, -r * 0.35, r * 0.3, r * 0.15, -0.4, 0, Math.PI * 2);
-      ctx.fill();
-      for (const ex of [-0.3, 0.3]) {
-        ctx.fillStyle = '#f5f5f5';
-        ctx.beginPath();
-        ctx.arc(ex * r + face * r * 0.12, -r * 0.05, r * 0.24, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = angry ? '#e53935' : '#212121';
-        ctx.beginPath();
-        ctx.arc(ex * r + face * r * 0.2, -r * 0.03, r * 0.11, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      if (angry) {
-        ctx.strokeStyle = '#212121';
-        ctx.lineWidth = Math.max(1, r * 0.08);
-        ctx.beginPath();
-        ctx.moveTo(-r * 0.5, -r * 0.38);
-        ctx.lineTo(-r * 0.12, -r * 0.25);
-        ctx.moveTo(r * 0.5, -r * 0.38);
-        ctx.lineTo(r * 0.12, -r * 0.25);
-        ctx.stroke();
-      }
     }
     ctx.restore();
-    if (angry && c.kind !== 'rockling') {
-      // a red "!" while it's fighting
-      label('!', x, y - r * 1.5 - 8, Math.max(11, Math.round(r * 0.9)), '#ff5252');
-    }
   }
+
+  // A barbarian camp: tents and a campfire.
+  function drawCampDecor(c, x, y, s, now) {
+    const tents = c.type === 'small' ? [[-0.95, -1.0]] : [[-1.05, -0.95], [1.0, -1.05]];
+    for (const [tx, ty] of tents) {
+      const cx = x + tx * s;
+      const cy = y + ty * s;
+      const w = s * (c.type === 'large' ? 0.62 : 0.52);
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + w * 0.55, w * 0.95, w * 0.25, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#b08d5f';
+      ctx.beginPath();
+      ctx.moveTo(cx - w, cy + w * 0.55);
+      ctx.lineTo(cx, cy - w * 0.75);
+      ctx.lineTo(cx + w, cy + w * 0.55);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#8c6b40';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - w * 0.75);
+      ctx.lineTo(cx + w, cy + w * 0.55);
+      ctx.lineTo(cx + w * 0.35, cy + w * 0.55);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#3b2418';
+      ctx.beginPath();
+      ctx.moveTo(cx - w * 0.22, cy + w * 0.55);
+      ctx.lineTo(cx, cy - w * 0.05);
+      ctx.lineTo(cx + w * 0.22, cy + w * 0.55);
+      ctx.closePath();
+      ctx.fill();
+      // little red pennant
+      ctx.strokeStyle = '#5d4037';
+      ctx.lineWidth = Math.max(1, s * 0.03);
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - w * 0.75);
+      ctx.lineTo(cx, cy - w * 1.15);
+      ctx.stroke();
+      ctx.fillStyle = '#c0392b';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - w * 1.15);
+      ctx.lineTo(cx + w * 0.4, cy - w * 1.02 + Math.sin(now / 250 + c.id) * w * 0.05);
+      ctx.lineTo(cx, cy - w * 0.9);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // campfire
+    const fx = x + s * 0.95;
+    const fy = y + s * 0.95;
+    ctx.strokeStyle = '#5d4037';
+    ctx.lineWidth = Math.max(1.5, s * 0.08);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(fx - s * 0.22, fy + s * 0.1);
+    ctx.lineTo(fx + s * 0.22, fy - s * 0.02);
+    ctx.moveTo(fx - s * 0.22, fy - s * 0.02);
+    ctx.lineTo(fx + s * 0.22, fy + s * 0.1);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+    const glow = ctx.createRadialGradient(fx, fy, 0, fx, fy, s * 0.7);
+    glow.addColorStop(0, 'rgba(255, 152, 0, 0.35)');
+    glow.addColorStop(1, 'rgba(255, 152, 0, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(fx, fy, s * 0.7, 0, Math.PI * 2);
+    ctx.fill();
+    drawFlame(fx, fy - s * 0.12, s * 0.18);
+  }
+
 
 
   // A core: a stone platform with a turning rune ring and a floating crystal in the player's colour.
@@ -2462,7 +2491,7 @@
         <span class="chip land" data-tip="Tiles you own. More land = more income and room for more troops.">🗺 <b></b> land</span>
         <span class="chip kills" data-tip="Enemy troops and monsters your side has killed">⚔ <b></b> kills</span>
         <span class="chip shield hidden" data-tip="Spawn protection: your core and buildings can't be damaged yet">🛡 <b></b></span>
-        <span class="chip buff hidden" data-tip="Jungle buff from a golem camp: your troops deal +${Math.round(C.JUNGLE_BUFF_DAMAGE * 100)}% damage and take ${Math.round(C.JUNGLE_BUFF_ARMOR * 100)}% less">🔥 <b></b></span>
+        <span class="chip buff hidden" data-tip="Buff from defeating a barbarian Warlord: your troops deal +${Math.round(C.JUNGLE_BUFF_DAMAGE * 100)}% damage and take ${Math.round(C.JUNGLE_BUFF_ARMOR * 100)}% less">🔥 <b></b></span>
       </div>
       <div class="meter" data-tip="Your core. If it falls, you're out of the round and whoever broke it takes your gold and troops."><i></i><span></span></div>`;
   }
@@ -2652,7 +2681,7 @@
     { id: 'barracks', text: 'Press <kbd>R</kbd> and click your land for a <b>barracks</b>: <b>+5 troops</b> in every wave, marching out from it.' },
     { id: 'mix', text: 'Choose your wave with <kbd>1</kbd>–<kbd>4</kbd> or the <b>+</b> buttons. <b>Scouts</b> explore the fog, <b>giants</b> smash bases, <b>medics</b> heal.' },
     { id: 'send', text: 'The <b>Send</b> slider sets how many troops an order takes. Send some, keep the rest home to defend.' },
-    { id: 'jungle', text: 'Right-click <b>jungle camps</b> for gold. <b>Golem camps</b> (🔥) also power up your troops for 60s.' },
+    { id: 'jungle', text: 'Right-click <b>barbarian camps</b> for gold. Beat a <b>Warlord\'s Fort</b> (🔥) to power up your troops for 60s.' },
   ];
   let tipsDone = new Set();
   let tipsOff = false;

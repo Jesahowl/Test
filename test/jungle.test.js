@@ -35,7 +35,7 @@ test('clearing a camp pays out, angry monsters fight back, and the camp respawns
   g.update(0.05);
   assert.ok(squad.filter((u) => g.units.has(u.id)).every((u) => !u.attack), 'order finished');
   run(g, C.CAMP_RESPAWN + 1);
-  assert.ok(!camp.alive, 'golem camps take longer to come back');
+  assert.ok(!camp.alive, 'the warlord\'s fort takes longer to come back');
   run(g, C.BUFF_CAMP_RESPAWN - C.CAMP_RESPAWN);
   assert.ok(camp.alive, 'camp respawns');
   assert.match(g.order(a.id, null, { k: 'j', id: 999 }), /empty/);

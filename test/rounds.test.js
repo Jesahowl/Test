@@ -72,7 +72,7 @@ test('sudden death: cores crumble (never below 1 HP) and home turf stops helping
   assert.strictEqual(g.onHomeLand(u), false);
 });
 
-test('clearing a golem camp buffs your troops: more damage dealt, less taken', () => {
+test('beating a warlord buffs your troops: more damage dealt, less taken', () => {
   const { g, a, b } = duel(4);
   const camp = g.camps.find((c) => c.type === 'large');
   run(g, 1);

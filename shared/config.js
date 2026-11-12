@@ -139,7 +139,7 @@
     // ---- Jungle: neutral camps that sit still, fight back when attacked, and pay out when cleared.
     CAMP_COUNT: 12,
     CAMP_RESPAWN: 45,
-    BUFF_CAMP_RESPAWN: 90, // golem ruins (which give the jungle buff) take longer to come back
+    BUFF_CAMP_RESPAWN: 90, // the warlord's fort (which gives the jungle buff) takes longer to come back
     // Camps wander: a cleared camp comes back somewhere new, and a camp nobody has touched for
     // CAMP_RELOCATE seconds packs up and moves. New spots prefer unclaimed land.
     CAMP_RELOCATE: 150,
@@ -149,21 +149,22 @@
     CAMP_LEASH: 4.5, // monsters chase attackers this far from their camp, then reset
     CAMP_MIX: { small: 5, medium: 4, large: 3 }, // how many of each camp size
     CAMP_INFO: {
-      small: { name: 'Wolf Den' },
-      medium: { name: 'Bear Cave' },
-      large: { name: 'Golem Ruins' },
+      small: { name: 'Raider Camp' },
+      medium: { name: 'Barbarian Outpost' },
+      large: { name: "Warlord's Fort" },
     },
     CAMP_TYPES: {
       // the first monster listed is the leader, standing in the middle
-      small: { wolf: 3 },
-      medium: { bear: 1, wolf: 2 },
-      large: { golem: 1, rockling: 2 },
+      small: { raider: 3 },
+      medium: { brute: 1, raider: 2 },
+      large: { warlord: 1, spearman: 2 },
     },
     CREEPS: {
-      wolf: { name: 'Wolf', hp: 150, speed: 2.9, damage: 9, bounty: 40, size: 0.32 },
-      bear: { name: 'Bear', hp: 650, speed: 2.0, damage: 22, bounty: 110, size: 0.48 },
-      golem: { name: 'Stone Golem', hp: 1100, speed: 1.5, damage: 32, bounty: 250, size: 0.58 },
-      rockling: { name: 'Rockling', hp: 240, speed: 2.3, damage: 13, bounty: 60, size: 0.3 },
+      // Barbarians: neutral, passive until attacked. Each carries the weapon that tells it apart.
+      raider: { name: 'Raider', hp: 150, speed: 2.9, damage: 9, bounty: 40, size: 0.32, weapon: 'axe' },
+      brute: { name: 'Brute', hp: 650, speed: 2.0, damage: 22, bounty: 110, size: 0.46, weapon: 'club' },
+      warlord: { name: 'Warlord', hp: 1100, speed: 1.5, damage: 32, bounty: 250, size: 0.54, weapon: 'greataxe', crown: true },
+      spearman: { name: 'Spearman', hp: 240, speed: 2.3, damage: 13, bounty: 60, size: 0.32, weapon: 'spear' },
     },
     CREEP_REACH: 0.9,
     // Jungle buff: whoever clears one of these camp types empowers all their troops for a while.
