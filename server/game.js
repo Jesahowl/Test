@@ -630,6 +630,11 @@ class Game {
       if (!camp || !camp.alive) return 'That camp is empty';
       return { type: 'attack', target: { k: 'j', id } };
     }
+    if (k === 'p') {
+      // Move to a spot on the map and hold it (id = tile index).
+      if (!Number.isInteger(id) || id < 0 || id >= this.w * this.h) return 'Invalid spot';
+      return { type: 'attack', target: { k: 'p', id } };
+    }
     if (k === 'u') {
       // Hunt an enemy troop: chase it down, then go after its nearby squadmates.
       const v = this.units.get(id);
@@ -646,32 +651,43 @@ class Game {
   //   less than 1 sends that fraction of your current troops (keeping the army's mix of types, nearest
   //   to the target first) and leaves the standing order for new waves alone.
   // Returns null on success or an error string; this.lastOrderCount says how many troops moved.
-  order(pid, ids, target, share = 1) {
+  // kinds: optional list of troop types; only troops of those types take the order (and a
+  // filtered order never changes what new waves do).
+  order(pid, ids, target, share = 1, kinds = null) {
     this.lastOrderCount = 0;
     const p = this.players.get(pid);
     if (!p || !p.alive) return 'Invalid order';
     const ord = this.makeOrder(pid, target);
     if (typeof ord === 'string') return ord;
+    const filter = Array.isArray(kinds) && kinds.length && UNIT_KEYS.some((k) => !kinds.includes(k))
+      ? new Set(kinds.filter((k) => C.UNITS[k]))
+      : null;
+    const ok = (u) => !filter || filter.has(u.kind);
     let chosen;
     if (Array.isArray(ids) && ids.length) {
       chosen = ids.slice(0, C.MAX_UNITS).map((id) => this.units.get(id)).filter((u) => u && u.owner === pid);
       if (!chosen.length) return 'No troops selected';
+      chosen = chosen.filter(ok);
+      if (!chosen.length) return 'None of the selected troops are of the chosen types';
     } else if (!(share < 1)) {
-      if (ord.target?.k !== 'u') p.order = ord; // new waves don't chase a single troop
-      chosen = [...this.units.values()].filter((u) => u.owner === pid);
+      // Everyone (of the chosen types). Unfiltered, new waves follow too - except when hunting one troop.
+      if (!filter && ord.target?.k !== 'u') p.order = ord;
+      chosen = [...this.units.values()].filter((u) => u.owner === pid && ok(u));
+      if (filter && !chosen.length) return 'You have no troops of the chosen types';
     } else {
-      chosen = this.pickShare(pid, ord, Math.max(0.01, share));
-      if (!chosen.length) return 'No troops available to send';
+      chosen = this.pickShare(pid, ord, Math.max(0.01, share), ok);
+      if (!chosen.length) return filter ? 'You have no troops of the chosen types' : 'No troops available to send';
     }
     for (const u of chosen) this.applyOrder(u, ord);
     this.lastOrderCount = chosen.length;
     return null;
   }
 
+
   // Pick `share` of pid's troops for an order: troops not already following it, each type taken in
   // proportion so the group keeps the army's mix, nearest to the order's destination first.
-  pickShare(pid, ord, share) {
-    const mine = [...this.units.values()].filter((u) => u.owner === pid);
+  pickShare(pid, ord, share, ok = () => true) {
+    const mine = [...this.units.values()].filter((u) => u.owner === pid && ok(u));
     const want = Math.max(1, Math.round(mine.length * share));
     const dest = this.orderPos(pid, ord);
     const already = (u) => (ord.type === 'defend'
@@ -711,6 +727,7 @@ class Game {
       return { x: p.core.x + 0.5, y: p.core.y + 0.5 };
     }
     if (k === 'u') return { x: ord.target.lx, y: ord.target.ly };
+    if (k === 'p') return { x: (id % this.w) + 0.5, y: Math.floor(id / this.w) + 0.5 };
     const camp = this.camps[id];
     return { x: camp.x + 0.5, y: camp.y + 0.5 };
   }
@@ -735,6 +752,7 @@ class Game {
     if (t.k === 'c') return !!this.players.get(t.id)?.alive;
     if (t.k === 'j') return !!this.camps[t.id]?.alive;
     if (t.k === 'u') return this.units.has(t.id);
+    if (t.k === 'p') return true;
     return !!this.players.get(t.owner)?.alive; // tower orders roll on to that player's next structure
   }
 
@@ -1124,6 +1142,9 @@ class Game {
   // structure when a tower falls or changes hands. Returns null when the order is finished.
   resolveAttack(u) {
     const a = u.attack;
+    if (a.k === 'p') {
+      return { x: (a.id % this.w) + 0.5, y: Math.floor(a.id / this.w) + 0.5, goal: a.id, struct: false, hold: true };
+    }
     if (a.k === 'u') {
       let v = this.units.get(a.id);
       if (!v || v.owner === u.owner) {
@@ -1474,14 +1495,19 @@ class Game {
       if (tgt) {
         // On the march: engage enemies that come close, otherwise push on to the target.
         if (!def.heal) {
-          const foe = this.pickTarget(u, def, s.range + C.TROOP_AGGRO, false);
+          let foe = this.pickTarget(u, def, s.range + C.TROOP_AGGRO, false);
+          if (foe && tgt.hold) {
+            // Holding a spot: only chase enemies that come near it.
+            const [fx0, fy0] = posOf(foe);
+            if (dist(fx0, fy0, tgt.x, tgt.y) > C.HOLD_LEASH) foe = null;
+          }
           if (foe) {
             const [fx, fy] = posOf(foe);
             this.stepToward(u, fx, fy, s.range * 0.9, speed, dt);
             continue;
           }
         }
-        const stop = tgt.struct ? Math.max(0.6, s.range * 0.85) : 1;
+        const stop = tgt.struct ? Math.max(0.6, s.range * 0.85) : tgt.hold ? 1.2 : 1;
         this.marchTo(u, tgt.goal, tgt.x, tgt.y, stop, speed, dt);
         continue;
       }

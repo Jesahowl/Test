@@ -380,3 +380,52 @@ test('hunting: troops chase a chosen enemy troop, focus it, then move on to its 
   assert.match(g.order(a.id, null, { k: 'u', id: mine.id }), /own troop/);
   assert.match(g.order(a.id, null, { k: 'u', id: 99999 }), /gone/);
 });
+
+test('orders can be limited to certain troop types', () => {
+  const { g, a, b } = duel(22);
+  const t = outpost(g, b);
+  const soldiers = troops(g, a, 'soldier', 4, a.core.x + 0.5, a.core.y + 1);
+  const giants = troops(g, a, 'giant', 2, a.core.x + 0.5, a.core.y - 1);
+  const medics = troops(g, a, 'medic', 2, a.core.x - 1, a.core.y + 0.5);
+  const standing = { ...a.order };
+  // only giants, everyone of that type
+  assert.strictEqual(g.order(a.id, null, { k: 't', id: t.id }, 1, ['giant']), null);
+  assert.strictEqual(g.lastOrderCount, 2);
+  assert.ok(giants.every((u) => u.attack) && soldiers.every((u) => !u.attack) && medics.every((u) => !u.attack));
+  assert.deepStrictEqual(a.order, standing, 'a filtered order leaves new waves alone');
+  // 50% of soldiers + medics
+  assert.strictEqual(g.order(a.id, null, { k: 't', id: t.id }, 0.5, ['soldier', 'medic']), null);
+  assert.strictEqual(g.lastOrderCount, 3);
+  assert.strictEqual(soldiers.filter((u) => u.attack).length, 2);
+  assert.strictEqual(medics.filter((u) => u.attack).length, 1);
+  // a selection, filtered
+  assert.strictEqual(g.order(a.id, [...soldiers, ...giants].map((u) => u.id), { k: 'c', id: a.id }, 1, ['giant']), null);
+  assert.ok(giants.every((u) => !u.attack) && soldiers.filter((u) => u.attack).length === 2);
+  assert.match(g.order(a.id, soldiers.map((u) => u.id), { k: 'c', id: a.id }, 1, ['scout']), /chosen types/);
+  assert.match(g.order(a.id, null, { k: 't', id: t.id }, 1, ['scout']), /no troops of the chosen types/);
+  // all types ticked = a normal order (new waves follow)
+  assert.strictEqual(g.order(a.id, null, { k: 't', id: t.id }, 1, ['soldier', 'scout', 'medic', 'giant']), null);
+  assert.strictEqual(a.order.type, 'attack');
+});
+
+test('right-clicking the ground sends troops to hold that spot', () => {
+  const { g, a, b } = duel(23);
+  const squad = troops(g, a, 'soldier', 3, a.core.x + 0.5, a.core.y + 1);
+  const spot = { x: a.core.x + 12, y: a.core.y + 3 };
+  assert.strictEqual(g.order(a.id, squad.map((u) => u.id), { k: 'p', id: g.idx(spot.x, spot.y) }), null);
+  run(g, 15);
+  for (const u of squad) assert.ok(Math.hypot(u.x - spot.x - 0.5, u.y - spot.y - 0.5) < 2.5, 'arrived and holding');
+  // an enemy walks up: they fight it, then return to the spot
+  const [foe] = troops(g, b, 'soldier', 1, spot.x + 3, spot.y + 0.5);
+  foe.attack = { k: 'c', id: b.id };
+  run(g, 20, () => !g.units.has(foe.id));
+  assert.ok(!g.units.has(foe.id), 'enemy near the spot is dealt with');
+  run(g, 5);
+  for (const u of squad.filter((v) => g.units.has(v.id))) assert.ok(Math.hypot(u.x - spot.x - 0.5, u.y - spot.y - 0.5) < 3);
+  // an enemy far from the spot is ignored
+  const [far] = troops(g, b, 'soldier', 1, spot.x + 9, spot.y + 0.5);
+  far.attack = { k: 'c', id: b.id };
+  run(g, 3, () => { far.x = spot.x + 9; far.y = spot.y + 0.5; return false; });
+  for (const u of squad.filter((v) => g.units.has(v.id))) assert.ok(Math.hypot(u.x - spot.x - 0.5, u.y - spot.y - 0.5) < 3, 'stayed put');
+  assert.match(g.order(a.id, null, { k: 'p', id: -5 }), /Invalid/);
+});

@@ -186,7 +186,8 @@ function createServer({ port = 3000, botTarget } = {}) {
         case 'order': {
           const target = msg.target && typeof msg.target === 'object' ? { k: String(msg.target.k), id: msg.target.id } : null;
           const share = typeof msg.share === 'number' && msg.share > 0 && msg.share <= 1 ? msg.share : 1;
-          err = game.order(client.pid, Array.isArray(msg.ids) ? msg.ids : null, target, share);
+          const kinds = Array.isArray(msg.kinds) ? msg.kinds.slice(0, 8).map(String) : null;
+          err = game.order(client.pid, Array.isArray(msg.ids) ? msg.ids : null, target, share, kinds);
           if (!err) send(client, { t: 'ordered', n: game.lastOrderCount });
           break;
         }

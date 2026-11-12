@@ -49,6 +49,7 @@
     LAND_PER_UNIT: 10,
     MIN_UNITS: 10,
     MAX_UNITS: 45,
+    HOLD_LEASH: 6, // troops holding a spot fight enemies within this distance of it
     HUNT_ROLL_RANGE: 6, // when a hunted troop dies, hunters go after its squadmates within this range
     TROOP_AGGRO: 2,
     // Fog of war: you see your own land plus what your core, buildings and troops can see.

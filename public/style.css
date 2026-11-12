@@ -139,8 +139,14 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 .troop button:hover:not(:disabled) { border-color: var(--accent); }
 .troop button:disabled { opacity: 0.35; cursor: default; }
 
-#bar .orders { width: 186px; }
+#bar .orders { width: 186px; gap: 5px; }
 #bar .share { display: flex; flex-direction: column; gap: 2px; }
+#kinds { display: flex; gap: 4px; }
+#kinds button { flex: 1; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--raise); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; opacity: 0.35; filter: grayscale(1); }
+#kinds button img { width: 18px; height: 18px; }
+#kinds button.on { opacity: 1; filter: none; border-color: var(--line-hi); background: var(--raise-2); }
+#kinds button:hover { border-color: var(--accent); }
 #bar .share-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; white-space: nowrap; font-size: 12px; }
 #bar .share-head > span:first-child { color: var(--muted); }
 #bar #share-pct { color: var(--gold); font-size: 15px; }

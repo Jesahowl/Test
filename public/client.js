@@ -83,6 +83,13 @@
     const saved = Number(localStorage.getItem('ts-share'));
     if (saved >= SHARE_STEP && saved <= 1) sendShare = saved;
   } catch { /* ignore */ }
+  // Which troop types right-click orders send (all by default).
+  let sendKinds = new Set(UNIT_KEYS);
+  try {
+    const saved = JSON.parse(localStorage.getItem('ts-kinds') || 'null');
+    if (Array.isArray(saved) && saved.some((k) => UNIT_KEYS.includes(k))) sendKinds = new Set(saved.filter((k) => UNIT_KEYS.includes(k)));
+  } catch { /* ignore */ }
+  const allKinds = () => UNIT_KEYS.every((k) => sendKinds.has(k));
   let pendingOrder = null; // toast text waiting for the server to say how many troops moved
   const keys = new Set();
   const mouse = { sx: 0, sy: 0, wx: 0, wy: 0, rightDown: false, dragged: false, lastX: 0, lastY: 0 };
@@ -412,6 +419,7 @@
       const u = units.get(id);
       return u ? { x: u.rx, y: u.ry, unit: true } : null;
     }
+    if (k === 'p') return { x: (id % C.MAP_W) + 0.5, y: Math.floor(id / C.MAP_W) + 0.5, unit: true };
     const camp = camps[id];
     return camp ? { x: camp.x + 0.5, y: camp.y + 0.5 } : null;
   }
@@ -422,6 +430,7 @@
     const id = Number(raw);
     if (k === 'c') return id === myId ? 'your core' : `${(players.get(id) || { name: '?' }).name}'s core`;
     if (k === 'j') return 'a jungle camp';
+    if (k === 'p') return 'a rally point';
     if (k === 'u') {
       const u = units.get(id);
       return u ? `${(players.get(u.owner) || { name: '?' }).name}'s ${C.UNITS[u.kind].name}` : 'a troop';
@@ -1471,7 +1480,7 @@
 
   function drawEffects(now) {
     const s = scale();
-    effects = effects.filter((f) => now - f.born < (f.k === 'coreDown' || f.k === 'buff' ? 1200 : f.k === 'smash' ? 500 : f.k === 'campSpawn' || f.k === 'campLeave' ? 1000 : f.k === 'wave' ? 700 : f.k === 'gold' ? 1100 : 450));
+    effects = effects.filter((f) => now - f.born < (f.k === 'coreDown' || f.k === 'buff' ? 1200 : f.k === 'smash' ? 500 : f.k === 'ping' ? 600 : f.k === 'campSpawn' || f.k === 'campLeave' ? 1000 : f.k === 'wave' ? 700 : f.k === 'gold' ? 1100 : 450));
     for (const f of effects) {
       const age = (now - f.born) / 1000;
       if (age < 0) continue; // not due yet (effects are delayed to match troop interpolation)
@@ -1572,6 +1581,19 @@
           ctx.globalAlpha = Math.max(0, 1 - p * p);
           label(`+${f.n}g`, x, y - s * (0.6 + p * 1.4), Math.round((big ? 18 : 13) + (big ? 4 : 0) * (1 - p)), '#ffd54f');
           ctx.globalAlpha = 1;
+          break;
+        }
+        case 'ping': {
+          // where you sent troops to: a shrinking double ring
+          const [x, y] = toScreen(f.x, f.y);
+          const p = age / 0.6;
+          ctx.strokeStyle = `rgba(255, 213, 79, ${1 - p})`;
+          ctx.lineWidth = 2.5;
+          for (const r of [1.4, 0.8]) {
+            ctx.beginPath();
+            ctx.arc(x, y, s * r * (1 - p * 0.6), 0, Math.PI * 2);
+            ctx.stroke();
+          }
           break;
         }
         case 'smash': {
@@ -1836,7 +1858,8 @@
         const pos = targetPos(`${tg.k}:${tg.id}`);
         const mine = isMineTarget(tg);
         const n = shareCount(sendShare);
-        const who = selUnits.size ? `${selUnits.size} selected` : sendShare < 1 ? `${n} troop${n === 1 ? '' : 's'} (${Math.round(sendShare * 100)}%)` : 'all troops';
+        const kindTxt = allKinds() ? `troop${n === 1 ? '' : 's'}` : kindsLabel(n);
+        const who = selUnits.size ? `${selUnits.size} selected` : sendShare < 1 ? `${n} ${kindTxt} (${Math.round(sendShare * 100)}%)` : `all ${allKinds() ? 'troops' : kindsLabel(2)}`;
         const verb = mine ? 'defend' : tg.k === 'j' ? 'clear' : tg.k === 'u' ? `hunt ${targetName(`u:${tg.id}`)}` : 'attack';
         const [hx, hy] = toScreen(pos.x, pos.y);
         if (tg.k === 'u') drawTargetMarker(pos, true, false, 0.6);
@@ -2066,18 +2089,49 @@
     // Keep keyboard focus off the slider so game keys (A/D pan, numbers) still work.
     slider.addEventListener('change', () => slider.blur());
     slider.addEventListener('pointerup', () => slider.blur());
+    // Troop-type toggles for orders.
+    const kinds = $('kinds');
+    for (const kind of UNIT_KEYS) {
+      const b = document.createElement('button');
+      b.dataset.kind = kind;
+      b.innerHTML = `<img src="${iconURL(kind, 36)}" alt="">`;
+      b.dataset.tip = `<span class="t">Send ${C.UNITS[kind].name.toLowerCase()}s</span>Toggle whether right-click orders include ${C.UNITS[kind].name.toLowerCase()}s.<br><span class="m"><kbd>Shift</kbd>-click or right-click: send <b>only</b> ${C.UNITS[kind].name.toLowerCase()}s (again: all types).</span>`;
+      b.onclick = (e) => toggleKind(kind, e.shiftKey);
+      b.oncontextmenu = (e) => {
+        e.preventDefault();
+        toggleKind(kind, true);
+      };
+      kinds.appendChild(b);
+    }
     setShare(sendShare);
   }
 
   // How many troops a share-order would send right now (the server picks the same number).
   function myTroopCount() {
     let n = 0;
-    for (const u of units.values()) if (u.owner === myId) n++;
+    for (const u of units.values()) if (u.owner === myId && sendKinds.has(u.kind)) n++;
     return n;
   }
   function shareCount(sh) {
     const total = myTroopCount();
     return total ? (sh >= 1 ? total : Math.max(1, Math.round(total * sh))) : 0;
+  }
+
+  // "giants", "soldiers & medics", ... for labels.
+  function kindsLabel(n = 2) {
+    const names = UNIT_KEYS.filter((k) => sendKinds.has(k)).map((k) => C.UNITS[k].name.toLowerCase() + (n === 1 ? '' : 's'));
+    return names.length <= 2 ? names.join(' & ') : `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]}`;
+  }
+
+  // Toggle a troop type for orders (Shift / right-click: only that type; click the last one: all again).
+  function toggleKind(kind, solo) {
+    if (solo) sendKinds = sendKinds.size === 1 && sendKinds.has(kind) ? new Set(UNIT_KEYS) : new Set([kind]);
+    else if (sendKinds.has(kind)) {
+      sendKinds.delete(kind);
+      if (!sendKinds.size) sendKinds = new Set(UNIT_KEYS);
+    } else sendKinds.add(kind);
+    try { localStorage.setItem('ts-kinds', JSON.stringify([...sendKinds])); } catch { /* ignore */ }
+    updateShareUi();
   }
 
   function setShare(sh) {
@@ -2094,10 +2148,13 @@
     slider.classList.toggle('all', sendShare >= 1);
     const total = myTroopCount();
     const n = shareCount(sendShare);
+    const all = allKinds();
+    const what = all ? `troop${total === 1 ? '' : 's'}` : kindsLabel(total);
     $('share-pct').textContent = `${pct}%`;
     $('share-count').innerHTML = sendShare >= 1
-      ? `<b>All ${total}</b> + new waves`
-      : `<b>${n}</b> of ${total} troop${total === 1 ? '' : 's'}`;
+      ? `<b>All ${total}</b> ${all ? '+ new waves' : what}`
+      : `<b>${n}</b> of ${total} ${what}`;
+    for (const b of document.querySelectorAll('#kinds button')) b.classList.toggle('on', sendKinds.has(b.dataset.kind));
     slider.parentElement.dataset.tip = `<span class="t">Send</span>${sendShare >= 1
       ? 'Right-click orders send <b>every troop</b>, and new waves follow too.'
       : `Right-click orders send <b>${pct}%</b> of your troops (nearest first); new waves keep their orders.`}<br><span class="m">Drag, scroll, or press <kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd><kbd>V</kbd> for 25/50/75/100%.</span>`;
@@ -2112,16 +2169,18 @@
   function orderAt(tg, share = sendShare) {
     if (!myId || !tg) return;
     const ids = selUnits.size ? [...selUnits] : null;
-    sendMsg({ t: 'order', ids, target: tg, share: ids ? 1 : share });
+    const filtered = !allKinds();
+    sendMsg({ t: 'order', ids, target: tg, share: ids ? 1 : share, kinds: filtered ? [...sendKinds] : null });
+    if (tg.k === 'p') effects.push({ k: 'ping', x: (tg.id % C.MAP_W) + 0.5, y: Math.floor(tg.id / C.MAP_W) + 0.5, born: performance.now() });
     if (!isMineTarget(tg)) tipDone('attack');
     if (tg.k === 'j') tipDone('jungle');
-    const verb = isMineTarget(tg) ? 'defending' : tg.k === 'j' ? 'clearing' : tg.k === 'u' ? 'hunting' : 'attacking';
+    const verb = isMineTarget(tg) ? 'defending' : tg.k === 'j' ? 'clearing' : tg.k === 'u' ? 'hunting' : tg.k === 'p' ? 'moving to' : 'attacking';
     const what = targetName(`${tg.k}:${tg.id}`);
     pendingOrder = (n) => {
-      const troopsTxt = `${n} troop${n === 1 ? '' : 's'}`;
+      const troopsTxt = filtered ? `${n} ${kindsLabel(n)}` : `${n} troop${n === 1 ? '' : 's'}`;
       if (ids) return `${troopsTxt}: ${verb} ${what}`;
       if (share < 1) return `${troopsTxt} (${Math.round(share * 100)}%): ${verb} ${what}`;
-      if (tg.k === 'u') return `All ${troopsTxt}: ${verb} ${what}`; // new waves keep their orders
+      if (tg.k === 'u' || filtered) return `All ${troopsTxt}: ${verb} ${what}`; // new waves keep their orders
       return `All ${troopsTxt} and new waves: ${verb} ${what}`;
     };
   }
@@ -2177,7 +2236,9 @@
     $('alive').innerHTML = `Troops alive <b>${myTroops}</b> / ${cap}`;
 
     const o = me.order;
-    const orderHtml = o.type === 'attack'
+    const orderHtml = o.type === 'attack' && o.target.startsWith('p:')
+      ? `<span class="atk">🚩 Waves gathering at a rally point</span><span class="hint">press H to bring them home</span>`
+      : o.type === 'attack'
       ? `<span class="atk">⚔ Waves attacking ${escapeHtml(targetName(o.target))}</span><span class="hint">press H to bring them home</span>`
       : `<span class="def">🛡 Waves defending ${escapeHtml(targetName(o.target))}</span><span class="hint">right-click an enemy to attack</span>`;
     if ($('order-info').dataset.html !== orderHtml) {
@@ -2634,7 +2695,10 @@
       updateMouseWorld();
       const tg = orderTargetAt(mouse.wx, mouse.wy);
       if (tg) orderAt(tg);
-      else clearSelection();
+      else if (mouse.wx >= 0 && mouse.wy >= 0 && mouse.wx < C.MAP_W && mouse.wy < C.MAP_H) {
+        // Empty ground: move there and hold the spot.
+        orderAt({ k: 'p', id: Math.floor(mouse.wy) * C.MAP_W + Math.floor(mouse.wx) });
+      }
     }
   });
 
