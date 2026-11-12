@@ -68,7 +68,7 @@ test('sudden death: cores crumble (never below 1 HP) and home turf stops helping
   a.core.hp = 1.5;
   run(g, 5);
   assert.strictEqual(a.core.hp, 1);
-  const [u] = troops(g, a, 'guard', 1, a.core.x + 1.5, a.core.y + 0.5);
+  const [u] = troops(g, a, 'soldier', 1, a.core.x + 1.5, a.core.y + 0.5);
   assert.strictEqual(g.onHomeLand(u), false);
 });
 
@@ -84,14 +84,14 @@ test('clearing a golem camp buffs your troops: more damage dealt, less taken', (
   assert.ok(g.buffed(a.id));
   assert.ok(a.buffUntil - g.time > C.JUNGLE_BUFF_TIME - 1);
 
-  const [ua] = troops(g, a, 'archer', 1, 50, 50);
-  const [ub] = troops(g, b, 'archer', 1, 50, 50);
+  const [ua] = troops(g, a, 'soldier', 1, 50, 50);
+  const [ub] = troops(g, b, 'soldier', 1, 50, 50);
   g.damageUnit(ua, 100, b.id);
   assert.strictEqual(ua.hp, ua.maxHp - 100 * (1 - C.JUNGLE_BUFF_ARMOR));
   const hp = ub.hp;
-  g.unitFire(ua, ub, C.towerStats('archer', 1), C.UNITS.archer);
+  g.unitFire(ua, ub, C.towerStats('soldier', 1), C.UNITS.soldier);
   const home = g.onHomeLand(ua) ? 1 + C.HOME_DAMAGE_BONUS : 1;
-  assert.ok(Math.abs(hp - ub.hp - C.UNITS.archer.damage * (1 + C.JUNGLE_BUFF_DAMAGE) * home) < 1e-9);
+  assert.ok(Math.abs(hp - ub.hp - C.UNITS.soldier.damage * (1 + C.JUNGLE_BUFF_DAMAGE) * home) < 1e-9);
 
   g.time = a.buffUntil + 0.1;
   assert.ok(!g.buffed(a.id));

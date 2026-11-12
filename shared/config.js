@@ -37,19 +37,25 @@
     // Every WAVE_INTERVAL seconds your core sends out a free wave built from your army plan.
     WAVE_INTERVAL: 20,
     FIRST_WAVE_DELAY: 6,
-    // Wave size: BASE_WAVE troops from the core, plus BARRACKS_TROOPS from each barracks you own.
-    // The army panel only sets the mix; slots left unassigned are filled with guards and archers.
+    // Wave size: BASE_WAVE slots from the core, plus BARRACKS_TROOPS from each barracks you own.
+    // The army panel only sets the mix (a giant takes 3 slots); unassigned slots become soldiers.
     BASE_WAVE: 5,
     BARRACKS_TROOPS: 5,
     MAX_BARRACKS: 5,
     BARRACKS_COST_STEP: 150, // each extra barracks costs this much more than the last
-    START_ARMY: {}, // wave slots assigned at the start (the rest are guards/archers)
-    // How many troops can be alive at once grows with land: one per LAND_PER_UNIT tiles.
+    START_ARMY: {}, // wave slots assigned at the start (the rest are soldiers)
+    // How many troop slots can be alive at once grows with land: one per LAND_PER_UNIT tiles.
     LAND_PER_UNIT: 10,
     MIN_UNITS: 10,
     MAX_UNITS: 45,
     HUNT_ROLL_RANGE: 6, // when a hunted troop dies, hunters go after its squadmates within this range
-    TROOP_AGGRO: 2, // troops on the march engage enemies within (attack range + this)
+    TROOP_AGGRO: 2,
+    // Fog of war: you see your own land plus what your core, buildings and troops can see.
+    CORE_SIGHT: 9,
+    TOWER_SIGHT_BONUS: 2, // towers see this much past their range
+    BARRACKS_SIGHT: 5,
+    SCOUT_RANGE: 45, // scouts explore up to this far from their core
+    SCOUT_LEG_TIME: 25, // seconds before a scout picks a new place to explore // troops on the march engage enemies within (attack range + this)
     TROOP_BOUNTY: 14, // gold for killing an enemy troop
     TROOP_BOUNTY_PER_LEVEL: 6, // extra gold per level of the troop killed
     TOWER_BOUNTY: 250, // gold for destroying an enemy tower
@@ -86,28 +92,23 @@
 
     // Troop types. `cost` sets the price of levelling the type up (see armyLevelCost).
     UNITS: {
-      guard: {
-        name: 'Guard', key: '1', cost: 70, hp: 420, range: 1.5, damage: 14, rate: 1, speed: 2.2,
-        melee: true, taunt: 2.5,
-        color: '#a5d6a7', desc: 'Melee tank. Enemy troops nearby are taunted into fighting it',
+      soldier: {
+        name: 'Soldier', key: '1', cost: 60, slots: 1, hp: 300, range: 1.3, damage: 20, rate: 1, speed: 2.3, sight: 5,
+        melee: true,
+        color: '#a5d6a7', desc: 'Sword and shield: the backbone of every wave. Empty wave slots are filled with soldiers',
       },
-      archer: {
-        name: 'Archer', key: '2', cost: 60, hp: 120, range: 4.5, damage: 13, rate: 1.4, speed: 2.4,
-        color: '#4fc3f7', desc: 'Ranged damage, fragile',
-      },
-      frost: {
-        name: 'Frost', key: '3', cost: 90, hp: 220, range: 3.5, damage: 12, rate: 1, speed: 2.2,
-        aoe: true, slow: 0.5, slowTime: 1.5,
-        color: '#b3e5fc', desc: 'Pulses damage and slows every enemy nearby',
-      },
-      mortar: {
-        name: 'Mortar', key: '4', cost: 130, hp: 140, range: 6, minRange: 1.5, damage: 24, rate: 0.5, speed: 1.8,
-        splash: 1.2, siege: 2,
-        color: '#ff8a65', desc: 'Long-range splash. Double damage to towers and cores',
+      scout: {
+        name: 'Scout', key: '2', cost: 50, slots: 1, hp: 110, speed: 4.2, sight: 11, scout: true,
+        color: '#fff59d', desc: 'Very fast, sees far, never fights. While your troops defend, scouts explore on their own, uncovering camps and enemy land',
       },
       medic: {
-        name: 'Medic', key: '5', cost: 90, hp: 130, range: 3, heal: 12, rate: 1, speed: 2.4,
+        name: 'Medic', key: '3', cost: 90, slots: 1, hp: 150, range: 3, heal: 12, rate: 1, speed: 2.4, sight: 5,
         color: '#f48fb1', desc: 'Heals nearby troops, cannot attack',
+      },
+      giant: {
+        name: 'Giant', key: '4', cost: 200, slots: 3, hp: 1800, range: 1.5, damage: 55, rate: 0.6, speed: 1.4, sight: 6,
+        melee: true, cleave: 1.4, knockback: 0.9, siege: 2, size: 1.6,
+        color: '#bcaaa4', desc: 'Takes 3 wave slots. Huge and slow: smashes everything around its target, knocks troops back, double damage to buildings',
       },
     },
 
@@ -182,6 +183,17 @@
   // Price multiplier for going from `level` to `level + 1`: steep past CHEAP_LEVELS.
   CONFIG.latePrice = function (level) {
     return level > CONFIG.CHEAP_LEVELS ? Math.pow(CONFIG.LATE_LEVEL_PRICE, level - CONFIG.CHEAP_LEVELS) : 1;
+  };
+
+  // Sight radius of a structure.
+  CONFIG.structSight = function (kind, level) {
+    if (kind === 'barracks') return CONFIG.BARRACKS_SIGHT;
+    return CONFIG.towerStats(kind, level).range + CONFIG.TOWER_SIGHT_BONUS;
+  };
+
+  // Wave slots a troop type takes.
+  CONFIG.slotsOf = function (kind) {
+    return CONFIG.UNITS[kind].slots || 1;
   };
 
   // Highest level a structure kind can reach.

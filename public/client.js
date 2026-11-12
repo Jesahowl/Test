@@ -40,6 +40,29 @@
   const tctx = terrCanvas.getContext('2d');
   const grid = new Map(); // "x,y" -> tower id
   let terrShapes = []; // [{ owner, path: Path2D in tile units }]
+  // ---- fog of war
+  // vis: what I can see now; explored: what I've ever seen. While fogged, the map shows territory,
+  // buildings and camps as they were when last seen (terrSeen / *Seen maps); enemy troops are only
+  // sent by the server when they're in sight. Spectators see everything.
+  const Vision = window.TD_VISION;
+  const NTILES = C.MAP_W * C.MAP_H;
+  const vis = new Uint8Array(NTILES);
+  const explored = new Uint8Array(NTILES);
+  const terrSeen = new Int32Array(NTILES);
+  let terrView = terr; // what the territory layer draws
+  let fogOn = false;
+  let fogWasOn = null;
+  let towersSeen = new Map();
+  let coresSeen = new Map();
+  let campsSeen = new Map();
+  let towersView = new Map();
+  let coresView = new Map();
+  let campsView = [];
+  const fogCanvas = document.createElement('canvas');
+  fogCanvas.width = C.MAP_W;
+  fogCanvas.height = C.MAP_H;
+  const fogCtx = fogCanvas.getContext('2d');
+  const fogImg = fogCtx.createImageData(C.MAP_W, C.MAP_H);
   let terrStamp = 0; // bumps whenever territory changes
 
   const cam = { x: C.MAP_W / 2, y: C.MAP_H / 2, zoom: 1 };
@@ -110,6 +133,7 @@
           lastKiller = 0;
         }
         $('roundover').classList.add('hidden');
+        if (!myId || (round && msg.round !== round.n)) resetFog();
         myId = msg.id;
         centerOnMe = true;
         clearSelection();
@@ -183,6 +207,83 @@
     return [smp[0].x, smp[0].y];
   }
 
+  const seesTile = (x, y) => vis[Math.floor(y) * C.MAP_W + Math.floor(x)] === 1;
+
+  // Recompute my sight and the remembered map. terrChanged: new territory arrived this update.
+  function updateFog(terrChanged) {
+    fogOn = !!(myId && players.has(myId) && !spectating);
+    let redraw = terrChanged || fogOn !== fogWasOn;
+    fogWasOn = fogOn;
+    if (!fogOn) {
+      terrView = terr;
+      towersView = towers;
+      coresView = players;
+      campsView = camps;
+      if (redraw) drawTerritory();
+      return;
+    }
+    const me0 = players.get(myId);
+    const sources = [{ x: me0.x + 0.5, y: me0.y + 0.5, r: C.CORE_SIGHT }];
+    for (const t of towers.values()) if (t.owner === myId) sources.push({ x: t.x + 0.5, y: t.y + 0.5, r: C.structSight(t.kind, t.level) });
+    for (const u of units.values()) if (u.owner === myId) sources.push({ x: u.x, y: u.y, r: C.UNITS[u.kind].sight || 5 });
+    Vision.computeVision(vis, C.MAP_W, C.MAP_H, myId, terr, sources);
+    for (let k = 0; k < NTILES; k++) {
+      if (!vis[k]) continue;
+      explored[k] = 1;
+      if (terrSeen[k] !== terr[k]) {
+        terrSeen[k] = terr[k];
+        redraw = true;
+      }
+    }
+    terrView = terrSeen;
+    if (redraw) drawTerritory();
+    // Buildings, cores and camps: live while in sight, otherwise as last seen.
+    const remember = (seen, live, posOf) => {
+      for (const [id, o] of live) {
+        const [x, y] = posOf(o);
+        if (seesTile(x, y) || o.owner === myId || o.id === myId) seen.set(id, o);
+      }
+      for (const [id, o] of seen) {
+        const [x, y] = posOf(o);
+        if (!live.has(id) && seesTile(x, y)) seen.delete(id); // gone, and we can see it's gone
+      }
+      return seen;
+    };
+    towersView = remember(towersSeen, towers, (t) => [t.x, t.y]);
+    coresView = remember(coresSeen, players, (p) => [p.x, p.y]);
+    campsView = [...remember(campsSeen, campMap, (c) => [c.x, c.y]).values()];
+    // Fog image: clear where I see, dim where I've been, dark where I've never looked.
+    const d = fogImg.data;
+    for (let k = 0; k < NTILES; k++) {
+      d[k * 4] = 8;
+      d[k * 4 + 1] = 11;
+      d[k * 4 + 2] = 15;
+      d[k * 4 + 3] = vis[k] ? 0 : explored[k] ? 120 : 246;
+    }
+    fogCtx.putImageData(fogImg, 0, 0);
+  }
+
+  function resetFog() {
+    vis.fill(0);
+    explored.fill(0);
+    terrSeen.fill(0);
+    towersSeen = new Map();
+    coresSeen = new Map();
+    campsSeen = new Map();
+    fogWasOn = null;
+  }
+
+  function drawFog() {
+    if (!fogOn) return;
+    const s = scale();
+    const [ox, oy] = toScreen(0, 0);
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(fogCanvas, ox, oy, C.MAP_W * s, C.MAP_H * s);
+    ctx.restore();
+  }
+
   function applyState(msg) {
     me = msg.me;
     const now = performance.now();
@@ -214,7 +315,6 @@
     });
     players.clear();
     for (const [id, p] of np) players.set(id, p);
-    if (msg.terr) drawTerritory();
 
     towers = merge(towers, msg.towers, (a, old) => {
       const t = { id: a[0], kind: KIND_KEYS[a[1]], x: a[2], y: a[3], owner: a[4], level: a[5], hp: a[6], maxHp: a[7], ruinOf: a[8] || '',
@@ -262,6 +362,7 @@
 
     campMap = merge(campMap, msg.camps, (a) => ({ id: a[0], x: a[1], y: a[2], type: CAMP_KEYS[a[3]], alive: !!a[4], respawn: a[5] }));
     camps = [...campMap.values()];
+    updateFog(!!msg.terr);
 
     for (const f of msg.fx) {
       effects.push({ ...f, born: now + INTERP_DELAY }); // shown in step with the delayed troops
@@ -344,13 +445,13 @@
       }
     }
     if (best) return { k: 'u', id: best.id };
-    for (const p of players.values()) {
+    for (const p of coresView.values()) {
       if (Math.hypot(p.x + 0.5 - wx, p.y + 0.5 - wy) < 1.1) return { k: 'c', id: p.id };
     }
     const tid = grid.get(`${Math.floor(wx)},${Math.floor(wy)}`);
-    const t = tid && towers.get(tid);
+    const t = tid && towersView.get(tid);
     if (t && t.owner) return { k: 't', id: t.id };
-    for (const c of camps) {
+    for (const c of campsView) {
       if (c.alive && Math.hypot(c.x + 0.5 - wx, c.y + 0.5 - wy) < 1.8) return { k: 'j', id: c.id };
     }
     return null;
@@ -386,12 +487,12 @@
     };
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
-        const o = terr[y * W + x];
+        const o = terrView[y * W + x];
         if (!o) continue;
-        if (y === 0 || terr[(y - 1) * W + x] !== o) add(x, y, x + 1, y, o);
-        if (x === W - 1 || terr[y * W + x + 1] !== o) add(x + 1, y, x + 1, y + 1, o);
-        if (y === H - 1 || terr[(y + 1) * W + x] !== o) add(x + 1, y + 1, x, y + 1, o);
-        if (x === 0 || terr[y * W + x - 1] !== o) add(x, y + 1, x, y, o);
+        if (y === 0 || terrView[(y - 1) * W + x] !== o) add(x, y, x + 1, y, o);
+        if (x === W - 1 || terrView[y * W + x + 1] !== o) add(x + 1, y, x + 1, y + 1, o);
+        if (y === H - 1 || terrView[(y + 1) * W + x] !== o) add(x + 1, y + 1, x, y + 1, o);
+        if (x === 0 || terrView[y * W + x - 1] !== o) add(x, y + 1, x, y, o);
       }
     }
     const used = new Uint8Array(own.length);
@@ -573,29 +674,42 @@
     ctx.fillStyle = fill;
     ctx.beginPath();
     switch (kind) {
-      case 'archer':
-        ctx.arc(x, y, r * 0.75, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      case 'soldier': {
+        // shield with a sword behind it
+        ctx.strokeStyle = '#e6edf3';
+        ctx.lineWidth = Math.max(1.2, r * 0.16);
+        ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.moveTo(x, y - r * 0.85);
-        ctx.lineTo(x + r * 0.35, y - r * 0.2);
-        ctx.lineTo(x - r * 0.35, y - r * 0.2);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillRect(x - r * 0.09, y - r * 0.25, r * 0.18, r * 0.75);
-        break;
-      case 'guard':
-        ctx.moveTo(x - r * 0.8, y - r * 0.75);
-        ctx.lineTo(x + r * 0.8, y - r * 0.75);
-        ctx.lineTo(x + r * 0.8, y);
-        ctx.quadraticCurveTo(x + r * 0.7, y + r * 0.7, x, y + r * 0.95);
-        ctx.quadraticCurveTo(x - r * 0.7, y + r * 0.7, x - r * 0.8, y);
+        ctx.moveTo(x - r * 0.75, y + r * 0.75);
+        ctx.lineTo(x + r * 0.75, y - r * 0.75);
+        ctx.stroke();
+        ctx.lineCap = 'butt';
+        ctx.fillStyle = fill;
+        ctx.beginPath();
+        ctx.moveTo(x - r * 0.6, y - r * 0.6);
+        ctx.lineTo(x + r * 0.6, y - r * 0.6);
+        ctx.lineTo(x + r * 0.6, y);
+        ctx.quadraticCurveTo(x + r * 0.5, y + r * 0.55, x, y + r * 0.75);
+        ctx.quadraticCurveTo(x - r * 0.5, y + r * 0.55, x - r * 0.6, y);
         ctx.closePath();
         ctx.fill();
         ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-        ctx.lineWidth = Math.max(1, r * 0.12);
+        ctx.lineWidth = Math.max(1, r * 0.1);
         ctx.stroke();
+        break;
+      }
+      case 'scout':
+        // a swift chevron with an eye
+        ctx.moveTo(x, y - r * 0.85);
+        ctx.lineTo(x + r * 0.75, y + r * 0.65);
+        ctx.lineTo(x, y + r * 0.25);
+        ctx.lineTo(x - r * 0.75, y + r * 0.65);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.beginPath();
+        ctx.arc(x, y - r * 0.05, r * 0.18, 0, Math.PI * 2);
+        ctx.fill();
         break;
       case 'medic':
         ctx.arc(x, y, r * 0.8, 0, Math.PI * 2);
@@ -604,22 +718,27 @@
         ctx.fillRect(x - r * 0.14, y - r * 0.5, r * 0.28, r);
         ctx.fillRect(x - r * 0.5, y - r * 0.14, r, r * 0.28);
         break;
-      case 'frost':
-        for (let i = 0; i < 6; i++) {
-          const a = (Math.PI / 3) * i;
-          ctx.lineTo(x + Math.cos(a) * r * 0.85, y + Math.sin(a) * r * 0.85);
-        }
-        ctx.closePath();
+      case 'giant': {
+        // a hulking body with a club
+        ctx.arc(x, y + r * 0.1, r * 0.78, 0, Math.PI * 2);
         ctx.fill();
-        break;
-      case 'mortar':
-        ctx.arc(x, y, r * 0.85, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
         ctx.beginPath();
-        ctx.arc(x, y, r * 0.4, 0, Math.PI * 2);
+        ctx.arc(x, y - r * 0.45, r * 0.32, 0, Math.PI * 2);
         ctx.fill();
+        ctx.fillStyle = fill;
+        ctx.beginPath();
+        ctx.arc(x, y - r * 0.48, r * 0.26, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#6d4c41';
+        ctx.save();
+        ctx.translate(x + r * 0.6, y - r * 0.1);
+        ctx.rotate(0.5);
+        roundRect(-r * 0.12, -r * 0.7, r * 0.24, r * 0.95, r * 0.12);
+        ctx.fill();
+        ctx.restore();
         break;
+      }
       case 'barracks':
         // a hall with a pitched roof and a door
         ctx.fillRect(x - r * 0.8, y - r * 0.2, r * 1.6, r * 0.95);
@@ -1052,7 +1171,7 @@
     const s = scale();
     const now = performance.now();
     const hover = grid.get(`${Math.floor(mouse.wx)},${Math.floor(mouse.wy)}`);
-    for (const t of towers.values()) {
+    for (const t of towersView.values()) {
       const [x, y] = toScreen(t.x + 0.5, t.y + 0.5);
       if (!onScreen(x, y, s * 3)) continue;
       if (t.ruin || !t.owner) {
@@ -1098,9 +1217,9 @@
 
   function drawUnits(dt) {
     const s = scale();
-    const r = s * 0.34;
     const rt = renderTime();
     for (const u of units.values()) {
+      const r = s * 0.34 * (C.UNITS[u.kind].size || 1);
       [u.rx, u.ry] = interpPos(u, rt);
       const [x, y] = toScreen(u.rx, u.ry);
       if (!onScreen(x, y, s)) continue;
@@ -1143,7 +1262,7 @@
 
   function drawCamps() {
     const s = scale();
-    for (const c of camps) {
+    for (const c of campsView) {
       const [x, y] = toScreen(c.x + 0.5, c.y + 0.5);
       if (!onScreen(x, y, s * 3)) continue;
       ctx.save();
@@ -1226,7 +1345,7 @@
   function drawCores(dt) {
     const s = scale();
     const now = performance.now();
-    for (const p of players.values()) {
+    for (const p of coresView.values()) {
       const [x, y] = toScreen(p.x + 0.5, p.y + 0.5);
       if (!onScreen(x, y, s * 3)) continue;
       const r = s * 0.75;
@@ -1352,7 +1471,7 @@
 
   function drawEffects(now) {
     const s = scale();
-    effects = effects.filter((f) => now - f.born < (f.k === 'coreDown' || f.k === 'buff' ? 1200 : f.k === 'campSpawn' || f.k === 'campLeave' ? 1000 : f.k === 'wave' ? 700 : f.k === 'gold' ? 1100 : 450));
+    effects = effects.filter((f) => now - f.born < (f.k === 'coreDown' || f.k === 'buff' ? 1200 : f.k === 'smash' ? 500 : f.k === 'campSpawn' || f.k === 'campLeave' ? 1000 : f.k === 'wave' ? 700 : f.k === 'gold' ? 1100 : 450));
     for (const f of effects) {
       const age = (now - f.born) / 1000;
       if (age < 0) continue; // not due yet (effects are delayed to match troop interpolation)
@@ -1453,6 +1572,22 @@
           ctx.globalAlpha = Math.max(0, 1 - p * p);
           label(`+${f.n}g`, x, y - s * (0.6 + p * 1.4), Math.round((big ? 18 : 13) + (big ? 4 : 0) * (1 - p)), '#ffd54f');
           ctx.globalAlpha = 1;
+          break;
+        }
+        case 'smash': {
+          // giant's club: shockwave ring and flying dirt
+          const [x, y] = toScreen(f.x, f.y);
+          const p = age / 0.5;
+          ctx.strokeStyle = `rgba(215, 168, 110, ${1 - p})`;
+          ctx.lineWidth = 5 * (1 - p) + 1;
+          ctx.beginPath();
+          ctx.arc(x, y, s * f.r * (0.3 + p * 0.9), 0, Math.PI * 2);
+          ctx.stroke();
+          for (let i = 0; i < 6; i++) {
+            const a = (Math.PI * 2 * i) / 6 + 0.4;
+            ctx.fillStyle = `rgba(120, 95, 70, ${0.8 * (1 - p)})`;
+            ctx.fillRect(x + Math.cos(a) * s * f.r * p - 2, y + Math.sin(a) * s * f.r * p - 2 - Math.sin(p * Math.PI) * s * 0.4, 4, 4);
+          }
           break;
         }
         case 'campSpawn': {
@@ -1762,7 +1897,8 @@
     const sy = H / C.MAP_H;
     mctx.clearRect(0, 0, W, H);
     mctx.drawImage(terrCanvas, 0, 0, W, H);
-    for (const c of camps) {
+    if (fogOn) mctx.drawImage(fogCanvas, 0, 0, W, H);
+    for (const c of campsView) {
       if (!c.alive) {
         // where a camp will appear next
         mctx.strokeStyle = 'rgba(201, 166, 107, 0.6)';
@@ -1777,7 +1913,7 @@
       mctx.fillStyle = u.owner === myId ? '#ffffff' : colorOf(u.owner, 70);
       mctx.fillRect(u.x * sx - 0.75, u.y * sy - 0.75, 1.5, 1.5);
     }
-    for (const p of players.values()) {
+    for (const p of coresView.values()) {
       mctx.fillStyle = p.id === myId ? '#fff' : colorOf(p.id, 60);
       mctx.beginPath();
       mctx.arc((p.x + 0.5) * sx, (p.y + 0.5) * sy, p.id === myId ? 4 : 3, 0, Math.PI * 2);
@@ -1824,8 +1960,8 @@
         <div class="head"><span class="icon" style="background:${u.color}"></span><b>${u.name}</b><span class="lvl"></span></div>
         <div class="count"></div>
         <div class="btns">
-          <button class="rem" title="One fewer ${u.name} per wave (its slot goes back to guards/archers)">−</button>
-          <button class="add" title="Make one more wave slot a ${u.name} (free; barracks add slots)"></button>
+          <button class="rem" title="One fewer ${u.name} per wave (its slots go back to soldiers)">−</button>
+          <button class="add" title="Put one more ${u.name} in every wave (free; uses ${C.slotsOf(kind)} wave slot${C.slotsOf(kind) > 1 ? 's' : ''}; barracks add slots)"></button>
           <button class="up" title="Level up: applies to ${u.name}s from the next wave"></button>
         </div>`;
       card.querySelector('.add').onclick = () => sendMsg({ t: 'army', op: 'add', kind });
@@ -1932,7 +2068,7 @@
     const gold = me.gold;
     const sorted = [...players.values()].sort((a, b) => b.territory - a.territory);
     const rank = sorted.findIndex((q) => q.id === myId) + 1;
-    const myTroops = [...units.values()].filter((u) => u.owner === myId).length;
+    const myTroops = [...units.values()].filter((u) => u.owner === myId).reduce((n, u) => n + C.slotsOf(u.kind), 0);
     const perWave = me.waveSize;
     updateRound();
     $('stats').innerHTML = `
@@ -1970,9 +2106,14 @@
   // Same as the server's waveList: assigned slots, then guards/archers.
   function waveListOf(m) {
     const list = [];
-    for (const kind of UNIT_KEYS) for (let i = 0; i < m.army[kind] && list.length < m.waveSize; i++) list.push(kind);
-    let i = 0;
-    while (list.length < m.waveSize) list.push(i++ % 2 ? 'archer' : 'guard');
+    let used = 0;
+    for (const kind of UNIT_KEYS) {
+      for (let i = 0; i < m.army[kind] && used + C.slotsOf(kind) <= m.waveSize; i++) {
+        list.push(kind);
+        used += C.slotsOf(kind);
+      }
+    }
+    for (; used < m.waveSize; used++) list.push('soldier');
     return list;
   }
 
@@ -1990,8 +2131,7 @@
     bb.classList.toggle('poor', maxed || gold < bCost);
     bb.querySelector('.cost').textContent = maxed ? `${owned}/${C.MAX_BARRACKS} max` : `${bCost}g · ${owned}/${C.MAX_BARRACKS}`;
     // Wave slots: assigned ones per type; the rest are filled with guards and archers.
-    const assigned = UNIT_KEYS.reduce((n, k) => n + me.army[k], 0);
-    const full = assigned >= me.waveSize;
+    const assigned = UNIT_KEYS.reduce((n, k) => n + me.army[k] * C.slotsOf(k), 0);
     const list = waveListOf(me);
     for (const card of document.querySelectorAll('#army .troop')) {
       const kind = card.dataset.kind;
@@ -2001,10 +2141,13 @@
       const upCost = lvl < C.MAX_LEVEL ? C.armyLevelCost(kind, lvl) : 0;
       card.classList.toggle('off', n === 0);
       card.querySelector('.lvl').textContent = `Lv${lvl}`;
-      card.querySelector('.count').textContent = n ? `×${n} per wave${n > set ? ` (${n - set} auto)` : ''}` : 'not in waves';
+      const slots = C.slotsOf(kind);
+      card.querySelector('.count').textContent = n
+        ? `×${n} per wave${n > set ? ` (${n - set} auto)` : ''}${slots > 1 ? ` · ${n * slots} slots` : ''}`
+        : slots > 1 ? `not in waves · ${slots} slots each` : 'not in waves';
       const add = card.querySelector('.add');
       add.textContent = '+';
-      add.disabled = full;
+      add.disabled = assigned + slots > me.waveSize;
       const up = card.querySelector('.up');
       up.textContent = lvl < C.MAX_LEVEL ? `▲ ${upCost}g` : 'MAX';
       up.disabled = lvl >= C.MAX_LEVEL || gold < upCost;
@@ -2031,7 +2174,7 @@
         const u = list[0];
         const st = C.towerStats(u.kind, u.level);
         const d = C.UNITS[u.kind];
-        $('sel-info').textContent = `Lv${u.level} · HP ${u.hp}/${u.maxHp} · ${d.heal ? `heals ${st.heal.toFixed(0)}/s` : `${st.damage.toFixed(0)} dmg, range ${st.range}`} · ${u.attack ? `attacking ${targetName(u.attack)}` : `defending ${targetName(u.anchor ? `t:${u.anchor}` : `c:${u.owner}`)}`}`;
+        $('sel-info').textContent = `Lv${u.level} · HP ${u.hp}/${u.maxHp} · ${d.heal ? `heals ${st.heal.toFixed(0)}/s` : d.scout ? `sees ${d.sight} tiles, never fights` : `${st.damage.toFixed(0)} dmg, range ${st.range}`} · ${u.attack ? `attacking ${targetName(u.attack)}` : `defending ${targetName(u.anchor ? `t:${u.anchor}` : `c:${u.owner}`)}`}`;
       } else {
         $('sel-info').textContent = '';
       }
@@ -2429,12 +2572,13 @@
 
     drawBackground();
     drawCamps();
-    drawOverlay();
     drawTowers(dt);
     drawCreeps(dt);
     drawUnits(dt);
     drawCores(dt);
     drawEffects(now);
+    drawFog();
+    drawOverlay();
     if (myId || spectating) drawMinimap();
 
     hudTimer -= dt;

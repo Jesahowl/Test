@@ -11,6 +11,7 @@
 // - Jungle camps are neutral monsters that sit still, fight back when attacked, and pay out.
 
 const C = require('../shared/config');
+const Vision = require('../shared/vision');
 const Path = require('../shared/pathfinding');
 
 const BOT_NAMES = [
@@ -180,6 +181,8 @@ class Game {
       earned: { income: 0, troops: 0, camps: 0, towers: 0, cores: 0 }, // gold by source
       spawnTime: this.time,
       buffUntil: 0, // jungle buff active until this time
+      vis: new Uint8Array(this.w * this.h), // fog of war: what this player sees now
+      explored: new Uint8Array(this.w * this.h), // ...and everywhere they have seen
       army,
       levels,
       order: { type: 'defend', anchor: 0 },
@@ -544,22 +547,34 @@ class Game {
     return C.waveSize(this.countOwned(p.id, 'barracks'));
   }
 
-  // The troops of the next wave, in order: assigned slots first, the rest guards and archers.
+  // The troops of the next wave, in order: assigned slots first (a giant takes 3), the rest soldiers.
   waveList(p) {
     const size = this.waveSize(p);
     const list = [];
-    for (const kind of UNIT_KEYS) for (let i = 0; i < p.army[kind] && list.length < size; i++) list.push(kind);
-    let i = 0;
-    while (list.length < size) list.push(i++ % 2 ? 'archer' : 'guard');
+    let used = 0;
+    for (const kind of UNIT_KEYS) {
+      for (let i = 0; i < p.army[kind] && used + C.slotsOf(kind) <= size; i++) {
+        list.push(kind);
+        used += C.slotsOf(kind);
+      }
+    }
+    for (; used < size; used++) list.push('soldier');
     return list;
+  }
+
+  slotsUsed(p) {
+    return UNIT_KEYS.reduce((n, k) => n + p.army[k] * C.slotsOf(k), 0);
   }
 
   // Assigning wave slots is free; barracks are what add slots.
   armyAdd(pid, kind) {
     const p = this.players.get(pid);
     if (!p || !p.alive || !C.UNITS[kind]) return 'Invalid troop type';
-    const total = UNIT_KEYS.reduce((n, k) => n + p.army[k], 0);
-    if (total >= this.waveSize(p)) return 'Every wave slot is assigned: build a barracks for more, or remove a troop';
+    if (this.slotsUsed(p) + C.slotsOf(kind) > this.waveSize(p)) {
+      return C.slotsOf(kind) > 1
+        ? `Not enough free wave slots (a ${C.UNITS[kind].name} takes ${C.slotsOf(kind)}): build a barracks, or remove a troop`
+        : 'Every wave slot is assigned: build a barracks for more, or remove a troop';
+    }
     p.army[kind]++;
     return null;
   }
@@ -730,18 +745,22 @@ class Game {
   // The core sends BASE_WAVE troops; each barracks sends its BARRACKS_TROOPS from where it stands.
   spawnWave(p) {
     if (!this.orderValid(p.id, p.order)) p.order = { type: 'defend', anchor: 0 };
-    let alive = 0;
-    for (const u of this.units.values()) if (u.owner === p.id) alive++;
+    let alive = 0; // in wave slots: a giant counts as 3
+    for (const u of this.units.values()) if (u.owner === p.id) alive += C.slotsOf(u.kind);
     const cap = C.unitCap(p.territory, this.waveSize(p));
     const barracks = [...this.towers.values()].filter((t) => t.owner === p.id && t.kind === 'barracks')
       .sort((a, b) => a.id - b.id).slice(0, C.MAX_BARRACKS);
     const list = this.waveList(p);
     let spawned = 0;
-    for (let i = 0; i < list.length && alive < cap; i++) {
-      const slot = i - C.BASE_WAVE;
+    let slotAt = 0;
+    for (const kind of list) {
+      const n = C.slotsOf(kind);
+      if (alive + n > cap) break;
+      const slot = slotAt - C.BASE_WAVE;
       const from = slot < 0 ? null : barracks[Math.floor(slot / C.BARRACKS_TROOPS)];
-      this.spawnTroop(p, list[i], from);
-      alive++;
+      this.spawnTroop(p, kind, from);
+      slotAt += n;
+      alive += n;
       spawned++;
     }
     if (spawned) {
@@ -1242,6 +1261,26 @@ class Game {
         if (c !== target && !c.dead && dist(tx, ty, c.x, c.y) <= def.splash) this.damageCreep(c, base, u.owner);
       }
       this.fx.push({ k: 'shell', x1: round2(u.x), y1: round2(u.y), x2: round2(tx), y2: round2(ty), r: def.splash });
+    } else if (def.cleave) {
+      // Giant: smash the target and everything around it, knocking troops back.
+      const hit = [target];
+      for (const v of this.nearUnits(tx, ty, def.cleave)) {
+        if (v !== target && v.owner !== u.owner && dist(tx, ty, v.x, v.y) <= def.cleave) hit.push(v);
+      }
+      for (const c of this.creeps.values()) {
+        if (c !== target && !c.dead && dist(tx, ty, c.x, c.y) <= def.cleave) hit.push(c);
+      }
+      for (const v of hit) {
+        this.hurt(v, v === target ? dmg : base * home, u.owner);
+        if (v.isUnit && this.units.has(v.id)) {
+          const d = dist(u.x, u.y, v.x, v.y) || 1;
+          v.x = Math.max(0.5, Math.min(this.w - 0.5, v.x + ((v.x - u.x) / d) * def.knockback));
+          v.y = Math.max(0.5, Math.min(this.h - 0.5, v.y + ((v.y - u.y) / d) * def.knockback));
+          v.path = [];
+          v.dest = null;
+        }
+      }
+      this.fx.push({ k: 'smash', x: round2(tx), y: round2(ty), r: def.cleave });
     } else if (def.melee) {
       this.hurt(target, dmg, u.owner);
       this.fx.push({ k: 'slash', x: round2(tx), y: round2(ty) });
@@ -1388,6 +1427,13 @@ class Game {
         }
       }
 
+      if (def.scout) {
+        // Scouts never fight. With an attack order they run to the target; otherwise they explore.
+        if (tgt) this.marchTo(u, tgt.goal, tgt.x, tgt.y, 2, speed, dt);
+        else this.scoutTick(u, speed, dt);
+        continue;
+      }
+
       if (tgt && tgt.unit && !def.heal) {
         // Hunting: focus on the chosen troop, ignoring everything else until it's down.
         const v = tgt.unit;
@@ -1494,6 +1540,86 @@ class Game {
 
   // Medics heal every friendly troop in range and keep close to the fighting. Returns true if
   // the medic's movement for this tick is handled.
+  // A scout heads for places its owner hasn't seen yet (staying clear of enemy guns), picking a
+  // new spot when it arrives or after SCOUT_LEG_TIME seconds.
+  scoutTick(u, speed, dt) {
+    const p = this.players.get(u.owner);
+    if (!p) return;
+    if (!u.scoutTo || this.time > u.scoutUntil || dist(u.x, u.y, u.scoutTo.x, u.scoutTo.y) < 1.5) {
+      u.scoutTo = this.pickScoutSpot(u, p);
+      u.scoutUntil = this.time + C.SCOUT_LEG_TIME;
+    }
+    const { x, y } = u.scoutTo;
+    this.marchTo(u, this.idx(Math.floor(x), Math.floor(y)), x, y, 1, speed, dt);
+  }
+
+  pickScoutSpot(u, p) {
+    let best = null;
+    let bestScore = -Infinity;
+    for (let i = 0; i < 16; i++) {
+      const a = this.rand() * Math.PI * 2;
+      const r = 6 + this.rand() * C.SCOUT_RANGE;
+      const x = Math.max(2, Math.min(this.w - 3, p.core.x + Math.cos(a) * r));
+      const y = Math.max(2, Math.min(this.h - 3, p.core.y + Math.sin(a) * r));
+      let danger = false;
+      for (const t of this.towers.values()) {
+        if (t.owner && t.owner !== p.id && dist(x, y, t.x, t.y) < C.structSight(t.kind, t.level)) danger = true;
+      }
+      for (const q of this.players.values()) if (q.id !== p.id && dist(x, y, q.core.x, q.core.y) < C.CORE_RANGE + 2) danger = true;
+      if (danger) continue;
+      let unseen = 0;
+      for (let dy = -4; dy <= 4; dy += 2) {
+        for (let dx = -4; dx <= 4; dx += 2) {
+          const tx = Math.floor(x + dx);
+          const ty = Math.floor(y + dy);
+          if (this.inBounds(tx, ty) && !(p.explored && p.explored[this.idx(tx, ty)])) unseen++;
+        }
+      }
+      const score = unseen * 10 - dist(u.x, u.y, x, y) * 0.3 + this.rand() * 5;
+      if (score > bestScore) {
+        bestScore = score;
+        best = { x, y };
+      }
+    }
+    return best || { x: p.core.x + 0.5, y: p.core.y + 0.5 };
+  }
+
+  // ---------------------------------------------------------------- fog of war
+
+  // What each player can see right now (p.vis), and everywhere they have ever seen (p.explored).
+  updateVision() {
+    const n = this.w * this.h;
+    const sources = new Map();
+    for (const p of this.players.values()) {
+      if (!p.alive) continue;
+      sources.set(p.id, [{ x: p.core.x + 0.5, y: p.core.y + 0.5, r: C.CORE_SIGHT }]);
+    }
+    for (const t of this.towers.values()) {
+      const list = sources.get(t.owner);
+      if (list) list.push({ x: t.x + 0.5, y: t.y + 0.5, r: C.structSight(t.kind, t.level) });
+    }
+    for (const u of this.units.values()) {
+      const list = sources.get(u.owner);
+      if (list) list.push({ x: u.x, y: u.y, r: C.UNITS[u.kind].sight || 5 });
+    }
+    for (const [pid, list] of sources) {
+      const p = this.players.get(pid);
+      if (!p.vis) {
+        p.vis = new Uint8Array(n);
+        p.explored = new Uint8Array(n);
+      }
+      Vision.computeVision(p.vis, this.w, this.h, pid, this.terr, list);
+      for (let k = 0; k < n; k++) if (p.vis[k]) p.explored[k] = 1;
+    }
+  }
+
+  // Can player p see world point (x, y)?
+  sees(p, x, y) {
+    const tx = Math.floor(x);
+    const ty = Math.floor(y);
+    return !!p.vis && this.inBounds(tx, ty) && p.vis[this.idx(tx, ty)] === 1;
+  }
+
   medicTick(u, def, s, tgt, speed, dt) {
     let healed = 0;
     let patient = null;
@@ -1693,11 +1819,11 @@ class Game {
     }
 
     // Shape the wave: assign free slots to a mix of troop types (free), then buy levels.
-    const assigned = UNIT_KEYS.reduce((n, k) => n + p.army[k], 0);
+    const assigned = this.slotsUsed(p);
     if (assigned < this.waveSize(p)) {
       const r = this.rand();
-      const kind = r < 0.3 ? 'guard' : r < 0.6 ? 'archer' : r < 0.72 ? 'frost' : r < 0.86 ? 'mortar' : 'medic';
-      this.armyAdd(p.id, kind);
+      const kind = !p.army.scout ? 'scout' : r < 0.55 ? 'soldier' : r < 0.75 ? 'medic' : 'giant';
+      if (this.armyAdd(p.id, kind)) this.armyAdd(p.id, 'soldier'); // e.g. no room for a giant
     } else if (p.gold >= 120 && roll < 0.7) {
       const kinds = UNIT_KEYS.filter((k) => p.army[k] > 0 && p.levels[k] < C.MAX_LEVEL);
       if (kinds.length) this.armyLevel(p.id, kinds[Math.floor(this.rand() * kinds.length)]);
@@ -1803,6 +1929,8 @@ class Game {
     }
 
     if (this.terrDirty) this.recomputeTerritory();
+    this.visionTick = (this.visionTick || 0) + 1;
+    if (this.visionTick % 2 === 0) this.updateVision();
     this.checkRoundOver();
   }
 

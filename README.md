@@ -24,8 +24,9 @@ AI bots fill the server up to 6 players, so it's playable alone too.
 |---|---|
 | **Waves** | Every 20s your core sends out a free wave of **5 troops**. |
 | **Barracks** | Build **barracks** (`R`, on your own land) for **+5 troops in every wave**. Each barracks' 5 march out from the barracks itself and guard it while your standing order is "defend home". Up to 5 barracks (30 troops per wave). They cost 250g, then 150g more for each one you own. They don't shoot or level up, and like towers they can be destroyed or captured: whoever takes one gets its +5. |
-| **Army mix** | The army panel decides **which troops fill your wave slots**, for free (`1`–`5` / `+`). Unassigned slots are filled with guards and archers. Gold goes into **levelling troop types** (`Shift`+number), barracks and towers. |
+| **Army mix** | The army panel decides **which troops fill your wave slots**, for free (`1`–`4` / `+`). A giant takes 3 slots. Unassigned slots are filled with soldiers. Gold goes into **levelling troop types** (`Shift`+number), barracks and towers. |
 | **Orders** | **Right-click** an enemy tower or core to attack it, or one of your own towers or your core to defend there. Who goes depends on the **Send slider** in the bar (5% steps; it shows how many of your troops that is, e.g. "12 of 20"): at 100% every troop goes and every future wave follows; below 100% only that share of your current troops goes (nearest to the target first, keeping your army's mix of types) and new waves keep their orders, so you can split your forces. Select specific troops first (click, Shift-click, `Q` = all) to command exactly those. `H` brings everyone home. |
+| **Fog of war** | You only see your own land, plus what your core (9 tiles), towers (range + 2), barracks and troops can see; scouts see furthest. Places you've seen stay on the map, dimmed, **as they were when you last saw them**. Enemy troops in the fog aren't even sent to your browser. Spectators see everything. |
 | **Hunting** | **Right-click an enemy troop** to send your troops after it. They chase it down and focus it, ignoring other enemies on the way. When it dies they go after its squadmates within 6 tiles, then head home once the squad is gone. A red crosshair marks troops you're hunting. Hunts use the Send slider (or your selection) like other orders, but never redirect new waves. |
 | **The push** | Troops march across the map (pathfinding around structures), fight whatever they meet, then hit the target. When a tower falls, the push rolls on to that player's next tower, then their core. |
 | **Towers** | Claim land and shoot enemy troops. Your core shoots too. Place them on your land, or **leapfrog** up to 3 tiles past your border onto unclaimed ground. |
@@ -41,13 +42,12 @@ AI bots fill the server up to 6 players, so it's playable alone too.
 
 ### Troops
 
-| Key | Troop | Level 2 | HP | Role |
-|---|---|---|---|---|
-| `1` | Guard | 140g | 420 | Melee tank. Enemy troops nearby are taunted into fighting it first |
-| `2` | Archer | 120g | 120 | Ranged damage, fragile |
-| `3` | Frost | 180g | 220 | Pulses damage and slows every enemy around it |
-| `4` | Mortar | 260g | 140 | Long-range splash, **double damage to towers and cores** |
-| `5` | Medic | 180g | 130 | Heals nearby troops, never attacks |
+| Key | Troop | Wave slots | Level 2 | HP | Role |
+|---|---|---|---|---|---|
+| `1` | Soldier | 1 | 120g | 300 | Sword and shield: the backbone of every wave. Unassigned slots are filled with soldiers |
+| `2` | Scout | 1 | 100g | 110 | Very fast, sees 11 tiles, **never fights**. While your troops defend, scouts **explore on their own**, heading for ground you haven't seen and staying clear of enemy guns |
+| `3` | Medic | 1 | 180g | 150 | Heals nearby troops, never attacks |
+| `4` | Giant | **3** | 400g | 1800 | Huge and slow. **Smashes everything around its target**, knocks troops back, double damage to buildings |
 
 `Shift`+number levels a type up
 (+50% HP, +60% damage, +0.5 range per level, **max 5**); levels apply to troops spawned after.
@@ -63,7 +63,7 @@ and get a turning gold rune ring at level 4 and a radiant aura at level 5.
 | Left-click | Select a troop (`Shift` adds), or a tower / ruin |
 | `Q` / `Esc` | Select all troops / clear selection |
 | `H` | All troops and new waves defend your core |
-| `1`–`5` (`Shift` = level up) | Put a troop type in one more wave slot (free) |
+| `1`–`4` (`Shift` = level up) | Put a troop type in one more wave slot (free) |
 | `R` | Place a barracks (your own land only): +5 troops per wave |
 | `B` | Place a tower (shows where you can leap, and the land you'd gain or take) |
 | `U` / `Del` | Upgrade / sell the selected tower |
@@ -80,6 +80,7 @@ rounds (`ROUND_JOIN_WINDOW`, `ROUND_SUDDEN_DEATH`, `SUDDEN_DEATH_*`, `ROUND_RESE
 ```
 shared/config.js       game constants + stat/cost helpers (used by Node and the browser)
 shared/pathfinding.js  flow-field Dijkstra used by marching troops
+shared/vision.js       fog of war: who can see which tiles (server filtering + client drawing)
 server/game.js         authoritative simulation: territory, waves, troops, towers, jungle, captures, bots
 server/index.js        HTTP static server + WebSocket, 20 Hz tick, state broadcast
 public/                canvas client (index.html, client.js, style.css)

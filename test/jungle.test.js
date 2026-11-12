@@ -10,7 +10,7 @@ test('camps spawn across the map and stay passive until attacked', () => {
   assert.strictEqual(g.camps.length, C.CAMP_COUNT);
   assert.ok(g.camps.every((c) => c.alive));
   const camp = g.camps[0];
-  const [u] = troops(g, a, 'guard', 1, camp.x + 1.5, camp.y + 0.5);
+  const [u] = troops(g, a, 'soldier', 1, camp.x + 1.5, camp.y + 0.5);
   u.anchor = 0;
   const hp = u.hp;
   g.update(0.05);
@@ -21,7 +21,7 @@ test('camps spawn across the map and stay passive until attacked', () => {
 test('clearing a camp pays out, angry monsters fight back, and the camp respawns', () => {
   const { g, a } = duel(2);
   const camp = g.camps.find((c) => c.type === 'big');
-  const squad = troops(g, a, 'archer', 6, camp.x - 2, camp.y + 0.5, 3);
+  const squad = troops(g, a, 'soldier', 6, camp.x - 2, camp.y + 0.5, 3);
   const gold = a.gold;
   assert.strictEqual(g.order(a.id, squad.map((u) => u.id), { k: 'j', id: camp.id }), null);
   let hurt = false;
@@ -44,7 +44,7 @@ test('clearing a camp pays out, angry monsters fight back, and the camp respawns
 test('monsters give up when dragged away from their camp', () => {
   const { g, a } = duel(3);
   const camp = g.camps[1];
-  const [u] = troops(g, a, 'archer', 1, camp.x + 0.5, camp.y + 4);
+  const [u] = troops(g, a, 'soldier', 1, camp.x + 0.5, camp.y + 4);
   const creep = [...g.creeps.values()].find((c) => c.camp === camp.id);
   g.damageCreep(creep, 1, a.id);
   assert.strictEqual(creep.angry, a.id);

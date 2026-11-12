@@ -15,6 +15,7 @@ const STATIC = {
   '/style.css': 'public/style.css',
   '/shared/config.js': 'shared/config.js',
   '/shared/pathfinding.js': 'shared/pathfinding.js',
+  '/shared/vision.js': 'shared/vision.js',
 };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 
@@ -38,6 +39,27 @@ class RowTracker {
     this.prev = next;
     return { changed, removed, all: () => [...next.values()] };
   }
+
+  // Same, for pre-serialised entries { id, s }.
+  diffEntries(entries) {
+    const next = new Map();
+    const changed = [];
+    for (const e of entries) {
+      next.set(e.id, e.s);
+      if (this.prev.get(e.id) !== e.s) changed.push(e.s);
+    }
+    const removed = [];
+    for (const id of this.prev.keys()) if (!next.has(id)) removed.push(id);
+    this.prev = next;
+    return { changed, removed };
+  }
+}
+
+// Does an effect happen somewhere player p can see (or belong to them)?
+function fxVisible(game, p, f) {
+  if (f.o === p.id) return true;
+  if (f.x !== undefined) return game.sees(p, f.x, f.y);
+  return game.sees(p, f.x1, f.y1) || game.sees(p, f.x2, f.y2);
 }
 
 function createServer({ port = 3000, botTarget } = {}) {
@@ -45,7 +67,10 @@ function createServer({ port = 3000, botTarget } = {}) {
   let game = null;
   let tick = 0;
   const SEND_EVERY = Math.max(1, Math.round(C.TICK_RATE / C.SNAPSHOT_RATE));
-  const COLLECTIONS = ['players', 'towers', 'units', 'creeps', 'camps'];
+  // Buildings, players and camps are the same for everyone; troops, monsters and effects are
+  // filtered per player by fog of war (spectators see everything).
+  const COLLECTIONS = ['players', 'towers', 'camps'];
+  const PRIVATE = ['units', 'creeps'];
   let trackers = null;
   const resetTrackers = () => {
     trackers = Object.fromEntries(COLLECTIONS.map((k) => [k, new RowTracker()]));
@@ -204,7 +229,12 @@ function createServer({ port = 3000, botTarget } = {}) {
       fullParts.push(d.all);
     }
     let fullBody = null;
-    const rest = JSON.stringify({ tk: tick, fx: snap.fx, feed: snap.feed, round: snap.round }).slice(1, -1);
+    const priv = {};
+    for (const key of PRIVATE) {
+      priv[key] = snap[key].map((r) => ({ id: r[0], s: JSON.stringify(r), x: r[2] / 10, y: r[3] / 10, owner: key === 'units' ? r[4] : 0 }));
+    }
+    const shared = JSON.stringify({ tk: tick, feed: snap.feed, round: snap.round }).slice(1, -1);
+    let allFx = null;
     let terrJson = null;
     for (const client of clients) {
       if (client.ws.readyState !== client.ws.OPEN) continue;
@@ -213,16 +243,27 @@ function createServer({ port = 3000, botTarget } = {}) {
         if (!fullBody) fullBody = COLLECTIONS.map((key, i) => `"${key}":{"c":[${fullParts[i]().join(',')}],"r":[]},`).join('') + '"full":1,';
         body = fullBody;
         client.synced = true;
+        client.priv = Object.fromEntries(PRIVATE.map((k) => [k, new RowTracker()]));
       }
+      const p = client.pid ? game.players.get(client.pid) : null;
+      const fog = p && p.alive && p.vis ? p : null;
+      for (const key of PRIVATE) {
+        const rows = fog ? priv[key].filter((e) => e.owner === fog.id || game.sees(fog, e.x, e.y)) : priv[key];
+        const d = client.priv[key].diffEntries(rows);
+        body += `"${key}":{"c":[${d.changed.join(',')}],"r":[${d.removed.join(',')}]},`;
+      }
+      let fx;
+      if (fog) fx = JSON.stringify(snap.fx.filter((f) => fxVisible(game, fog, f)));
+      else fx = allFx || (allFx = JSON.stringify(snap.fx));
+      body += `"fx":${fx},`;
       let extra = '';
       if (client.terrVersion !== game.terrVersion) {
         if (!terrJson) terrJson = JSON.stringify(game.encodeTerritory());
         extra = `"terr":${terrJson},`;
         client.terrVersion = game.terrVersion;
       }
-      const p = client.pid ? game.players.get(client.pid) : null;
       const me = p ? JSON.stringify(game.personal(p)) : 'null';
-      client.ws.send(`{"t":"s","me":${me},${extra}${body}${rest}}`);
+      client.ws.send(`{"t":"s","me":${me},${extra}${body}${shared}}`);
     }
   }
 

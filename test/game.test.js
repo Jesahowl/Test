@@ -13,8 +13,8 @@ test('a new player gets a core, gold, land and a starting army plan', () => {
   assert.ok(p.territory > 100, `territory ${p.territory}`);
   assert.ok(p.gold > C.START_GOLD);
   assert.strictEqual(g.grid[g.idx(p.core.x, p.core.y)], -p.id);
-  assert.deepStrictEqual(p.army, { guard: 0, archer: 0, frost: 0, mortar: 0, medic: 0 });
-  assert.deepStrictEqual(g.waveList(p), ['guard', 'archer', 'guard', 'archer', 'guard'], '5 basic troops per wave');
+  assert.deepStrictEqual(p.army, { soldier: 0, scout: 0, medic: 0, giant: 0 });
+  assert.deepStrictEqual(g.waveList(p), ['soldier', 'soldier', 'soldier', 'soldier', 'soldier'], '5 soldiers per wave');
   assert.deepStrictEqual(p.order, { type: 'defend', anchor: 0 });
 });
 
@@ -73,7 +73,7 @@ test('spawn protection keeps a new core and its towers from taking damage', () =
 test('the conqueror takes the gold, the surviving troops and the core site', () => {
   const { g, a, b } = duel(6);
   const t = outpost(g, b);
-  const loyal = troops(g, b, 'archer', 3, b.core.x + 0.5, b.core.y + 2);
+  const loyal = troops(g, b, 'soldier', 3, b.core.x + 0.5, b.core.y + 2);
   let death = null;
   g.onDeath = (p, info) => { death = { p, info }; };
   b.gold = 777;
@@ -111,7 +111,7 @@ test('the conqueror takes the gold, the surviving troops and the core site', () 
 
 test('a player who leaves takes nothing with them and leaves no spoils', () => {
   const { g, a, b } = duel(16);
-  troops(g, b, 'archer', 2, b.core.x + 0.5, b.core.y + 2);
+  troops(g, b, 'soldier', 2, b.core.x + 0.5, b.core.y + 2);
   const gold = a.gold;
   g.removePlayer(b.id);
   assert.ok(!g.players.has(b.id));
@@ -160,7 +160,7 @@ test('long simulation with bots stays consistent', () => {
 
 test('gold is tracked by source and kills pay bounties', () => {
   const { g, a, b } = duel(17);
-  const [enemy] = troops(g, b, 'archer', 1, 50, 50, 2);
+  const [enemy] = troops(g, b, 'soldier', 1, 50, 50, 2);
   const before = { ...a.earned };
   g.damageUnit(enemy, 1e9, a.id);
   assert.strictEqual(a.earned.troops - before.troops, C.TROOP_BOUNTY + C.TROOP_BOUNTY_PER_LEVEL);
@@ -182,11 +182,11 @@ test('troops and towers level up to 5, with steep late levels', () => {
   for (let l = 1; l < 5; l++) assert.strictEqual(g.upgrade(a.id, t.id), null);
   assert.strictEqual(t.level, 5);
   assert.ok(g.upgrade(a.id, t.id));
-  for (let l = 1; l < 5; l++) assert.strictEqual(g.armyLevel(a.id, 'archer'), null);
-  assert.strictEqual(a.levels.archer, 5);
+  for (let l = 1; l < 5; l++) assert.strictEqual(g.armyLevel(a.id, 'soldier'), null);
+  assert.strictEqual(a.levels.soldier, 5);
   // Levels past 3 cost far more than the early ones, and land reach stops growing at level 3.
   assert.ok(C.upgradeCost('tower', 4) > 3 * C.upgradeCost('tower', 3));
-  assert.ok(C.armyLevelCost('archer', 3) > 3 * C.armyLevelCost('archer', 2));
+  assert.ok(C.armyLevelCost('soldier', 3) > 3 * C.armyLevelCost('soldier', 2));
   assert.strictEqual(C.towerStats('tower', 5).claim, C.towerStats('tower', 3).claim);
   assert.strictEqual(C.sellValue('tower', 2), Math.floor((C.TOWERS.tower.cost + C.upgradeCost('tower', 1)) * C.SELL_REFUND));
 });
