@@ -16,14 +16,14 @@ function updateHud() {
     const t = players.get(S.specTarget);
     const bar = $('spec-bar');
     const humans = [...players.values()].some((q) => !q.isBot);
-    const btn = S.queued ? '✓ Joining next round' : humans ? 'Join next round' : 'New round';
+    const btn = S.room ? 'Leave room' : S.queued ? '✓ Joining next round' : humans ? 'Join next round' : 'New round';
     const key = `${t ? t.name : ''}:${S.specFollow}:${btn}`;
     if (bar.dataset.key !== key) {
       bar.dataset.key = key;
       bar.innerHTML = `<span>👁 Spectating${t ? ` <b>${escapeHtml(t.name)}</b>` : ''}${t && !S.specFollow ? ' <span class="muted">(free camera)</span>' : ''}</span>
         <span class="muted">Tab: next player · Space: follow · WASD: move</span>
-        <button id="spec-new"${S.queued ? ' disabled' : ''}>${btn}</button>`;
-      $('spec-new').onclick = () => sendMsg({ t: 'join', name: S.lastName });
+        <button id="spec-new"${S.queued && !S.room ? ' disabled' : ''}>${btn}</button>`;
+      $('spec-new').onclick = () => sendMsg(S.room ? { t: 'leave' } : { t: 'join', name: S.lastName });
     }
     updateRound();
     return;

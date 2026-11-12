@@ -303,3 +303,27 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 @media (max-height: 640px) {
   #feed { display: none; }
 }
+
+/* ---------------------------------------------------------------- private rooms */
+.card button.small { padding: 7px 14px; font-size: 13px; }
+.private-row { display: flex; gap: 8px; margin-top: 8px; }
+.private-row #create { flex: 1; font-size: 14px; padding: 10px 12px; }
+.private-row .code-join { display: flex; gap: 6px; flex: 1; }
+.private-row #code { width: 0; flex: 1; text-transform: uppercase; letter-spacing: 3px; font-weight: 700; font-size: 15px; padding: 10px; text-align: center; }
+.private-row #join-code { font-size: 14px; padding: 10px 14px; }
+.invite { background: rgba(88, 166, 255, 0.12); border: 1px solid rgba(88, 166, 255, 0.4); color: #a5d0ff; border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; font-size: 13.5px; }
+.invite b { color: #fff; letter-spacing: 2px; }
+.form-err { color: var(--bad-soft); font-size: 13px; min-height: 18px; margin-top: 8px; }
+.lobby-card { width: min(440px, 94vw); }
+.lobby-tag { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); font-weight: 700; }
+.room-code { font: 800 46px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 8px; color: var(--gold); margin: 6px 0 8px; user-select: all; }
+#lobby-last { margin: 10px 0 0; font-size: 13px; }
+#lobby h3 span { color: var(--text); letter-spacing: 0; }
+#lobby-members { display: flex; flex-direction: column; gap: 4px; }
+#lobby-members div { display: flex; align-items: center; gap: 8px; background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; text-align: left; font-size: 14px; }
+#lobby-members div.me { border-color: var(--line-hi); font-weight: 700; }
+#lobby-members .crown { margin-left: auto; font-size: 11px; color: var(--gold); }
+#lobby-bots { display: flex; align-items: center; gap: 10px; justify-content: center; }
+#lobby-bots button { width: 36px; height: 36px; padding: 0; font-size: 18px; }
+#lobby-bots b { font-size: 22px; min-width: 30px; }
+#lobby-hint { font-size: 12.5px; margin: 12px 0 10px; }

@@ -22,6 +22,9 @@ function escapeHtml(s) {
 function showMenu() {
   $('hud').classList.add('hidden');
   $('death').classList.add('hidden');
+  $('lobby').classList.add('hidden');
+  $('roundover').classList.add('hidden');
+  $('conn').classList.remove('form-err');
   $('menu').classList.remove('hidden');
 }
 
@@ -30,7 +33,8 @@ function showDeath(info) {
   $('death').classList.remove('hidden');
   S.lastKiller = info.killerId || 0;
   // With no other people left in the round, a new one starts straight away.
-  $('again').textContent = info.humansAlive ? 'Join next round' : 'New round';
+  // In a private room you go back to the lobby when the round ends (or can leave now).
+  $('again').textContent = info.priv ? 'Leave room' : info.humansAlive ? 'Join next round' : 'New round';
   $('death-by').textContent = info.killer ? `Destroyed by ${info.killer}` : 'Your core fell';
   $('death-spoils').textContent = info.killer
     ? `${info.killer} took your ${info.goldTaken}g, ${info.troopsTaken} surviving troop${info.troopsTaken === 1 ? '' : 's'}, and turned your core into a tower.`
@@ -69,7 +73,7 @@ function updateRound() {
   else if (S.round.t >= C.SIEGE_RAMP_START && S.round.sd > 120) sub = `<div class="sub">⚔ Siege power ×${(1 + (S.round.t - C.SIEGE_RAMP_START) / 60 * C.SIEGE_RAMP_PER_MIN).toFixed(1)} · sudden death in ${fmtTime(S.round.sd)}</div>`;
   else if (S.round.sd <= 0) sub = '<div class="sd">☠ Sudden death: cores crumble · troops hit buildings ×2 · no home turf</div>';
   else if (S.round.sd <= 120) sub = `<div class="sd">Sudden death in ${fmtTime(S.round.sd)}</div>`;
-  el.innerHTML = `Round <b>${S.round.n}</b> · <b>${players.size}</b> core${players.size === 1 ? '' : 's'} left · ${fmtTime(S.round.t)}${sub}`;
+  el.innerHTML = `${S.round.code ? `🔒 Room <b>${S.round.code}</b> · ` : ''}Round <b>${S.round.n}</b> · <b>${players.size}</b> core${players.size === 1 ? '' : 's'} left · ${fmtTime(S.round.t)}${sub}`;
 }
 
 let roundTimer = null;
@@ -88,7 +92,9 @@ function showRoundOver(msg) {
   $('roundover').classList.remove('hidden');
   let left = msg.next;
   const tick = () => {
-    $('ro-next').textContent = left > 0 ? `Next round starts in ${left}s on a fresh map…` : 'Starting…';
+    $('ro-next').textContent = msg.priv
+      ? (left > 0 ? `Back to the lobby in ${left}s…` : 'Back to the lobby…')
+      : (left > 0 ? `Next round starts in ${left}s on a fresh map…` : 'Starting…');
     left--;
   };
   tick();

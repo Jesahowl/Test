@@ -258,7 +258,7 @@ window.addEventListener('keydown', (e) => {
 
 $('play').onclick = join;
 
-$('again').onclick = () => sendMsg({ t: 'join', name: S.lastName });
+$('again').onclick = () => sendMsg(S.room ? { t: 'leave' } : { t: 'join', name: S.lastName });
 
 $('spectate').onclick = startSpectating;
 

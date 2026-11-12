@@ -142,6 +142,18 @@ module.exports = {
     }
   },
 
+  // End the round now (e.g. a private room where no humans are left): the players still standing
+  // are ranked by land.
+  endRound() {
+    if (this.phase !== 'playing') return;
+    const alive = [...this.players.values()].filter((p) => p.alive).sort((a, b) => b.territory - a.territory);
+    alive.forEach((p, i) => this.recordStanding(p, i + 1));
+    this.phase = 'over';
+    const w = alive[0];
+    this.winner = w ? { id: w.id, name: w.name, hue: w.hue } : null;
+    if (w) this.pushFeed(`${w.name} holds the most land and wins round ${this.round}!`);
+  },
+
   // Removes a player (disconnect) - their base turns into ruins like a death.
   removePlayer(id) {
     const p = this.players.get(id);

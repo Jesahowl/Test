@@ -8,6 +8,7 @@ import { drawFog } from './fog.js';
 import { updateHud } from './hud.js';
 import { updateMouseWorld } from './input.js';
 import { connect } from './net.js';
+import './lobby.js'; // private rooms: menu buttons, lobby screen, invite links
 import { drawMinimap, drawOverlay } from './overlay.js';
 import { drawBackground, resize } from './render.js';
 import { specNext } from './screens.js';

@@ -1,6 +1,7 @@
 // Network: the WebSocket connection, incoming messages, and smooth (interpolated) movement.
 
 import { resetFog, updateFog } from './fog.js';
+import { formError, onLeft, onRoom } from './lobby.js';
 import { clearSelection } from './overlay.js';
 import { showDeath, showMenu, showRoundOver, startSpectating, stopSpectating, toast } from './screens.js';
 import { S, $, C, cam, CAMP_KEYS, CREEP_KEYS, feed, grid, KIND_KEYS, players, selUnits, terr, UNIT_KEYS } from './state.js';
@@ -18,6 +19,8 @@ function connect() {
     $('conn').textContent = 'Disconnected - retrying…';
     $('play').disabled = true;
     S.myId = null;
+    if (S.room) $('code').value = S.room.code; // one click to rejoin the room once reconnected
+    S.room = null;
     showMenu();
     setTimeout(connect, 1500);
   };
@@ -45,6 +48,7 @@ function handle(msg) {
         S.lastKiller = 0;
       }
       $('roundover').classList.add('hidden');
+      $('lobby').classList.add('hidden');
       if (!S.myId || (S.round && msg.round !== S.round.n)) resetFog();
       S.myId = msg.id;
       S.centerOnMe = true;
@@ -68,8 +72,14 @@ function handle(msg) {
     case 'roundover':
       showRoundOver(msg);
       break;
+    case 'room':
+      onRoom(msg);
+      break;
+    case 'left':
+      onLeft();
+      break;
     case 'err':
-      toast(msg.m);
+      if (!formError(msg.m)) toast(msg.m);
       S.pendingOrder = null;
       break;
     case 'ordered':

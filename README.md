@@ -18,6 +18,15 @@ Open the URL in a few browser tabs (or share it on your LAN) to play against eac
 To put it online for friends, follow **[HOSTING.md](HOSTING.md)** (free, about 10 minutes, on Render).
 AI bots fill the server up to 6 players, so it's playable alone too.
 
+## Private rooms
+
+On the menu, **Create private room** gives you a 5-letter room code and an invite link
+(`…/?room=K7QXM`). Friends join by typing the code or opening the link. In the lobby the host
+(👑) chooses how many bots to add (0–10) and presses **Start round**; anyone who arrives mid-round
+watches and joins the next one. After each round's scoreboard everyone returns to the lobby. A round
+also ends early if no humans are left. If the host leaves, someone else becomes host; an empty room
+closes after a minute. **Play** still drops you into the always-running public game.
+
 ## How to play
 
 | | |
@@ -92,7 +101,8 @@ rounds (`ROUND_JOIN_WINDOW`, `ROUND_SUDDEN_DEATH`, `SUDDEN_DEATH_*`, `CORE_FORTI
 shared/config.js        game constants + stat/cost helpers (used by Node and the browser)
 shared/pathfinding.js   flow-field Dijkstra used by marching troops
 shared/vision.js        fog of war: who can see which tiles (server filtering + client drawing)
-server/index.js         HTTP static server + WebSocket, 20 Hz tick, 10 Hz state broadcast, rounds
+server/index.js         HTTP static server + WebSocket, routes players to rooms, 20 Hz tick
+server/room.js          a room: its game, rounds/lobby, and the 10 Hz per-player state broadcast
 server/game.js          the Game class core: state, spatial grid, tick, snapshots
 server/game/*.js        Game methods by topic, mixed into Game.prototype:
                           players (joining, rounds, pacing, gold) · territory · structures (build,

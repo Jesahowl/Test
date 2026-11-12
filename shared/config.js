@@ -99,6 +99,9 @@
     BOT_STRIKE_SHARE: 0.6, // share of its home troops a bot sends on each attack
     BOT_JUNGLE_SHARE: 0.35, // share of its home troops a bot sends to farm jungle camps
     MAX_PLAYERS: 24,
+    MAX_ROOMS: 200, // private rooms open at once
+    PRIVATE_DEFAULT_BOTS: 2, // bots in a new private room (the host can change it)
+    PRIVATE_MAX_BOTS: 10,
 
     // Troop types. `cost` sets the price of levelling the type up (see armyLevelCost).
     UNITS: {
