@@ -239,6 +239,17 @@ class Game {
     return n;
   }
 
+  // Pacing (rounds only): cores are fortified early on, so nobody is knocked out in the first
+  // minutes, and troops hit buildings gradually harder as the round goes on.
+  coreArmor() {
+    return this.rounds && this.time < C.CORE_FORTIFY_TIME ? C.CORE_FORTIFY : 0;
+  }
+
+  siegeRamp() {
+    if (!this.rounds) return 1;
+    return 1 + Math.max(0, this.time - C.SIEGE_RAMP_START) / 60 * C.SIEGE_RAMP_PER_MIN;
+  }
+
   suddenDeath() {
     return this.rounds && this.time >= C.ROUND_SUDDEN_DEATH;
   }
@@ -1019,7 +1030,7 @@ class Game {
 
   damageCore(p, amount, byPid) {
     if (this.isShielded(p)) return;
-    p.core.hp -= amount;
+    p.core.hp -= amount * (1 - this.coreArmor());
     this.fx.push({ k: 'hit', x: p.core.x + 0.5, y: p.core.y + 0.5 });
     if (p.core.hp <= 0) this.killPlayer(p, byPid);
   }
@@ -1270,7 +1281,7 @@ class Game {
     const home = this.onHomeLand(u) ? 1 + C.HOME_DAMAGE_BONUS : 1;
     const buff = this.buffed(u.owner) ? 1 + C.JUNGLE_BUFF_DAMAGE : 1;
     const base = s.damage * buff; // splash and frost pulses
-    const siege = isStruct ? (def.siege || 1) * (this.suddenDeath() ? C.SUDDEN_DEATH_SIEGE : 1) : 1;
+    const siege = isStruct ? (def.siege || 1) * (this.suddenDeath() ? C.SUDDEN_DEATH_SIEGE : this.siegeRamp()) : 1;
     const dmg = base * home * siege;
     if (def.aoe) {
       // Frost pulse: every enemy troop and monster around us.

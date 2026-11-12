@@ -84,6 +84,12 @@
     // and cores slowly crumble - so every round ends.
     ROUND_SUDDEN_DEATH: 600,
     SUDDEN_DEATH_SIEGE: 2, // troop damage multiplier against towers and cores
+    // Pacing: cores take less damage for the first minutes, and troop damage to buildings
+    // ramps up from SIEGE_RAMP_START so pushes get easier as the round goes on.
+    CORE_FORTIFY: 0, // fraction of core damage blocked... (tuning in progress)
+    CORE_FORTIFY_TIME: 420, // ...until this many seconds into the round
+    SIEGE_RAMP_START: 480,
+    SIEGE_RAMP_PER_MIN: 0, // extra building damage per minute after that (tuning in progress)
     SUDDEN_DEATH_DECAY: 0.002, // fraction of core max HP lost per second in sudden death (never below 1 HP)
     ROUND_RESET_DELAY: 15, // seconds the scoreboard shows before the next round starts
 
