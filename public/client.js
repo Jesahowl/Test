@@ -90,6 +90,14 @@
     if (Array.isArray(saved) && saved.some((k) => UNIT_KEYS.includes(k))) sendKinds = new Set(saved.filter((k) => UNIT_KEYS.includes(k)));
   } catch { /* ignore */ }
   const allKinds = () => UNIT_KEYS.every((k) => sendKinds.has(k));
+  // Whether right-click orders also redirect new waves (an explicit toggle, F).
+  let wavesFollow = true;
+  try { wavesFollow = localStorage.getItem('ts-follow') !== '0'; } catch { /* ignore */ }
+  function setFollow(on) {
+    wavesFollow = on;
+    try { localStorage.setItem('ts-follow', on ? '1' : '0'); } catch { /* ignore */ }
+    updateShareUi();
+  }
   let pendingOrder = null; // toast text waiting for the server to say how many troops moved
   const keys = new Set();
   const mouse = { sx: 0, sy: 0, wx: 0, wy: 0, rightDown: false, dragged: false, lastX: 0, lastY: 0 };
@@ -324,8 +332,7 @@
     for (const [id, p] of np) players.set(id, p);
 
     towers = merge(towers, msg.towers, (a, old) => {
-      const t = { id: a[0], kind: KIND_KEYS[a[1]], x: a[2], y: a[3], owner: a[4], level: a[5], hp: a[6], maxHp: a[7], ruinOf: a[8] || '',
-        capBy: a[9], cap: a[10] / 100 };
+      const t = { id: a[0], kind: KIND_KEYS[a[1]], x: a[2], y: a[3], owner: a[4], level: a[5], hp: a[6], maxHp: a[7], ruinOf: a[8] || '' };
       t.ruin = !t.owner;
       if (old) {
         // remember render state: when it was last hit, when it changed hands, where its turret points
@@ -1215,22 +1222,7 @@
       }
       if (t.kind === 'barracks') drawBarracksSprite(t, x, y, s, now);
       else drawTowerSprite(t, x, y, s, now);
-      const sieged = t.cap > 0 && t.capBy;
-      structBar(t, x, y - r * (sieged ? 2.6 : 1.75), s * 1.0, now, t.id === selectedId || t.id === hover, dt);
-      if (t.cap > 0 && t.capBy) {
-        // Capture in progress: a ring filling in the attacker's colour.
-        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-        ctx.lineWidth = Math.max(3, s * 0.14);
-        ctx.beginPath();
-        ctx.arc(x, y, r * 1.9, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.strokeStyle = colorOf(t.capBy, 60);
-        ctx.beginPath();
-        ctx.arc(x, y, r * 1.9, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * t.cap);
-        ctx.stroke();
-        const txt = t.owner === myId ? `Under siege ${Math.round(t.cap * 100)}%` : `Capturing ${Math.round(t.cap * 100)}%`;
-        label(txt, x, y - r * 2.85, Math.max(10, Math.round(s * 0.4)), t.owner === myId ? '#ff7b72' : '#fff');
-      }
+      structBar(t, x, y - r * 1.75, s * 1.0, now, t.id === selectedId || t.id === hover, dt);
     }
   }
 
@@ -1708,7 +1700,7 @@
 
   function drawEffects(now) {
     const s = scale();
-    effects = effects.filter((f) => now - f.born < (f.k === 'coreDown' || f.k === 'buff' ? 1200 : f.k === 'smash' ? 500 : f.k === 'ping' ? 600 : f.k === 'campSpawn' || f.k === 'campLeave' ? 1000 : f.k === 'wave' ? 700 : f.k === 'gold' ? 1100 : 450));
+    effects = effects.filter((f) => now - f.born < (f.k === 'coreDown' || f.k === 'buff' ? 1200 : f.k === 'smash' ? 500 : f.k === 'ping' ? 600 : f.k === 'campSpawn' ? 1000 : f.k === 'wave' ? 700 : f.k === 'gold' ? 1100 : 450));
     for (const f of effects) {
       const age = (now - f.born) / 1000;
       if (age < 0) continue; // not due yet (effects are delayed to match troop interpolation)
@@ -1825,16 +1817,6 @@
             ctx.arc(x + Math.cos(a) * s * (0.4 + p * 1.8), y + Math.sin(a) * s * (0.4 + p * 1.8) - p * s * 0.6, s * 0.14 * (1 - p * 0.5), 0, Math.PI * 2);
             ctx.fill();
           }
-          break;
-        }
-        case 'campLeave': {
-          // a camp wandered off: dust settles where it was
-          const [x, y] = toScreen(f.x, f.y);
-          const p = age / 1;
-          ctx.fillStyle = `rgba(160, 130, 90, ${0.35 * (1 - p)})`;
-          ctx.beginPath();
-          ctx.arc(x, y, s * (1 + p * 1.2), 0, Math.PI * 2);
-          ctx.fill();
           break;
         }
         case 'buff': {
@@ -2270,7 +2252,8 @@
     $('slots').dataset.tip = `<span class="t">Wave slots</span>${C.BASE_WAVE} from your core, +${C.BARRACKS_TROOPS} per barracks. Bright slots are troops you picked; faded ones are filled with soldiers automatically. A giant fills ${C.slotsOf('giant')}.`;
     $('alive').dataset.tip = 'Troops alive now / the most you can have. The cap grows with your land (and always fits one full wave). A giant counts as 3.';
     buildStats();
-    $('defend-home').onclick = () => orderAt({ k: 'c', id: myId }, 1);
+    $('defend-home').onclick = () => orderAt({ k: 'c', id: myId }, 1, { everyone: true });
+    $('follow').onclick = () => setFollow(!wavesFollow);
 
     // Send slider: what share of your troops a right-click order sends.
     const slider = $('share-slider');
@@ -2349,12 +2332,16 @@
     const what = all ? `troop${total === 1 ? '' : 's'}` : kindsLabel(total);
     $('share-pct').textContent = `${pct}%`;
     $('share-count').innerHTML = sendShare >= 1
-      ? `<b>All ${total}</b> ${all ? '+ new waves' : what}`
+      ? `<b>All ${total}</b> ${what}`
       : `<b>${n}</b> of ${total} ${what}`;
     for (const b of document.querySelectorAll('#kinds button')) b.classList.toggle('on', sendKinds.has(b.dataset.kind));
-    slider.parentElement.dataset.tip = `<span class="t">Send</span>${sendShare >= 1
-      ? 'Right-click orders send <b>every troop</b>, and new waves follow too.'
-      : `Right-click orders send <b>${pct}%</b> of your troops (nearest first); new waves keep their orders.`}<br><span class="m">Drag, scroll, or press <kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd><kbd>V</kbd> for 25/50/75/100%.</span>`;
+    slider.parentElement.dataset.tip = `<span class="t">Send</span>Right-click orders send <b>${sendShare >= 1 ? 'every troop' : `${pct}% of your troops`}</b>${sendShare < 1 ? ' (nearest first)' : ''}.<br><span class="m">Drag, scroll, or press <kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd><kbd>V</kbd> for 25/50/75/100%.</span>`;
+    const fb = $('follow');
+    fb.classList.toggle('on', wavesFollow);
+    fb.innerHTML = `${wavesFollow ? '☑' : '☐'} New waves follow <kbd>F</kbd>`;
+    fb.dataset.tip = `<span class="t">New waves follow: ${wavesFollow ? 'on' : 'off'}</span>${wavesFollow
+      ? 'Each order also redirects your <b>future waves</b>: they march to the same target.'
+      : 'Orders only move the troops you send. <b>Future waves</b> keep their current orders.'}<br><span class="m">Hunting a single troop never redirects waves. Click or press <kbd>F</kbd> to switch.</span>`;
   }
 
   function toggleBuild(kind) {
@@ -2362,12 +2349,14 @@
     clearSelection();
   }
 
-  // Order troops at a target: the selected troops, else `share` of all troops (100% = everyone + new waves).
-  function orderAt(tg, share = sendShare) {
+  // Order troops at a target: the selected troops, else `share` of all troops (of the chosen types).
+  // opts.everyone: ignore the selection, type filter and follow toggle (Defend home / H).
+  function orderAt(tg, share = sendShare, opts = {}) {
     if (!myId || !tg) return;
-    const ids = selUnits.size ? [...selUnits] : null;
-    const filtered = !allKinds();
-    sendMsg({ t: 'order', ids, target: tg, share: ids ? 1 : share, kinds: filtered ? [...sendKinds] : null });
+    const ids = selUnits.size && !opts.everyone ? [...selUnits] : null;
+    const filtered = !allKinds() && !opts.everyone;
+    const follow = opts.everyone ? true : wavesFollow && tg.k !== 'u';
+    sendMsg({ t: 'order', ids, target: tg, share: ids ? 1 : share, kinds: filtered ? [...sendKinds] : null, follow });
     if (tg.k === 'p') effects.push({ k: 'ping', x: (tg.id % C.MAP_W) + 0.5, y: Math.floor(tg.id / C.MAP_W) + 0.5, born: performance.now() });
     if (!isMineTarget(tg)) tipDone('attack');
     if (tg.k === 'j') tipDone('jungle');
@@ -2375,10 +2364,10 @@
     const what = targetName(`${tg.k}:${tg.id}`);
     pendingOrder = (n) => {
       const troopsTxt = filtered ? `${n} ${kindsLabel(n)}` : `${n} troop${n === 1 ? '' : 's'}`;
-      if (ids) return `${troopsTxt}: ${verb} ${what}`;
-      if (share < 1) return `${troopsTxt} (${Math.round(share * 100)}%): ${verb} ${what}`;
-      if (tg.k === 'u' || filtered) return `All ${troopsTxt}: ${verb} ${what}`; // new waves keep their orders
-      return `All ${troopsTxt} and new waves: ${verb} ${what}`;
+      const wavesTxt = follow ? ' · new waves too' : '';
+      if (ids) return `${troopsTxt}: ${verb} ${what}${wavesTxt}`;
+      if (share < 1) return `${troopsTxt} (${Math.round(share * 100)}%): ${verb} ${what}${wavesTxt}`;
+      return `All ${troopsTxt}: ${verb} ${what}${wavesTxt}`;
     };
   }
 
@@ -2629,7 +2618,7 @@
         $('sel-defend').onclick = () => orderAt({ k: 't', id: t.id });
       } else {
         panel.innerHTML = `<h4>${img}${escapeHtml((players.get(t.owner) || { name: '?' }).name)}'s ${d.name}${t.kind === 'barracks' ? '' : ` · Lv ${t.level}`}</h4>
-          <div id="sel-info" class="stats"></div><div class="muted">Right-click it to attack. Destroy it and it's yours; or stand next to it with no defenders around to capture it.</div>`;
+          <div id="sel-info" class="stats"></div><div class="muted">Right-click it to attack. Destroy it and it becomes yours.</div>`;
       }
     }
     if (ruined) {
@@ -2957,7 +2946,8 @@
       selUnits.clear();
       for (const u of units.values()) if (u.owner === myId) selUnits.add(u.id);
     }
-    if (k === 'h') orderAt({ k: 'c', id: myId }, 1);
+    if (k === 'h') orderAt({ k: 'c', id: myId }, 1, { everyone: true });
+    if (k === 'f') setFollow(!wavesFollow);
     const si = SHARE_KEYS.indexOf(k);
     if (si >= 0) setShare(SHARES[si]);
     if (k === ' ') {

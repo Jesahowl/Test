@@ -152,13 +152,13 @@ test('orders: everyone plus future waves, or only selected troops', () => {
   assert.match(g.order(b.id, [squad[0].id], { k: 'c', id: a.id }), /No troops/);
 });
 
-test('an attack marches across the map and captures an undefended tower', () => {
+test('an attack marches across the map and takes an undefended tower', () => {
   const { g, a, b } = duel(5);
   const t = outpost(g, b);
   const squad = troops(g, a, 'soldier', 5, a.core.x + 0.5, a.core.y + 2);
   g.order(a.id, squad.map((u) => u.id), { k: 't', id: t.id });
   assert.ok(run(g, 120, () => t.owner !== b.id), 'tower should fall');
-  assert.strictEqual(t.owner, a.id, 'with nobody defending, occupation captures it');
+  assert.strictEqual(t.owner, a.id, 'the attackers destroy and claim it');
   for (const u of squad.filter((v) => g.units.has(v.id))) {
     assert.strictEqual(u.anchor, t.id, 'the attackers stay on as its garrison');
     assert.strictEqual(u.attack, null);
@@ -167,9 +167,7 @@ test('an attack marches across the map and captures an undefended tower', () => 
 
 test('destroying a tower claims it for the attacker', () => {
   const { g, a, b } = duel(6);
-  const saved = C.CAPTURE_RANGE;
-  C.CAPTURE_RANGE = 0; // no occupation: the tower has to be knocked down
-  try {
+  {
     const t = outpost(g, b);
     t.level = 2;
     const landBefore = a.territory;
@@ -187,8 +185,6 @@ test('destroying a tower claims it for the attacker', () => {
     assert.ok(a.territory > landBefore, 'its land comes with it');
     for (const u of squad.filter((v) => g.units.has(v.id))) assert.strictEqual(u.anchor, t.id, 'the attackers garrison it');
     assert.deepStrictEqual(a.order, { type: 'attack', target: { k: 'c', id: b.id } }, 'new waves push on to the core');
-  } finally {
-    C.CAPTURE_RANGE = saved;
   }
 });
 
@@ -200,7 +196,7 @@ test('towers still fall to ruins when their owner is wiped out', () => {
   assert.strictEqual(t.owner, 0);
 });
 
-test('a defended tower is not captured', () => {
+test('a defended tower holds while its defender lives', () => {
   const { g, a, b } = duel(7);
   const savedRegen = C.HOME_REGEN;
   C.HOME_REGEN = 0; // the defender has huge HP; regen would hide the hits it takes
@@ -212,7 +208,6 @@ test('a defended tower is not captured', () => {
   g.order(a.id, squad.map((u) => u.id), { k: 't', id: t.id });
   run(g, 20);
   assert.strictEqual(t.owner, b.id);
-  assert.ok(!t.cap);
   assert.ok(def.hp < def.maxHp, 'attackers fight the defender');
   C.HOME_REGEN = savedRegen;
 });
@@ -308,30 +303,6 @@ test('a percentage of a tiny army still sends at least one troop', () => {
   assert.strictEqual(g.order(a.id, null, { k: 'c', id: b.id }, 0.25), null);
   assert.strictEqual(g.lastOrderCount, 1);
   assert.match(g.order(a.id, null, { k: 'c', id: b.id }, 0.25), /No troops available/);
-});
-
-test('capture speed is capped, and higher-level towers take longer to capture', () => {
-  assert.strictEqual(C.captureSpeed(1), 1);
-  assert.strictEqual(C.captureSpeed(20), C.CAPTURE_MAX_SPEED);
-  assert.ok(C.captureTime(3) > C.captureTime(1));
-  const { g, a, b } = duel(14);
-  const t = outpost(g, b);
-  const squad = troops(g, a, 'soldier', 12, t.x + 0.5, t.y + 2);
-  for (const u of squad) u.hp = u.maxHp = 1e6; // survive the tower's fire
-  // 12 troops on an unguarded level-1 tower: no faster than the capped speed allows
-  const minTime = C.captureTime(1) / C.CAPTURE_MAX_SPEED;
-  let secs = 0;
-  run(g, 30, () => {
-    secs += 0.05;
-    squad.forEach((u, i) => { // stand still next to it, not attacking
-      u.attack = null;
-      u.x = t.x + 0.5 + (i % 4) * 0.3;
-      u.y = t.y + 2 + Math.floor(i / 4) * 0.3;
-    });
-    return t.owner === a.id;
-  });
-  assert.strictEqual(t.owner, a.id);
-  assert.ok(secs >= minTime - 0.1, `took ${secs.toFixed(2)}s, at least ${minTime}s`);
 });
 
 test('the spatial grid finds the same nearby troops as a full scan', () => {
@@ -431,4 +402,23 @@ test('right-clicking the ground sends troops to hold that spot', () => {
   run(g, 3, () => { far.x = spot.x + 9; far.y = spot.y + 0.5; return false; });
   for (const u of squad.filter((v) => g.units.has(v.id))) assert.ok(Math.hypot(u.x - spot.x - 0.5, u.y - spot.y - 0.5) < 3, 'stayed put');
   assert.match(g.order(a.id, null, { k: 'p', id: -5 }), /Invalid/);
+});
+
+test('"new waves follow" is an explicit choice on each order', () => {
+  const { g, a, b } = duel(24);
+  const t = outpost(g, b);
+  troops(g, a, 'soldier', 4, a.core.x + 0.5, a.core.y + 1);
+  const home = { ...a.order };
+  // 100% but follow off: troops go, waves stay home
+  assert.strictEqual(g.order(a.id, null, { k: 't', id: t.id }, 1, null, false), null);
+  assert.deepStrictEqual(a.order, home);
+  // 25%, or only one troop type, with follow on: waves follow
+  assert.strictEqual(g.order(a.id, null, { k: 'c', id: b.id }, 0.25, null, true), null);
+  assert.deepStrictEqual(a.order, { type: 'attack', target: { k: 'c', id: b.id } });
+  assert.strictEqual(g.order(a.id, null, { k: 'c', id: a.id }, 1, ['giant'], true), null, 'waves follow even with no giants alive');
+  assert.deepStrictEqual(a.order, { type: 'defend', anchor: 0 });
+  // hunting one troop never redirects waves
+  const [foe] = troops(g, b, 'soldier', 1, a.core.x + 3, a.core.y);
+  assert.strictEqual(g.order(a.id, null, { k: 'u', id: foe.id }, 1, null, true), null);
+  assert.deepStrictEqual(a.order, { type: 'defend', anchor: 0 });
 });

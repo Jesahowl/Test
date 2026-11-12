@@ -74,18 +74,3 @@ test('a cleared camp comes back somewhere new, away from cores and other camps',
   }
 });
 
-test('a camp left alone wanders to a new spot; a camp in a fight stays put', () => {
-  const { g, a } = duel(6);
-  run(g, 1);
-  const idle = g.camps[0];
-  const busy = g.camps[1];
-  const idleAt = { x: idle.x, y: idle.y };
-  const busyAt = { x: busy.x, y: busy.y };
-  for (let t = 0; t < C.CAMP_RELOCATE + 2; t += 5) {
-    const m = [...g.creeps.values()].find((c) => c.camp === busy.id);
-    if (m) g.damageCreep(m, 1, 0); // poked now and then (no attacker, so no aggro)
-    run(g, 5);
-  }
-  assert.ok(idle.alive && (idle.x !== idleAt.x || idle.y !== idleAt.y), 'idle camp moved');
-  assert.deepStrictEqual({ x: busy.x, y: busy.y }, busyAt, 'active camp stayed');
-});

@@ -23,18 +23,18 @@ AI bots fill the server up to 6 players, so it's playable alone too.
 | | |
 |---|---|
 | **Waves** | Every 20s your core sends out a free wave of **5 troops**. |
-| **Barracks** | Build **barracks** (`R`, on your own land) for **+5 troops in every wave**. Each barracks' 5 march out from the barracks itself and guard it while your standing order is "defend home". Up to 5 barracks (30 troops per wave). They cost 250g, then 150g more for each one you own. They don't shoot or level up, and like towers they can be destroyed or captured: whoever takes one gets its +5. |
+| **Barracks** | Build **barracks** (`R`, on your own land) for **+5 troops in every wave**. Each barracks' 5 march out from the barracks itself and guard it while your standing order is "defend home". Up to 5 barracks (30 troops per wave). They cost 250g, then 150g more for each one you own. They don't shoot or level up, and like towers they can be destroyed: whoever destroys one takes it over, with its +5. |
 | **Army mix** | The army panel decides **which troops fill your wave slots**, for free (`1`–`4` / `+`). A giant takes 3 slots. Unassigned slots are filled with soldiers. Gold goes into **levelling troop types** (`Shift`+number), barracks and towers. |
-| **Orders** | **Right-click** an enemy tower or core to attack it, or one of your own towers or your core to defend there. Who goes depends on the **Send slider** in the bar (5% steps; it shows how many of your troops that is, e.g. "12 of 20"): at 100% every troop goes and every future wave follows; below 100% only that share of your current troops goes (nearest to the target first, keeping your army's mix of types) and new waves keep their orders, so you can split your forces. Select specific troops first (click, Shift-click, `Q` = all) to command exactly those. `H` brings everyone home. |
+| **Orders** | **Right-click** an enemy tower or core to attack it, or one of your own towers or your core to defend there. Who goes depends on the **Send slider** in the bar (5% steps; it shows how many of your troops that is, e.g. "12 of 20"): at 100% every troop goes; below 100% only that share of your current troops goes (nearest to the target first, keeping your army's mix of types), so you can split your forces. The **New waves follow** toggle (`F`) decides whether an order also sends your *future* waves to the same target. Select specific troops first (click, Shift-click, `Q` = all) to command exactly those. `H` brings everyone home. |
 | **Fog of war** | You only see your own land, plus what your core (9 tiles), towers (range + 2), barracks and troops can see; scouts see furthest. Places you've seen stay on the map, dimmed, **as they were when you last saw them**. Enemy troops in the fog aren't even sent to your browser. Spectators see everything. |
-| **Troop types** | The four toggles under the Send slider pick **which troop types** your orders send: click to switch a type on/off, **Shift-click or right-click** to send *only* that type (again for all). The Send % then applies to those types, e.g. "50% of my giants". A filtered order never redirects new waves. Works with selections too. |
-| **Moving** | **Right-click empty ground** to send troops there. They hold the spot, fight enemies that come within 6 tiles of it, and come back to it afterwards. At 100% with all types, new waves rally there too. |
+| **Troop types** | The four toggles under the Send slider pick **which troop types** your orders send: click to switch a type on/off, **Shift-click or right-click** to send *only* that type (again for all). The Send % then applies to those types, e.g. "50% of my giants". Works with selections too. |
+| **Moving** | **Right-click empty ground** to send troops there. They hold the spot, fight enemies that come within 6 tiles of it, and come back to it afterwards. With *New waves follow* on, new waves rally there too. |
 | **Hunting** | **Right-click an enemy troop** to send your troops after it. They chase it down and focus it, ignoring other enemies on the way. When it dies they go after its squadmates within 6 tiles, then head home once the squad is gone. A red crosshair marks troops you're hunting. Hunts use the Send slider (or your selection) like other orders, but never redirect new waves. |
 | **The push** | Troops march across the map (pathfinding around structures), fight whatever they meet, then hit the target. When a tower falls, the push rolls on to that player's next tower, then their core. |
 | **Towers** | Claim land and shoot enemy troops. Your core shoots too. Place them on your land, or **leapfrog** up to 3 tiles past your border onto unclaimed ground. |
-| **Taking towers** | **Destroy** one and it becomes yours (+250g): it keeps its level, comes back at 70% health, and its land switches to you. Or **capture** it without a fight: troops standing near an enemy tower with none of its owner's troops around flip it in ~10s (faster with more troops, up to 3x; each tower level adds 50% to the time). Either way the attackers stay on as its garrison and your waves push on to that player's next tower. Towers only become ruins when their owner's core falls. |
+| **Taking towers** | **Destroy** one and it becomes yours (+250g): it keeps its level, comes back at 70% health, and its land switches to you. The attackers stay on as its garrison and your waves push on to that player's next tower. Towers only become ruins when their owner's core falls. |
 | **Gold** | Land only pays a trickle (1.5g/s + a little per tile). **Most gold comes from fighting**: 14g per enemy troop killed (+6 per troop level), 40–250g per barbarian (a whole camp pays 120–370g), 250g for a tower, and 250g plus all of their gold for a core. Each bounty pops up where you earned it, and the death screen breaks down where your gold came from. |
-| **Barbarian camps** | 12 neutral barbarian camps in three sizes: **Raider Camp** (3 axe raiders, 120g), **Barbarian Outpost** (a club-wielding brute + 2 raiders, 190g) and **Warlord's Fort** (a crowned warlord + 2 spearmen, 370g + buff). Barbarians are red-rimmed tokens with horned helmets; the weapon tells you the type. They're passive until attacked, then the whole camp fights back. Hover a camp to see what it pays; right-click it to send troops. They come back after 45s (the Warlord's Fort after 90s) **in a new random spot**, shown on the map and minimap with a countdown ring, and camps nobody touches for 2½ minutes move on too. |
+| **Barbarian camps** | 12 neutral barbarian camps in three sizes: **Raider Camp** (3 axe raiders, 120g), **Barbarian Outpost** (a club-wielding brute + 2 raiders, 190g) and **Warlord's Fort** (a crowned warlord + 2 spearmen, 370g + buff). Barbarians are red-rimmed tokens with horned helmets; the weapon tells you the type. They're passive until attacked, then the whole camp fights back. Hover a camp to see what it pays; right-click it to send troops. They come back after 45s (the Warlord's Fort after 90s) **in a new random spot**, shown on the map and minimap with a countdown ring. |
 | **Jungle buff** | Defeating a **Warlord's Fort** (marked 🔥 buff) empowers all your troops for 60s: **+30% damage and 25% less damage taken**. Buffed troops glow orange and a 🔥 shows next to your name. |
 | **Rounds** | **Last core standing wins.** Joining is open for the first 60s of a round (bots fill in during that time too). After that, newcomers watch and join the next round automatically. Cores are **fortified for the first 7 minutes** (they take 70% less damage), and from minute 8 troops hit buildings **10% harder every minute**, so early rushes can't knock anyone out but pushes keep getting stronger. After **19 minutes, sudden death** starts: no home-turf bonus, troops deal double damage to towers and cores, and cores slowly crumble, so every round ends. Then a scoreboard shows everyone's placing and a new round starts on a fresh map 15s later. If only bots are left, pressing *New round* starts one straight away. |
 | **Home turf** | Troops on their own land heal 2% HP/s and deal +30% damage, so defending is cheaper than attacking. |
@@ -63,6 +63,7 @@ and get a turning gold rune ring at level 4 and a radiant aura at level 5.
 |---|---|
 | Right-click target | Order troops: attack an enemy tower/core/camp, hunt an enemy troop, or defend your own tower/core |
 | Send slider | How many of your troops each order sends: drag it, or scroll the wheel over it. `Z` `X` `C` `V` jump to 25% / 50% / 75% / 100% |
+| `F` | New waves follow on/off: whether orders also redirect future waves |
 | Left-click | Select a troop (`Shift` adds), or a tower / ruin |
 | `Q` / `Esc` | Select all troops / clear selection |
 | `H` | All troops and new waves defend your core |
@@ -91,20 +92,20 @@ rounds (`ROUND_JOIN_WINDOW`, `ROUND_SUDDEN_DEATH`, `SUDDEN_DEATH_*`, `CORE_FORTI
 shared/config.js       game constants + stat/cost helpers (used by Node and the browser)
 shared/pathfinding.js  flow-field Dijkstra used by marching troops
 shared/vision.js       fog of war: who can see which tiles (server filtering + client drawing)
-server/game.js         authoritative simulation: territory, waves, troops, towers, jungle, captures, bots
+server/game.js         authoritative simulation: territory, waves, troops, towers, jungle, bots
 server/index.js        HTTP static server + WebSocket, 20 Hz tick, state broadcast
 public/                canvas client (index.html, client.js, style.css)
 test/                  node:test suite (game rules, waves & orders, jungle, pathfinding, server smoke test)
 ```
 
-- **Authoritative server.** Clients only send intents (`build`, `upgrade`, `sell`, `capture`, `army`, `order` with optional `ids` or `share`). The server validates everything.
+- **Authoritative server.** Clients only send intents (`build`, `upgrade`, `sell`, `capture`, `army`, `order` with optional `ids`, `share`, `kinds`, `follow`). The server validates everything.
 - **State sync.** The game simulates 20 times a second and sends state 10 times a second. Entity lists (players, towers, troops,
   monsters, camps) go out as compact arrays containing only the rows that changed since the last update, plus removed ids; a
   client that just joined gets everything once. Positions are sent in tenths of a tile, and WebSocket compression
   (permessage-deflate) shrinks the rest about 7x: roughly 7 KB/s per player with 12 players. Each player also gets their own
   gold, army plan, standing order and wave timer. Territory is sent run-length encoded, only when it changes.
 - **Spatial grid.** Troops are bucketed into 4x4-tile cells each tick, so targeting, tower fire, splash, healing and
-  captures only look at nearby troops (24 players: about 4 ms per tick).
+  healing only look at nearby troops (24 players: about 4 ms per tick).
 - **Territory.** Each tile belongs to whichever core/tower claims it most strongly; cores hold nearby land twice as strongly.
   Borders are traced, smoothed and drawn as vector paths on the client.
 - **Troop movement.** Attacking troops follow a flow field toward their target (Dijkstra from the goal tile, one per

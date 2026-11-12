@@ -326,7 +326,7 @@ class Game {
       const stats = C.towerStats('tower', 1);
       site = {
         isTower: true, id, kind: 'tower', x: p.core.x, y: p.core.y, owner: killer.id, level: 1,
-        hp: stats.hp, maxHp: stats.hp, cd: 0, ruin: false, cap: 0, capBy: 0,
+        hp: stats.hp, maxHp: stats.hp, cd: 0, ruin: false,
       };
       this.towers.set(id, site);
       this.grid[coreIdx] = id;
@@ -487,7 +487,7 @@ class Game {
     const id = this.nextId++;
     const stats = C.towerStats(kind, 1);
     this.towers.set(id, {
-      isTower: true, id, kind, x, y, owner: pid, level: 1, hp: stats.hp, maxHp: stats.hp, cd: 0, ruin: false, cap: 0, capBy: 0,
+      isTower: true, id, kind, x, y, owner: pid, level: 1, hp: stats.hp, maxHp: stats.hp, cd: 0, ruin: false,
     });
     this.grid[k] = id;
     this.structVersion++;
@@ -662,9 +662,10 @@ class Game {
   //   less than 1 sends that fraction of your current troops (keeping the army's mix of types, nearest
   //   to the target first) and leaves the standing order for new waves alone.
   // Returns null on success or an error string; this.lastOrderCount says how many troops moved.
-  // kinds: optional list of troop types; only troops of those types take the order (and a
-  // filtered order never changes what new waves do).
-  order(pid, ids, target, share = 1, kinds = null) {
+  // ids: specific troops (else `share` of all troops); kinds: only troops of these types;
+  // follow: whether new waves take this order too (default: only for an unfiltered 100% order).
+  // Hunting a single troop never becomes the waves' order.
+  order(pid, ids, target, share = 1, kinds = null, follow = null) {
     this.lastOrderCount = 0;
     const p = this.players.get(pid);
     if (!p || !p.alive) return 'Invalid order';
@@ -674,25 +675,26 @@ class Game {
       ? new Set(kinds.filter((k) => C.UNITS[k]))
       : null;
     const ok = (u) => !filter || filter.has(u.kind);
+    const selected = Array.isArray(ids) && ids.length;
+    const waves = ord.target?.k !== 'u' && (follow === null || follow === undefined ? !selected && !(share < 1) && !filter : !!follow);
     let chosen;
-    if (Array.isArray(ids) && ids.length) {
+    if (selected) {
       chosen = ids.slice(0, C.MAX_UNITS).map((id) => this.units.get(id)).filter((u) => u && u.owner === pid);
       if (!chosen.length) return 'No troops selected';
       chosen = chosen.filter(ok);
       if (!chosen.length) return 'None of the selected troops are of the chosen types';
     } else if (!(share < 1)) {
-      // Everyone (of the chosen types). Unfiltered, new waves follow too - except when hunting one troop.
-      if (!filter && ord.target?.k !== 'u') p.order = ord;
       chosen = [...this.units.values()].filter((u) => u.owner === pid && ok(u));
-      if (filter && !chosen.length) return 'You have no troops of the chosen types';
     } else {
       chosen = this.pickShare(pid, ord, Math.max(0.01, share), ok);
-      if (!chosen.length) return filter ? 'You have no troops of the chosen types' : 'No troops available to send';
     }
+    if (!chosen.length && !waves) return filter ? 'You have no troops of the chosen types' : 'No troops available to send';
+    if (waves) p.order = ord;
     for (const u of chosen) this.applyOrder(u, ord);
     this.lastOrderCount = chosen.length;
     return null;
   }
+
 
 
   // Pick `share` of pid's troops for an order: troops not already following it, each type taken in
@@ -847,7 +849,7 @@ class Game {
         if (i >= C.CAMP_COUNT) break;
         const x = Math.round(margin + (c + 0.5) * cw + (this.rand() - 0.5) * cw * 0.5);
         const y = Math.round(margin + (r + 0.5) * ch + (this.rand() - 0.5) * ch * 0.5);
-        this.camps.push({ id: i, x, y, type: types[i % types.length], alive: false, respawnAt: 0, lastActive: 0 });
+        this.camps.push({ id: i, x, y, type: types[i % types.length], alive: false, respawnAt: 0 });
         i++;
       }
     }
@@ -886,7 +888,6 @@ class Game {
   spawnCamp(camp) {
     const leader = Object.keys(C.CAMP_TYPES[camp.type])[0];
     if (!this.campSpotOk(camp, camp.x, camp.y, false)) this.moveCamp(camp); // someone built here meanwhile
-    camp.lastActive = this.time;
     this.fx.push({ k: 'campSpawn', x: camp.x + 0.5, y: camp.y + 0.5 });
     for (const [kind, n] of Object.entries(C.CAMP_TYPES[camp.type])) {
       const def = C.CREEPS[kind];
@@ -961,18 +962,6 @@ class Game {
         camp.alive = false;
         camp.respawnAt = this.time + (C.BUFF_CAMPS.includes(camp.type) ? C.BUFF_CAMP_RESPAWN : C.CAMP_RESPAWN);
         this.moveCamp(camp);
-      } else if (camp.alive && this.time - camp.lastActive > C.CAMP_RELOCATE) {
-        // Left alone too long: if it's calm and unhurt, the camp wanders off to a new spot.
-        const members = [...this.creeps.values()].filter((m) => m.camp === camp.id);
-        if (members.every((m) => !m.angry && m.hp >= m.maxHp)) {
-          for (const m of members) this.creeps.delete(m.id);
-          const from = { x: camp.x + 0.5, y: camp.y + 0.5 };
-          this.moveCamp(camp);
-          this.fx.push({ k: 'campLeave', x: from.x, y: from.y });
-          this.spawnCamp(camp);
-        } else {
-          camp.lastActive = this.time;
-        }
       } else if (!camp.alive && this.time >= camp.respawnAt) {
         this.spawnCamp(camp);
       }
@@ -1005,7 +994,6 @@ class Game {
     if (c.dead) return;
     c.hp -= amount;
     const camp = this.camps[c.camp];
-    if (camp) camp.lastActive = this.time;
     if (byPid) {
       // The whole camp joins in.
       for (const m of this.creeps.values()) if (m.camp === c.camp && !m.angry) m.angry = byPid;
@@ -1062,8 +1050,6 @@ class Game {
     t.ruinOf = ruinOf;
     t.ruinTime = this.time;
     t.hp = t.maxHp;
-    t.cap = 0;
-    t.capBy = 0;
     this.structVersion++;
     this.terrDirty = true;
   }
@@ -1697,43 +1683,6 @@ class Game {
     return false;
   }
 
-  // ---------------------------------------------------------------- capture by occupation
-
-  // Troops near an enemy tower slowly take it over, unless its owner's troops are there too.
-  updateCaptures(dt) {
-    for (const t of this.towers.values()) {
-      if (!t.owner) continue;
-      const cx = t.x + 0.5;
-      const cy = t.y + 0.5;
-      const counts = new Map();
-      for (const u of this.nearUnits(cx, cy, C.CAPTURE_RANGE)) {
-        if (dist(u.x, u.y, cx, cy) <= C.CAPTURE_RANGE) counts.set(u.owner, (counts.get(u.owner) || 0) + 1);
-      }
-      const defended = (counts.get(t.owner) || 0) > 0;
-      let attacker = 0;
-      let most = 0;
-      for (const [pid, n] of counts) {
-        if (pid === t.owner) continue;
-        if (n > most || (n === most && pid === t.capBy)) {
-          most = n;
-          attacker = pid;
-        }
-      }
-      if (!defended && attacker && !this.isShielded(this.players.get(t.owner))) {
-        if (t.capBy !== attacker) {
-          t.capBy = attacker; // a new challenger starts from scratch
-          t.cap = 0;
-        }
-        t.cap += (dt * C.captureSpeed(most)) / C.captureTime(t.level);
-        if (t.cap >= 1) this.transferTower(t, attacker);
-      } else if (t.cap) {
-        // Contested or abandoned: progress drains away.
-        t.cap = Math.max(0, t.cap - dt / C.captureTime(t.level));
-        if (!t.cap) t.capBy = 0;
-      }
-    }
-  }
-
   // When tower t stops being `enemyId`'s, standing attack orders on it roll on to that
   // enemy's nearest remaining tower (or core), so waves keep pushing like a lane.
   rollOnOrders(t, enemyId) {
@@ -1757,14 +1706,12 @@ class Game {
     }
   }
 
-  // Hand tower t to newOwner (captured by occupation, or claimed by destroying it).
+  // Hand tower t to newOwner (claimed by destroying it).
   transferTower(t, newOwner, how = 'captured') {
     const winner = this.players.get(newOwner);
     const loser = this.players.get(t.owner);
     const loserId = t.owner;
     t.owner = newOwner;
-    t.cap = 0;
-    t.capBy = 0;
     this.structVersion++;
     this.terrDirty = true;
     this.fx.push({ k: 'capture', x: t.x + 0.5, y: t.y + 0.5, o: newOwner });
@@ -1957,7 +1904,6 @@ class Game {
     this.updateBots();
     this.updateUnits(dt);
     this.updateStructures(dt);
-    this.updateCaptures(dt);
     this.updateCreeps(dt);
 
     for (const t of this.towers.values()) {
@@ -1984,8 +1930,7 @@ class Game {
     }
     const towers = [];
     for (const t of this.towers.values()) {
-      towers.push([t.id, KIND_KEYS.indexOf(t.kind), t.x, t.y, t.owner, t.level, Math.ceil(t.hp), t.maxHp, t.ruinOf || 0,
-        t.capBy || 0, t.cap ? Math.round(t.cap * 100) : 0]);
+      towers.push([t.id, KIND_KEYS.indexOf(t.kind), t.x, t.y, t.owner, t.level, Math.ceil(t.hp), t.maxHp, t.ruinOf || 0]);
     }
     const units = [];
     for (const u of this.units.values()) {

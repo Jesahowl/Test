@@ -136,21 +136,12 @@
 
     // Leapfrogging: towers may be placed on unclaimed land up to this many tiles outside your border.
     TOWER_LEAP: 3,
-    // Capture by occupation: your troops within CAPTURE_RANGE of an enemy tower take it over after
-    // CAPTURE_TIME seconds (faster with more troops) - unless any of the owner's troops are there too.
-    CAPTURE_RANGE: 4.5,
-    CAPTURE_TIME: 10,
-    CAPTURE_EXTRA_UNIT_SPEED: 0.5, // each extra troop adds 50% capture speed...
-    CAPTURE_MAX_SPEED: 3, // ...up to 3x
-    CAPTURE_TIME_PER_LEVEL: 0.5, // each tower level above 1 adds 50% to the capture time
 
     // ---- Jungle: neutral camps that sit still, fight back when attacked, and pay out when cleared.
     CAMP_COUNT: 12,
     CAMP_RESPAWN: 45,
     BUFF_CAMP_RESPAWN: 90, // the warlord's fort (which gives the jungle buff) takes longer to come back
-    // Camps wander: a cleared camp comes back somewhere new, and a camp nobody has touched for
-    // CAMP_RELOCATE seconds packs up and moves. New spots prefer unclaimed land.
-    CAMP_RELOCATE: 150,
+    // A cleared camp comes back somewhere new (preferring unclaimed land).
     CAMP_SPACING: 12, // minimum distance between camps
     CAMP_CORE_DIST: 9, // minimum distance from any core
     CAMP_MOVE_MIN: 15, // a camp moves at least this far when it can
@@ -263,14 +254,6 @@
   // (always enough for one full wave, so barracks are never wasted).
   CONFIG.unitCap = function (territory, waveSize = 0) {
     return Math.min(CONFIG.MAX_UNITS, Math.max(CONFIG.MIN_UNITS, waveSize, Math.floor(territory / CONFIG.LAND_PER_UNIT)));
-  };
-
-  // Capture speed multiplier for `n` capturing troops, and the base capture time of a tower level.
-  CONFIG.captureSpeed = function (n) {
-    return Math.min(CONFIG.CAPTURE_MAX_SPEED, 1 + CONFIG.CAPTURE_EXTRA_UNIT_SPEED * (n - 1));
-  };
-  CONFIG.captureTime = function (level) {
-    return CONFIG.CAPTURE_TIME * (1 + CONFIG.CAPTURE_TIME_PER_LEVEL * (level - 1));
   };
 
   CONFIG.income = function (territory) {
