@@ -316,92 +316,117 @@ function drawTowerSprite(t, x, y, s, now) {
   }
 }
 
-// Barracks: a timber hall with a roof in the owner's colour, crossed swords over the door and a
-// banner. Its doors glow and it pulses when a wave marches out.
+// Barracks: a crystal hall. A long stone hall on a rune circle, with crystals growing from the roof
+// ridge, glowing windows and a lit doorway. It flares and pulses when a wave marches out.
 function drawBarracksSprite(t, x, y, s, now) {
-  const r = s * 0.62;
+  const r = s * 0.7;
   const flip = t.flipAt ? (now - t.flipAt) / 900 : 1;
   const bounce = flip < 1 ? 1 + 0.3 * Math.sin(flip * Math.PI * 3) * (1 - flip) : 1;
   const out = t.waveAt ? Math.max(0, 1 - (now - t.waveAt) / 700) : 0;
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(bounce * (1 + 0.06 * out), bounce * (1 + 0.06 * out));
-  // shadow and yard
+  const by = r * 0.72; // ground level
+  const owner = t.owner;
+  // shadow, rune circle and plinth
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
   ctx.beginPath();
-  ctx.ellipse(r * 0.1, r * 0.45, r * 1.25, r * 0.7, 0, 0, Math.PI * 2);
+  ctx.ellipse(r * 0.1, by, r * 1.3, r * 0.42, 0, 0, Math.PI * 2);
   ctx.fill();
-  roundRect(-r * 1.15, -r * 0.55, r * 2.3, r * 1.45, r * 0.15);
-  ctx.fillStyle = colorOf(t.owner, 24);
-  ctx.fill();
-  ctx.strokeStyle = colorOf(t.owner, 62);
-  ctx.lineWidth = Math.max(1.5, s * 0.07);
-  ctx.stroke();
-  // timber walls
-  ctx.fillStyle = '#8d6e4f';
-  ctx.fillRect(-r * 0.85, -r * 0.15, r * 1.7, r * 0.85);
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  runeEllipse(0, by, r * 1.38, r * 0.5, owner, now / 3500 + t.id, 0.7 + 0.3 * out);
   ctx.lineWidth = Math.max(1, s * 0.03);
+  ctx.strokeStyle = '#22272d';
+  ctx.fillStyle = '#3a4048';
   ctx.beginPath();
-  for (let i = 1; i < 4; i++) {
-    ctx.moveTo(-r * 0.85 + (r * 1.7 * i) / 4, -r * 0.15);
-    ctx.lineTo(-r * 0.85 + (r * 1.7 * i) / 4, r * 0.7);
+  ctx.moveTo(-r * 1.2, by);
+  ctx.lineTo(-r * 1.1, by - r * 0.17);
+  ctx.lineTo(r * 1.1, by - r * 0.17);
+  ctx.lineTo(r * 1.2, by);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // stone walls with mortar lines and a shaded right end
+  const wTop = -r * 0.2;
+  const wBot = by - r * 0.17;
+  ctx.fillStyle = '#4c535c';
+  ctx.fillRect(-r, wTop, r * 2, wBot - wTop);
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(r * 0.45, wTop, r * 0.55, wBot - wTop);
+  ctx.strokeStyle = 'rgba(0,0,0,0.28)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let yy = wTop + r * 0.2; yy < wBot - 1; yy += r * 0.2) {
+    ctx.moveTo(-r, yy);
+    ctx.lineTo(r, yy);
   }
   ctx.stroke();
+  ctx.strokeStyle = '#22272d';
+  ctx.lineWidth = Math.max(1, s * 0.03);
+  ctx.strokeRect(-r, wTop, r * 2, wBot - wTop);
+  // a band in the owner's colour under the eaves
+  ctx.fillStyle = colorOf(owner, 60, 0.9);
+  ctx.fillRect(-r, wTop, r * 2, r * 0.07);
   // roof
-  ctx.fillStyle = colorOf(t.owner, 42);
+  ctx.fillStyle = '#3c434b';
   ctx.beginPath();
-  ctx.moveTo(-r * 1.02, -r * 0.1);
-  ctx.lineTo(-r * 0.6, -r * 0.75);
-  ctx.lineTo(r * 0.6, -r * 0.75);
-  ctx.lineTo(r * 1.02, -r * 0.1);
+  ctx.moveTo(-r * 1.12, wTop);
+  ctx.lineTo(-r * 0.7, -r * 0.62);
+  ctx.lineTo(r * 0.7, -r * 0.62);
+  ctx.lineTo(r * 1.12, wTop);
   ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = colorOf(t.owner, 65);
-  ctx.lineWidth = Math.max(1, s * 0.04);
   ctx.stroke();
-  // door (glows when a wave marches out)
-  ctx.fillStyle = out > 0 ? `rgba(255, 213, 79, ${0.5 + 0.5 * out})` : '#3b2a1c';
-  roundRect(-r * 0.22, r * 0.2, r * 0.44, r * 0.5, r * 0.18);
-  ctx.fill();
-  // crossed swords over the door
-  ctx.strokeStyle = '#e6edf3';
-  ctx.lineWidth = Math.max(1.2, s * 0.045);
-  ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(-r * 0.3, -r * 0.55);
-  ctx.lineTo(r * 0.12, -r * 0.2);
-  ctx.moveTo(r * 0.3, -r * 0.55);
-  ctx.lineTo(-r * 0.12, -r * 0.2);
+  for (let i = 1; i < 4; i++) {
+    const yy = wTop - ((r * 0.42) * i) / 4;
+    const half = r * 1.12 - (r * 0.42 * i) / 4;
+    ctx.moveTo(-half, yy);
+    ctx.lineTo(half, yy);
+  }
   ctx.stroke();
-  ctx.lineCap = 'butt';
-  // banner
-  const wave = Math.sin(now / 220 + t.id) * r * 0.08;
-  ctx.strokeStyle = '#3b3630';
-  ctx.lineWidth = Math.max(1, s * 0.04);
+  // glowing rune windows
+  for (const wx of [-0.62, 0.6]) {
+    ctx.fillStyle = '#1b1f24';
+    ctx.fillRect(r * wx - r * 0.1, r * 0.02, r * 0.2, r * 0.22);
+    ctx.fillStyle = colorOf(owner, 65 + 20 * out, 0.85);
+    ctx.fillRect(r * wx - r * 0.065, r * 0.05, r * 0.13, r * 0.16);
+  }
+  // arched doorway: lit from inside, flaring when a wave marches out
+  const dw = r * 0.2;
+  const dh = r * 0.55;
   ctx.beginPath();
-  ctx.moveTo(r * 0.85, -r * 0.1);
-  ctx.lineTo(r * 0.85, -r * 1.05);
-  ctx.stroke();
-  ctx.fillStyle = colorOf(t.owner, 55);
-  ctx.beginPath();
-  ctx.moveTo(r * 0.85, -r * 1.05);
-  ctx.quadraticCurveTo(r * 1.15, -r * 1.05 + wave, r * 1.35, -r * 0.92 + wave);
-  ctx.lineTo(r * 0.85, -r * 0.72);
+  ctx.moveTo(-dw, wBot);
+  ctx.lineTo(-dw, wBot - dh + dw);
+  ctx.arc(0, wBot - dh + dw, dw, Math.PI, 0);
+  ctx.lineTo(dw, wBot);
   ctx.closePath();
+  ctx.fillStyle = '#1b1f24';
   ctx.fill();
-  drawCracks(0, r * 0.25, r * 0.7, 1 - t.hp / t.maxHp, t.id);
+  const dg = ctx.createLinearGradient(0, wBot - dh, 0, wBot);
+  dg.addColorStop(0, out > 0 ? '#ffffff' : colorOf(owner, 80, 0.9));
+  dg.addColorStop(1, colorOf(owner, 60, 0.15 + 0.5 * out));
+  ctx.fillStyle = dg;
+  ctx.globalAlpha = 0.6 + 0.4 * out;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  // crystals growing from the roof ridge
+  for (const [cx, cr] of [[-0.45, 0.12], [0.45, 0.12], [0, 0.17]]) {
+    drawCrystal(r * cx, -r * 0.68 - (cx ? 0 : r * 0.05), r * cr, owner, out, cx ? 0 : s * 0.2);
+  }
+  drawCracks(0, r * 0.2, r * 0.6, 1 - t.hp / t.maxHp, t.id);
   if (flip < 1) {
     ctx.globalAlpha = (1 - flip) * 0.8;
     ctx.fillStyle = '#fff';
-    roundRect(-r * 1.15, -r * 0.55, r * 2.3, r * 1.45, r * 0.15);
+    roundRect(-r * 1.15, -r * 0.8, r * 2.3, r * 1.55, r * 0.15);
     ctx.fill();
     ctx.globalAlpha = 1;
   }
   ctx.restore();
   if (t.hp / t.maxHp < 0.3) drawSmoke(x, y, r, now, t.id);
   // "+5" tag
-  if (s >= 14) label(`+${C.BARRACKS_TROOPS}`, x - r * 0.95, y - r * 0.75, Math.max(9, Math.round(s * 0.32)), '#ffd54f');
+  if (s >= 14) label(`+${C.BARRACKS_TROOPS}`, x - r * 1.0, y - r * 0.85, Math.max(9, Math.round(s * 0.32)), '#ffd54f');
 }
 
 // A ruin: scattered rubble and a broken stub.

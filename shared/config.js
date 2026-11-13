@@ -132,11 +132,11 @@
     TOWERS: {
       tower: {
         name: 'Tower', key: 'B', cost: 120, hp: 1400, claim: 5, range: 5, damage: 32, rate: 1,
-        color: '#ffd54f', desc: 'Claims land and shoots enemy troops',
+        color: '#80deea', desc: 'Claims land and zaps enemy troops',
       },
       barracks: {
         name: 'Barracks', key: 'R', cost: 250, hp: 1600, claim: 2, maxLevel: 1, ownLandOnly: true,
-        color: '#d7a86e', desc: `+5 troops in every wave, spawning here. Build on your own land`,
+        color: '#9fb4c7', desc: `+5 troops in every wave, spawning here. Build on your own land`,
       },
     },
 

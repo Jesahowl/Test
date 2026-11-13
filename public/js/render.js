@@ -158,35 +158,55 @@ function drawShape(kind, x, y, r, fill) {
       ctx.restore();
       break;
     }
-    case 'barracks':
-      // a hall with a pitched roof and a door
-      ctx.fillRect(x - r * 0.8, y - r * 0.2, r * 1.6, r * 0.95);
+    case 'barracks': {
+      // crystal hall: a stone hall with crystals on the roof ridge and a lit doorway
+      ctx.fillRect(x - r * 0.85, y - r * 0.05, r * 1.7, r * 0.8);
       ctx.beginPath();
-      ctx.moveTo(x - r * 0.95, y - r * 0.15);
-      ctx.lineTo(x, y - r * 0.9);
-      ctx.lineTo(x + r * 0.95, y - r * 0.15);
+      ctx.moveTo(x - r * 0.98, y - r * 0.05);
+      ctx.lineTo(x - r * 0.6, y - r * 0.42);
+      ctx.lineTo(x + r * 0.6, y - r * 0.42);
+      ctx.lineTo(x + r * 0.98, y - r * 0.05);
       ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.fillRect(x - r * 0.2, y + r * 0.2, r * 0.4, r * 0.55);
-      break;
-    case 'tower':
-      // battlemented turret
-      ctx.moveTo(x - r * 0.8, y + r * 0.8);
-      ctx.lineTo(x - r * 0.8, y - r * 0.55);
-      for (let i = 0; i < 4; i++) {
-        const bx = x - r * 0.8 + (i * r * 1.6) / 3.5;
-        ctx.lineTo(bx, y - r * 0.9);
-        ctx.lineTo(bx + r * 0.25, y - r * 0.9);
-        ctx.lineTo(bx + r * 0.25, y - r * 0.55);
-        ctx.lineTo(bx + r * 0.46, y - r * 0.55);
+      for (const [cx, h] of [[-0.4, 0.3], [0, 0.42], [0.4, 0.3]]) {
+        ctx.beginPath();
+        ctx.moveTo(x + r * cx, y - r * (0.42 + h));
+        ctx.lineTo(x + r * (cx + h * 0.42), y - r * (0.42 + h * 0.3));
+        ctx.lineTo(x + r * cx, y - r * 0.38);
+        ctx.lineTo(x + r * (cx - h * 0.42), y - r * (0.42 + h * 0.3));
+        ctx.closePath();
+        ctx.fill();
       }
-      ctx.lineTo(x + r * 0.8, y - r * 0.9);
-      ctx.lineTo(x + r * 0.8, y + r * 0.8);
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.beginPath();
+      ctx.moveTo(x - r * 0.2, y + r * 0.75);
+      ctx.lineTo(x - r * 0.2, y + r * 0.35);
+      ctx.arc(x, y + r * 0.35, r * 0.2, Math.PI, 0);
+      ctx.lineTo(x + r * 0.2, y + r * 0.75);
       ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      ctx.fillRect(x - r * 0.18, y + r * 0.1, r * 0.36, r * 0.7);
+      break;
+    }
+    case 'tower':
+      // crystal tower: a pillar with a crystal floating above it
+      ctx.beginPath();
+      ctx.moveTo(x - r * 0.5, y + r * 0.85);
+      ctx.lineTo(x - r * 0.38, y + r * 0.6);
+      ctx.lineTo(x - r * 0.22, y + r * 0.6);
+      ctx.lineTo(x - r * 0.14, y - r * 0.1);
+      ctx.lineTo(x + r * 0.14, y - r * 0.1);
+      ctx.lineTo(x + r * 0.22, y + r * 0.6);
+      ctx.lineTo(x + r * 0.38, y + r * 0.6);
+      ctx.lineTo(x + r * 0.5, y + r * 0.85);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(x, y - r * 0.95);
+      ctx.lineTo(x + r * 0.3, y - r * 0.55);
+      ctx.lineTo(x, y - r * 0.22);
+      ctx.lineTo(x - r * 0.3, y - r * 0.55);
+      ctx.closePath();
+      ctx.fill();
       break;
     default:
       ctx.arc(x, y, r * 0.8, 0, Math.PI * 2);
