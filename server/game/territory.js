@@ -36,6 +36,7 @@ module.exports = {
         }
       }
     }
+    this.tidyTerritory(sources);
     const counts = new Map();
     for (let i = 0; i < this.terr.length; i++) {
       const o = this.terr[i];
@@ -47,6 +48,62 @@ module.exports = {
     }
     this.terrDirty = false;
     this.terrVersion++;
+  },
+
+  // Land is either one player's or another's, with clean borders between them: no one-tile
+  // strands poking into a neighbour, and no two patches of the same land touching only at a
+  // corner with someone else's land squeezed between (drawn smoothly, those look like two
+  // borders crossing). The tile under a core, tower or barracks always stays its owner's.
+  tidyTerritory(sources) {
+    const W = this.w;
+    const H = this.h;
+    const terr = this.terr;
+    const keep = new Set(sources.map((s) => this.idx(s.x, s.y)));
+    const at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? -1 : terr[y * W + x]);
+    for (let pass = 0; pass < 3; pass++) {
+      let changed = 0;
+      // Corner-only contacts: a 2x2 block like  A B / B A  goes to whichever owner holds it more
+      // strongly (closer to its claim), so one side's patches join and the other's separate.
+      for (let y = 0; y < H - 1; y++) {
+        for (let x = 0; x < W - 1; x++) {
+          const a = at(x, y);
+          const b = at(x + 1, y);
+          if (a === b || a !== at(x + 1, y + 1) || b !== at(x, y + 1)) continue;
+          const ka = this.idx(x, y);
+          const kb = this.idx(x + 1, y);
+          // empty land never wins a corner; otherwise the stronger claim does
+          let winner = a;
+          if (!a) winner = b;
+          else if (b && this.terrDist[kb] + this.terrDist[this.idx(x, y + 1)] < this.terrDist[ka] + this.terrDist[this.idx(x + 1, y + 1)]) winner = b;
+          const loserTiles = winner === a ? [kb, this.idx(x, y + 1)] : [ka, this.idx(x + 1, y + 1)];
+          for (const k of loserTiles) {
+            if (keep.has(k)) continue;
+            terr[k] = winner;
+            changed++;
+          }
+        }
+      }
+      // Strands: an owned tile with at most one side touching its own land, but with land of a
+      // single other owner on at least two sides, belongs to that neighbour.
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const k = y * W + x;
+          const o = terr[k];
+          if (!o || keep.has(k)) continue;
+          const n = [at(x - 1, y), at(x + 1, y), at(x, y - 1), at(x, y + 1)];
+          if (n.filter((v) => v === o).length > 1) continue;
+          const tally = new Map();
+          for (const v of n) if (v !== o && v !== -1) tally.set(v, (tally.get(v) || 0) + 1);
+          let best = 0;
+          let bestN = 0;
+          for (const [v, c] of tally) if (c > bestN) { best = v; bestN = c; }
+          if (bestN < 2 || (best === 0 && n.includes(o))) continue; // keep edges facing open land
+          terr[k] = best;
+          changed++;
+        }
+      }
+      if (!changed) break;
+    }
   },
 
   // Run-length encoded territory: [owner, count, owner, count, ...]
