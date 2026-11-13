@@ -167,33 +167,22 @@ module.exports = {
 
   unitFire(u, target, s, def) {
     u.cd = 1 / s.rate;
+    // Troops that get shot remember who did it, so they can fight back (see updateUnits).
+    if (target.isUnit) {
+      target.provoker = u.id;
+      target.provokedAt = this.time;
+    }
     const [tx, ty] = posOf(target);
     const isStruct = target.isTower || target.isPlayer;
     const home = this.onHomeLand(u) ? 1 + C.HOME_DAMAGE_BONUS : 1;
     const buff = this.buffed(u.owner) ? 1 + C.JUNGLE_BUFF_DAMAGE : 1;
-    const base = s.damage * buff; // what everything around a giant's target takes
+    const base = s.damage * buff;
     const siege = isStruct ? (def.siege || 1) * (this.suddenDeath() ? C.SUDDEN_DEATH_SIEGE : this.siegeRamp()) : 1;
     const dmg = base * home * siege;
-    if (def.cleave) {
-      // Giant: smash the target and everything around it, knocking troops back.
-      const hit = [target];
-      for (const v of this.nearUnits(tx, ty, def.cleave)) {
-        if (v !== target && v.owner !== u.owner && dist(tx, ty, v.x, v.y) <= def.cleave) hit.push(v);
-      }
-      for (const c of this.creeps.values()) {
-        if (c !== target && !c.dead && dist(tx, ty, c.x, c.y) <= def.cleave) hit.push(c);
-      }
-      for (const v of hit) {
-        this.hurt(v, v === target ? dmg : base * home, u.owner);
-        if (v.isUnit && this.units.has(v.id)) {
-          const d = dist(u.x, u.y, v.x, v.y) || 1;
-          v.x = Math.max(0.5, Math.min(this.w - 0.5, v.x + ((v.x - u.x) / d) * def.knockback));
-          v.y = Math.max(0.5, Math.min(this.h - 0.5, v.y + ((v.y - u.y) / d) * def.knockback));
-          v.path = [];
-          v.dest = null;
-        }
-      }
-      this.fx.push({ k: 'smash', x: round2(tx), y: round2(ty), r: def.cleave });
+    if (def.ranged) {
+      // Archer: an arrow flies to the target.
+      this.hurt(target, dmg, u.owner);
+      this.fx.push({ k: 'arrow', x1: round2(u.x), y1: round2(u.y), x2: round2(tx), y2: round2(ty), o: u.owner });
     } else {
       this.hurt(target, dmg, u.owner);
       this.fx.push({ k: 'slash', x: round2(tx), y: round2(ty) });
@@ -386,6 +375,11 @@ module.exports = {
             // Holding a spot: only chase enemies that come near it.
             const [fx0, fy0] = posOf(foe);
             if (dist(fx0, fy0, tgt.x, tgt.y) > C.HOLD_LEASH) foe = null;
+          }
+          if (!foe && u.provoker && this.time - u.provokedAt < C.PROVOKE_TIME) {
+            // Being shot from out of reach (an archer): turn on the shooter if it's close enough.
+            const v = this.units.get(u.provoker);
+            if (v && v.owner !== u.owner && dist(u.x, u.y, v.x, v.y) <= s.range + C.PROVOKE_RANGE) foe = v;
           }
           if (!foe && tgt.hold) {
             // ...and go after any enemy troop that steps within HOLD_LEASH of it.

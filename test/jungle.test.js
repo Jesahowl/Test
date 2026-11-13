@@ -74,3 +74,20 @@ test('a cleared camp comes back somewhere new, away from cores and other camps',
   }
 });
 
+
+test('camps keep well apart, at the start and as they move', () => {
+  const { g, a } = duel(31);
+  const minGap = () => {
+    let m = Infinity;
+    for (const c of g.camps) for (const o of g.camps) if (c !== o) m = Math.min(m, Math.hypot(c.x - o.x, c.y - o.y));
+    return m;
+  };
+  assert.ok(minGap() >= C.CAMP_SPACING, `start: ${minGap()}`);
+  run(g, 1);
+  for (let k = 0; k < 6; k++) {
+    const camp = g.camps.find((c) => c.alive);
+    for (const m of [...g.creeps.values()].filter((m) => m.camp === camp.id)) g.damageCreep(m, 1e6, a.id);
+    g.update(0.05);
+    assert.ok(minGap() >= C.CAMP_SPACING, `after a move: ${minGap()}`);
+  }
+});

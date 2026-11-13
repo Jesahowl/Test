@@ -6,7 +6,7 @@ import { S, colorOf, ctx, scale, toScreen } from './state.js';
 
 function drawEffects(now) {
   const s = scale();
-  S.effects = S.effects.filter((f) => now - f.born < (f.k === 'coreDown' || f.k === 'buff' ? 1200 : f.k === 'smash' ? 500 : f.k === 'ping' ? 600 : f.k === 'campSpawn' ? 1000 : f.k === 'wave' ? 700 : f.k === 'gold' ? 1100 : 450));
+  S.effects = S.effects.filter((f) => now - f.born < (f.k === 'coreDown' || f.k === 'buff' ? 1200 : f.k === 'arrow' ? 250 : f.k === 'ping' ? 600 : f.k === 'campSpawn' ? 1000 : f.k === 'wave' ? 700 : f.k === 'gold' ? 1100 : 450));
   for (const f of S.effects) {
     const age = (now - f.born) / 1000;
     if (age < 0) continue; // not due yet (effects are delayed to match troop interpolation)
@@ -91,20 +91,28 @@ function drawEffects(now) {
         }
         break;
       }
-      case 'smash': {
-        // giant's club: shockwave ring and flying dirt
-        const [x, y] = toScreen(f.x, f.y);
-        const p = age / 0.5;
-        ctx.strokeStyle = `rgba(215, 168, 110, ${1 - p})`;
-        ctx.lineWidth = 5 * (1 - p) + 1;
+      case 'arrow': {
+        // an archer's arrow streaking to its target
+        const life = 0.22;
+        if (age > life) break;
+        const p = age / life;
+        const [x1, y1] = toScreen(f.x1, f.y1);
+        const [x2, y2] = toScreen(f.x2, f.y2);
+        const hx = x1 + (x2 - x1) * p;
+        const hy = y1 + (y2 - y1) * p;
+        const len = Math.hypot(x2 - x1, y2 - y1) || 1;
+        const tx = hx - ((x2 - x1) / len) * s * 0.45;
+        const ty = hy - ((y2 - y1) / len) * s * 0.45;
+        ctx.strokeStyle = colorOf(f.o, 75, 0.9);
+        ctx.lineWidth = Math.max(1.5, s * 0.06);
         ctx.beginPath();
-        ctx.arc(x, y, s * f.r * (0.3 + p * 0.9), 0, Math.PI * 2);
+        ctx.moveTo(tx, ty);
+        ctx.lineTo(hx, hy);
         ctx.stroke();
-        for (let i = 0; i < 6; i++) {
-          const a = (Math.PI * 2 * i) / 6 + 0.4;
-          ctx.fillStyle = `rgba(120, 95, 70, ${0.8 * (1 - p)})`;
-          ctx.fillRect(x + Math.cos(a) * s * f.r * p - 2, y + Math.sin(a) * s * f.r * p - 2 - Math.sin(p * Math.PI) * s * 0.4, 4, 4);
-        }
+        ctx.fillStyle = '#e6edf3';
+        ctx.beginPath();
+        ctx.arc(hx, hy, Math.max(1.2, s * 0.05), 0, Math.PI * 2);
+        ctx.fill();
         break;
       }
       case 'campSpawn': {

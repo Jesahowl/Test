@@ -113,21 +113,51 @@ function drawShape(kind, x, y, r, fill) {
       ctx.fillRect(x - r * 0.14, y - r * 0.5, r * 0.28, r);
       ctx.fillRect(x - r * 0.5, y - r * 0.14, r, r * 0.28);
       break;
-    case 'giant':
-      // a war hammer: breaks buildings
+    case 'archer': {
+      // a bow with an arrow nocked, held diagonally
       ctx.save();
       ctx.translate(x, y);
-      ctx.rotate(-Math.PI / 6);
-      ctx.fillStyle = '#7b4a2a';
-      roundRect(-r * 0.07, -r * 0.3, r * 0.14, r * 1.05, r * 0.06);
+      ctx.rotate(-Math.PI / 4);
+      const bx = -r * 0.25;
+      const R = r * 0.62;
+      const a = 1.2;
+      ctx.strokeStyle = '#e6edf3';
+      ctx.lineWidth = Math.max(1, r * 0.06);
+      ctx.beginPath();
+      ctx.moveTo(bx + Math.cos(-a) * R, Math.sin(-a) * R);
+      ctx.lineTo(bx + Math.cos(a) * R, Math.sin(a) * R);
+      ctx.stroke();
+      ctx.strokeStyle = fill;
+      ctx.lineWidth = Math.max(1.5, r * 0.17);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(bx, 0, R, -a, a);
+      ctx.stroke();
+      ctx.strokeStyle = '#d7a86e';
+      ctx.lineWidth = Math.max(1, r * 0.08);
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.7, 0);
+      ctx.lineTo(r * 0.6, 0);
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+      ctx.fillStyle = '#e6edf3';
+      ctx.beginPath();
+      ctx.moveTo(r * 0.85, 0);
+      ctx.lineTo(r * 0.55, -r * 0.14);
+      ctx.lineTo(r * 0.55, r * 0.14);
+      ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = fill;
-      roundRect(-r * 0.55, -r * 0.7, r * 1.1, r * 0.45, r * 0.08);
+      ctx.fillStyle = '#e57373';
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.7, 0);
+      ctx.lineTo(-r * 0.85, -r * 0.13);
+      ctx.lineTo(-r * 0.55, 0);
+      ctx.lineTo(-r * 0.85, r * 0.13);
+      ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.fillRect(-r * 0.55, -r * 0.52, r * 1.1, r * 0.06);
       ctx.restore();
       break;
+    }
     case 'barracks':
       // a hall with a pitched roof and a door
       ctx.fillRect(x - r * 0.8, y - r * 0.2, r * 1.6, r * 0.95);

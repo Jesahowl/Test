@@ -11,7 +11,7 @@ module.exports = {
     return C.waveSize(this.countOwned(p.id, 'barracks'));
   },
 
-  // The troops of the next wave, in order: assigned slots first (a giant takes 3), the rest soldiers.
+  // The troops of the next wave, in order: assigned slots first, the rest soldiers.
   waveList(p) {
     const size = this.waveSize(p);
     const list = [];
@@ -223,7 +223,7 @@ module.exports = {
   // The core sends BASE_WAVE troops; each barracks sends its BARRACKS_TROOPS from where it stands.
   spawnWave(p) {
     if (!this.orderValid(p.id, p.order)) p.order = { type: 'defend', anchor: 0 };
-    let alive = 0; // in wave slots: a giant counts as 3
+    let alive = 0; // in wave slots
     for (const u of this.units.values()) if (u.owner === p.id) alive += C.slotsOf(u.kind);
     const cap = C.unitCap(p.territory, this.waveSize(p));
     const barracks = [...this.towers.values()].filter((t) => t.owner === p.id && t.kind === 'barracks')

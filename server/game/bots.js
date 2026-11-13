@@ -82,8 +82,8 @@ module.exports = {
     const assigned = this.slotsUsed(p);
     if (assigned < this.waveSize(p)) {
       const r = this.rand();
-      const kind = !p.army.scout ? 'scout' : r < 0.55 ? 'soldier' : r < 0.75 ? 'medic' : 'giant';
-      if (this.armyAdd(p.id, kind)) this.armyAdd(p.id, 'soldier'); // e.g. no room for a giant
+      const kind = !p.army.scout ? 'scout' : r < 0.5 ? 'soldier' : r < 0.7 ? 'medic' : 'archer';
+      this.armyAdd(p.id, kind);
     } else if (p.gold >= 120 && roll < 0.7) {
       const kinds = UNIT_KEYS.filter((k) => p.army[k] > 0 && p.levels[k] < C.MAX_LEVEL);
       if (kinds.length) this.armyLevel(p.id, kinds[Math.floor(this.rand() * kinds.length)]);

@@ -39,7 +39,7 @@
     WAVE_INTERVAL: 20,
     FIRST_WAVE_DELAY: 6,
     // Wave size: BASE_WAVE slots from the core, plus BARRACKS_TROOPS from each barracks you own.
-    // The army panel only sets the mix (a giant takes 3 slots); unassigned slots become soldiers.
+    // The army panel only sets the mix (one slot per troop); unassigned slots become soldiers.
     BASE_WAVE: 5,
     BARRACKS_TROOPS: 5,
     MAX_BARRACKS: 5,
@@ -52,6 +52,8 @@
     HOLD_LEASH: 6, // troops holding a spot fight enemies within this distance of it
     HUNT_ROLL_RANGE: 6, // when a hunted troop dies, hunters go after its squadmates within this range
     TROOP_AGGRO: 2,
+    PROVOKE_TIME: 3, // troops shot by someone out of reach go after the shooter for this long...
+    PROVOKE_RANGE: 7, // ...if it's within their range + this
     // Fog of war: you see your own land plus what your core, buildings and troops can see.
     CORE_SIGHT: 9,
     TOWER_SIGHT_BONUS: 2, // towers see this much past their range
@@ -118,10 +120,10 @@
         name: 'Medic', key: '3', cost: 90, slots: 1, hp: 150, range: 3, heal: 12, rate: 1, speed: 2.4, sight: 5,
         color: '#f48fb1', desc: 'Heals nearby troops, cannot attack',
       },
-      giant: {
-        name: 'Giant', key: '4', cost: 200, slots: 3, hp: 1800, range: 1.5, damage: 55, rate: 0.6, speed: 1.4, sight: 6,
-        melee: true, cleave: 1.4, knockback: 0.9, siege: 2, size: 1.6,
-        color: '#bcaaa4', desc: 'Takes 3 wave slots. Huge and slow: smashes everything around its target, knocks troops back, double damage to buildings',
+      archer: {
+        name: 'Archer', key: '4', cost: 80, slots: 1, hp: 170, range: 5, damage: 26, rate: 1.1, speed: 2.4, sight: 6,
+        ranged: true,
+        color: '#4fc3f7', desc: 'Shoots arrows from range. Fragile: keep soldiers in front of them',
       },
     },
 
@@ -145,7 +147,8 @@
     CAMP_RESPAWN: 45,
     BUFF_CAMP_RESPAWN: 90, // the warlord's fort (which gives the jungle buff) takes longer to come back
     // A cleared camp comes back somewhere new (preferring unclaimed land).
-    CAMP_SPACING: 12, // minimum distance between camps
+    CAMP_SPACING: 18, // minimum distance between camps (they're placed as far apart as they can be)
+    CAMP_CANDIDATES: 150, // random spots tried when placing a camp
     CAMP_CORE_DIST: 9, // minimum distance from any core
     CAMP_MOVE_MIN: 15, // a camp moves at least this far when it can
     CAMP_LEASH: 4.5, // monsters chase attackers this far from their camp, then reset

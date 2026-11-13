@@ -7,28 +7,25 @@ const { C, dist, round2 } = require('./common');
 
 module.exports = {
   setupCamps() {
-    // A shuffled mix of camp sizes (CAMP_MIX), dealt out over a jittered grid.
+    // A shuffled mix of camp sizes (CAMP_MIX), each placed as far as possible from the others.
     const types = [];
     for (const [type, n] of Object.entries(C.CAMP_MIX)) for (let k = 0; k < n; k++) types.push(type);
     for (let k = types.length - 1; k > 0; k--) {
       const j = Math.floor(this.rand() * (k + 1));
       [types[k], types[j]] = [types[j], types[k]];
     }
-    const cols = 4;
-    const rows = 3;
-    const margin = 10;
-    const cw = (this.w - margin * 2) / cols;
-    const ch = (this.h - margin * 2) / rows;
-    let i = 0;
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        if (i >= C.CAMP_COUNT) break;
-        const x = Math.round(margin + (c + 0.5) * cw + (this.rand() - 0.5) * cw * 0.5);
-        const y = Math.round(margin + (r + 0.5) * ch + (this.rand() - 0.5) * ch * 0.5);
-        this.camps.push({ id: i, x, y, type: types[i % types.length], alive: false, respawnAt: 0 });
-        i++;
-      }
+    for (let i = 0; i < C.CAMP_COUNT; i++) {
+      const camp = { id: i, x: -1000, y: -1000, type: types[i % types.length], alive: false, respawnAt: 0 };
+      this.camps.push(camp);
+      this.moveCamp(camp);
     }
+  },
+
+  // Distance from (x, y) to the nearest other (placed) camp.
+  campGap(camp, x, y) {
+    let best = Infinity;
+    for (const o of this.camps) if (o !== camp && o.x >= 0) best = Math.min(best, dist(x, y, o.x, o.y));
+    return best;
   },
 
   // Is (x, y) a good place for a camp? `strict` also requires unclaimed land and a real move.
@@ -36,22 +33,37 @@ module.exports = {
     const k = this.idx(x, y);
     if (this.grid[k] !== 0) return false;
     if (strict && this.terr[k] !== 0) return false;
-    if (strict && dist(x, y, camp.x, camp.y) < C.CAMP_MOVE_MIN) return false;
-    for (const o of this.camps) if (o !== camp && dist(x, y, o.x, o.y) < C.CAMP_SPACING) return false;
+    if (strict && camp.x >= 0 && dist(x, y, camp.x, camp.y) < C.CAMP_MOVE_MIN) return false;
+    if (this.campGap(camp, x, y) < C.CAMP_SPACING) return false;
     for (const p of this.players.values()) if (p.alive && dist(x, y, p.core.x, p.core.y) < C.CAMP_CORE_DIST) return false;
     for (const t of this.towers.values()) if (dist(x, y, t.x, t.y) < 3) return false;
     return true;
   },
 
-  // A new random spot for a camp: unclaimed land if possible, else anywhere clear.
+  // A new spot for a camp: of many random spots, the one furthest from other camps - preferring
+  // unclaimed land and a real move, and keeping clear of cores and towers. If the map is too
+  // crowded for the minimum gap, the roomiest spot found is used anyway.
   pickCampSpot(camp) {
     const margin = 6;
-    for (let i = 0; i < 400; i++) {
+    let best = null;
+    let bestScore = -Infinity;
+    for (let i = 0; i < C.CAMP_CANDIDATES; i++) {
       const x = margin + Math.floor(this.rand() * (this.w - margin * 2));
       const y = margin + Math.floor(this.rand() * (this.h - margin * 2));
-      if (this.campSpotOk(camp, x, y, i < 250)) return { x, y };
+      if (this.grid[this.idx(x, y)] !== 0) continue;
+      let nearCore = false;
+      for (const p of this.players.values()) if (p.alive && dist(x, y, p.core.x, p.core.y) < C.CAMP_CORE_DIST) nearCore = true;
+      for (const t of this.towers.values()) if (dist(x, y, t.x, t.y) < 3) nearCore = true;
+      if (nearCore) continue;
+      const gap = Math.min(this.campGap(camp, x, y), 60);
+      // strict spots (good gap, unclaimed land, a real move) always beat relaxed ones
+      const score = gap + (this.campSpotOk(camp, x, y, true) ? 1000 : this.campSpotOk(camp, x, y, false) ? 500 : 0);
+      if (score > bestScore) {
+        bestScore = score;
+        best = { x, y };
+      }
     }
-    return { x: camp.x, y: camp.y };
+    return best || { x: camp.x, y: camp.y };
   },
 
   // Move a camp to a new spot (its monsters must already be gone).

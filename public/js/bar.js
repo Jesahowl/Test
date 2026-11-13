@@ -43,8 +43,8 @@ function buildBar() {
     card.querySelector('.up').onclick = () => sendMsg({ t: 'army', op: 'level', kind });
     army.appendChild(card);
   }
-  $('slots').dataset.tip = `<span class="t">Wave slots</span>${C.BASE_WAVE} from your core, +${C.BARRACKS_TROOPS} per barracks. Bright slots are troops you picked; faded ones are filled with soldiers automatically. A giant fills ${C.slotsOf('giant')}.`;
-  $('alive').dataset.tip = 'Troops alive now / the most you can have. The cap grows with your land (and always fits one full wave). A giant counts as 3.';
+  $('slots').dataset.tip = `<span class="t">Wave slots</span>${C.BASE_WAVE} from your core, +${C.BARRACKS_TROOPS} per barracks. Bright slots are troops you picked; faded ones are filled with soldiers automatically.`;
+  $('alive').dataset.tip = 'Troops alive now / the most you can have. The cap grows with your land (and always fits one full wave).';
   buildStats();
   $('defend-home').onclick = () => orderAt({ k: 'c', id: S.myId }, 1, { everyone: true });
   $('follow').onclick = () => setFollow(!wavesFollow);
@@ -92,7 +92,7 @@ function shareCount(sh) {
   return total ? (sh >= 1 ? total : Math.max(1, Math.round(total * sh))) : 0;
 }
 
-// "giants", "soldiers & medics", ... for labels.
+// "archers", "soldiers & medics", ... for labels.
 function kindsLabel(n = 2) {
   const names = UNIT_KEYS.filter((k) => S.sendKinds.has(k)).map((k) => C.UNITS[k].name.toLowerCase() + (n === 1 ? '' : 's'));
   return names.length <= 2 ? names.join(' & ') : `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]}`;

@@ -13,7 +13,7 @@ test('a new player gets a core, gold, land and a starting army plan', () => {
   assert.ok(p.territory > 100, `territory ${p.territory}`);
   assert.ok(p.gold > C.START_GOLD);
   assert.strictEqual(g.grid[g.idx(p.core.x, p.core.y)], -p.id);
-  assert.deepStrictEqual(p.army, { soldier: 0, scout: 0, medic: 0, giant: 0 });
+  assert.deepStrictEqual(p.army, { soldier: 0, scout: 0, medic: 0, archer: 0 });
   assert.deepStrictEqual(g.waveList(p), ['soldier', 'soldier', 'soldier', 'soldier', 'soldier'], '5 soldiers per wave');
   assert.deepStrictEqual(p.order, { type: 'defend', anchor: 0 });
 });
