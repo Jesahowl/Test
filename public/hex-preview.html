@@ -34,7 +34,7 @@ const SQ3 = Math.sqrt(3);
 const cv = document.getElementById('c');
 const g = cv.getContext('2d');
 let W = 0, H = 0, DPR = 1;
-const cam = { x: 0, y: 0, size: 23 };   // size = hex radius in screen px
+const cam = { x: 0, y: 0, size: 22 };   // size = hex radius in screen px
 function resize() { DPR = window.devicePixelRatio || 1; W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; cv.style.width = W + 'px'; cv.style.height = H + 'px'; }
 addEventListener('resize', resize); resize();
 
@@ -42,7 +42,7 @@ const key = (q, r) => `${q},${r}`;
 const DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
 const hexes = new Map(); // key -> { q, r, owner }
 for (let q = -R; q <= R; q++) for (let r = Math.max(-R, -q - R); r <= Math.min(R, -q + R); r++) hexes.set(key(q, r), { q, r, owner: 0 });
-const HS = 1.25;           // hex radius in world units: hexes are this much bigger than the buildings and troops on them
+const HS = 1.5;            // hex radius in world units: hexes are this much bigger than the buildings and troops on them
 const toPix = (q, r) => [HS * SQ3 * (q + r / 2), HS * 1.5 * r];
 const hexDist = (a, b) => (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs(a.q + a.r - b.q - b.r)) / 2;
 function pixToHex(x, y) {
