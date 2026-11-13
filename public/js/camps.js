@@ -10,33 +10,29 @@ function drawCamps() {
   for (const c of S.campsView) {
     const [x, y] = toScreen(c.x + 0.5, c.y + 0.5);
     if (!onScreen(x, y, s * 3)) continue;
+    if (c.alive) {
+      if (s >= 8) drawCampDecor(c, x, y, s, performance.now());
+      continue;
+    }
     ctx.save();
-    ctx.strokeStyle = c.alive ? 'rgba(214, 180, 120, 0.45)' : 'rgba(139, 148, 158, 0.3)';
+    ctx.strokeStyle = 'rgba(139, 148, 158, 0.3)';
     ctx.lineWidth = c.type === 'large' ? 2.5 : c.type === 'medium' ? 2 : 1.5;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
     ctx.arc(x, y, s * 1.7, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
-    if (!c.alive) {
-      // An upcoming camp: a ring that fills in as it gets ready to appear here.
-      const total = C.BUFF_CAMPS.includes(c.type) ? C.BUFF_CAMP_RESPAWN : C.CAMP_RESPAWN;
-      const p = Math.max(0, Math.min(1, 1 - c.respawn / total));
-      ctx.strokeStyle = 'rgba(214, 180, 120, 0.55)';
-      ctx.lineWidth = Math.max(2, s * 0.08);
-      ctx.beginPath();
-      ctx.arc(x, y, s * 1.7, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p);
-      ctx.stroke();
-      const big = C.BUFF_CAMPS.includes(c.type);
-      label(C.CAMP_INFO[c.type].name, x, y - 2, Math.max(9, Math.round(s * 0.32)), big ? '#ffab40' : '#c9a66b');
-      label(`in ${c.respawn}s`, x, y + Math.max(10, s * 0.45), Math.max(10, Math.round(s * 0.4)), '#8b949e');
-    }
-    if (c.alive && s >= 8) drawCampDecor(c, x, y, s, performance.now());
-    if (c.alive && C.BUFF_CAMPS.includes(c.type) && s >= 12) {
-      // the warlord's fort grants the jungle buff
-      drawFlame(x - s * 0.35, y - s * 2.05, s * 0.26);
-      label('buff', x + s * 0.12, y - s * 1.9, Math.max(9, Math.round(s * 0.3)), '#ffab40');
-    }
+    // An upcoming camp: a ring that fills in as it gets ready to appear here.
+    const total = C.BUFF_CAMPS.includes(c.type) ? C.BUFF_CAMP_RESPAWN : C.CAMP_RESPAWN;
+    const p = Math.max(0, Math.min(1, 1 - c.respawn / total));
+    ctx.strokeStyle = 'rgba(214, 180, 120, 0.55)';
+    ctx.lineWidth = Math.max(2, s * 0.08);
+    ctx.beginPath();
+    ctx.arc(x, y, s * 1.7, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p);
+    ctx.stroke();
+    const big = C.BUFF_CAMPS.includes(c.type);
+    label(C.CAMP_INFO[c.type].name, x, y - 2, Math.max(9, Math.round(s * 0.32)), big ? '#ffab40' : '#c9a66b');
+    label(`in ${c.respawn}s`, x, y + Math.max(10, s * 0.45), Math.max(10, Math.round(s * 0.4)), '#8b949e');
   }
 }
 
@@ -232,55 +228,123 @@ function drawMonster(c, x, y, r, now, moving, face) {
 }
 
 // A barbarian camp: tents and a campfire.
-function drawCampDecor(c, x, y, s, now) {
-  const tents = c.type === 'small' ? [[-0.95, -1.0]] : [[-1.05, -0.95], [1.0, -1.05]];
-  for (const [tx, ty] of tents) {
-    const cx = x + tx * s;
-    const cy = y + ty * s;
-    const w = s * (c.type === 'large' ? 0.62 : 0.52);
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+// ---- camp look: a tent village on a patch of trampled earth. Bigger camps have more tents;
+// the Barbarian Outpost adds war banners, and the Warlord's Fort a watchtower whose beacon
+// fire marks the buff it gives.
+const CAMP_LAYOUT = {
+  small: { ground: 1.6, tent: 0.46, tents: [[-1.1, -1.0], [1.1, -1.0], [0, -1.55]] },
+  medium: { ground: 1.9, tent: 0.5, tents: [[-1.35, -0.85], [1.35, -0.85], [-0.6, -1.6], [0.6, -1.6]], banners: true },
+  large: { ground: 2.2, tent: 0.52, tents: [[-1.65, -0.55], [1.65, -0.55], [-1.0, -1.6], [0.7, -1.7], [-0.15, -2.2]], banners: true, tower: [1.75, -1.75] },
+};
+
+// An irregular patch of earth, the same shape every frame for a given camp.
+function campGround(c, x, y, r) {
+  for (const [scale, col] of [[1, 'rgba(110, 84, 56, 0.3)'], [0.62, 'rgba(70, 50, 32, 0.32)']]) {
+    ctx.fillStyle = col;
     ctx.beginPath();
-    ctx.ellipse(cx, cy + w * 0.55, w * 0.95, w * 0.25, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#b08d5f';
-    ctx.beginPath();
-    ctx.moveTo(cx - w, cy + w * 0.55);
-    ctx.lineTo(cx, cy - w * 0.75);
-    ctx.lineTo(cx + w, cy + w * 0.55);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#8c6b40';
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - w * 0.75);
-    ctx.lineTo(cx + w, cy + w * 0.55);
-    ctx.lineTo(cx + w * 0.35, cy + w * 0.55);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#3b2418';
-    ctx.beginPath();
-    ctx.moveTo(cx - w * 0.22, cy + w * 0.55);
-    ctx.lineTo(cx, cy - w * 0.05);
-    ctx.lineTo(cx + w * 0.22, cy + w * 0.55);
-    ctx.closePath();
-    ctx.fill();
-    // little red pennant
-    ctx.strokeStyle = '#5d4037';
-    ctx.lineWidth = Math.max(1, s * 0.03);
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - w * 0.75);
-    ctx.lineTo(cx, cy - w * 1.15);
-    ctx.stroke();
-    ctx.fillStyle = '#c0392b';
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - w * 1.15);
-    ctx.lineTo(cx + w * 0.4, cy - w * 1.02 + Math.sin(now / 250 + c.id) * w * 0.05);
-    ctx.lineTo(cx, cy - w * 0.9);
-    ctx.closePath();
+    for (let i = 0; i <= 28; i++) {
+      const a = (i / 28) * Math.PI * 2;
+      const rr = r * scale * (0.88 + 0.08 * Math.sin(a * 5 + c.id * 1.7) + 0.05 * Math.sin(a * 9 + c.id * 0.7));
+      ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.92);
+    }
     ctx.fill();
   }
-  // campfire
-  const fx = x + s * 0.95;
-  const fy = y + s * 0.95;
+}
+
+function drawTent(cx, cy, w, hide, shade, c, now) {
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + w * 0.55, w * 0.95, w * 0.25, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = hide;
+  ctx.beginPath();
+  ctx.moveTo(cx - w, cy + w * 0.55);
+  ctx.lineTo(cx, cy - w * 0.75);
+  ctx.lineTo(cx + w, cy + w * 0.55);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = shade;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - w * 0.75);
+  ctx.lineTo(cx + w, cy + w * 0.55);
+  ctx.lineTo(cx + w * 0.35, cy + w * 0.55);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#3b2418';
+  ctx.beginPath();
+  ctx.moveTo(cx - w * 0.22, cy + w * 0.55);
+  ctx.lineTo(cx, cy - w * 0.05);
+  ctx.lineTo(cx + w * 0.22, cy + w * 0.55);
+  ctx.closePath();
+  ctx.fill();
+  // crossed poles poking out of the top
+  ctx.strokeStyle = '#5d4037';
+  ctx.lineWidth = Math.max(1, w * 0.08);
+  ctx.beginPath();
+  ctx.moveTo(cx - w * 0.22, cy - w * 1.05);
+  ctx.lineTo(cx + w * 0.12, cy - w * 0.62);
+  ctx.moveTo(cx + w * 0.22, cy - w * 1.05);
+  ctx.lineTo(cx - w * 0.12, cy - w * 0.62);
+  ctx.stroke();
+}
+
+// A war banner on a pole: red cloth with a skull, waving.
+function drawBanner(bx, by, h, c, now, col = '#c0392b') {
+  ctx.strokeStyle = '#5d4037';
+  ctx.lineWidth = Math.max(1.5, h * 0.06);
+  ctx.beginPath();
+  ctx.moveTo(bx, by);
+  ctx.lineTo(bx, by - h);
+  ctx.stroke();
+  const wave = Math.sin(now / 260 + c.id + bx) * h * 0.04;
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(bx, by - h);
+  ctx.lineTo(bx + h * 0.5, by - h * 0.86 + wave);
+  ctx.lineTo(bx + h * 0.38, by - h * 0.71 + wave);
+  ctx.lineTo(bx + h * 0.5, by - h * 0.56 + wave);
+  ctx.lineTo(bx, by - h * 0.56);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#efe6d2';
+  ctx.beginPath();
+  ctx.arc(bx + h * 0.2, by - h * 0.72 + wave * 0.5, h * 0.07, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawWatchtower(tx, ty, s, now) {
+  const leg = s * 0.26;
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(tx, ty + s * 0.72, s * 0.4, s * 0.1, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#6d4426';
+  ctx.lineWidth = Math.max(1.5, s * 0.08);
+  ctx.beginPath();
+  ctx.moveTo(tx - leg, ty + s * 0.7);
+  ctx.lineTo(tx - leg * 0.6, ty - s * 0.3);
+  ctx.moveTo(tx + leg, ty + s * 0.7);
+  ctx.lineTo(tx + leg * 0.6, ty - s * 0.3);
+  ctx.moveTo(tx - leg * 0.85, ty + s * 0.35);
+  ctx.lineTo(tx + leg * 0.75, ty - s * 0.05);
+  ctx.stroke();
+  ctx.fillStyle = '#8a5a35';
+  ctx.fillRect(tx - s * 0.32, ty - s * 0.55, s * 0.64, s * 0.28);
+  ctx.strokeStyle = '#4e321d';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(tx - s * 0.32, ty - s * 0.55, s * 0.64, s * 0.28);
+  // beacon fire on top: this camp grants the jungle buff
+  const glow = ctx.createRadialGradient(tx, ty - s * 0.75, 0, tx, ty - s * 0.75, s * 0.8);
+  glow.addColorStop(0, 'rgba(255, 140, 0, 0.45)');
+  glow.addColorStop(1, 'rgba(255, 140, 0, 0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(tx, ty - s * 0.75, s * 0.8, 0, Math.PI * 2);
+  ctx.fill();
+  drawFlame(tx, ty - s * 0.78, s * 0.2);
+}
+
+function drawCampfire(fx, fy, s) {
   ctx.strokeStyle = '#5d4037';
   ctx.lineWidth = Math.max(1.5, s * 0.08);
   ctx.lineCap = 'round';
@@ -299,6 +363,24 @@ function drawCampDecor(c, x, y, s, now) {
   ctx.arc(fx, fy, s * 0.7, 0, Math.PI * 2);
   ctx.fill();
   drawFlame(fx, fy - s * 0.12, s * 0.18);
+}
+
+function drawCampDecor(c, x, y, s, now) {
+  const L = CAMP_LAYOUT[c.type] || CAMP_LAYOUT.small;
+  const fort = c.type === 'large';
+  campGround(c, x, y, s * L.ground);
+  const hide = fort ? '#8a5444' : '#b08d5f';
+  const shade = fort ? '#6a3c30' : '#8c6b40';
+  const items = L.tents.map(([tx, ty]) => ({ y: ty, draw: () => drawTent(x + tx * s, y + ty * s, s * L.tent, hide, shade, c, now) }));
+  if (L.tower) items.push({ y: L.tower[1] + 0.7, draw: () => drawWatchtower(x + L.tower[0] * s, y + L.tower[1] * s, s, now) });
+  items.sort((a, b) => a.y - b.y); // back to front
+  for (const it of items) it.draw();
+  if (L.banners) {
+    const bx = s * L.ground * 0.88;
+    for (const side of [-1, 1]) drawBanner(x + side * bx, y + s * 0.95, s * 0.95, c, now, fort ? '#e65100' : '#c0392b');
+  }
+  drawCampfire(x - s * 0.8, y + s * 0.95, s);
+  if (fort && s >= 12) label('buff', x + L.tower[0] * s + s * 0.55, y + (L.tower[1] - 0.8) * s, Math.max(9, Math.round(s * 0.3)), '#ffab40');
 }
 
 export { drawCamps, drawCreeps, drawFlame };
