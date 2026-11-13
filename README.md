@@ -4,6 +4,13 @@ A multiplayer **.io strategy game with a League-of-Legends feel**. Every player 
 that sends out **waves of troops** every 20 seconds. Point your waves at a rival's towers to push, or pull
 them home to defend. **Buy land** with gold along your border; more land means more gold and a bigger army. Towers defend it.
 
+![A battle at an enemy core](screenshots/1-battle.jpg)
+
+| | |
+|---|---|
+| ![Raiding a Warlord's Fort](screenshots/2-camp-raid.jpg) | ![Your base](screenshots/3-base.jpg) |
+| ![The interface](screenshots/4-interface.jpg) | ![The map](screenshots/5-map.jpg) |
+
 ![concept](https://img.shields.io/badge/status-prototype-yellow)
 
 ## Run it

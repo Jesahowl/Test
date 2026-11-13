@@ -110,10 +110,11 @@ function drawEffects(now) {
         if (age > 0.5) break;
         const [x, y] = toScreen(f.x, f.y);
         const p = age / 0.5;
-        ctx.strokeStyle = `rgba(126, 231, 135, ${0.6 * (1 - p)})`;
-        ctx.lineWidth = 2;
+        // a small soft pulse round the medic (not its whole reach, which cluttered busy fights)
+        ctx.strokeStyle = `rgba(126, 231, 135, ${0.35 * (1 - p)})`;
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.arc(x, y, f.r * s * (0.3 + 0.7 * p), 0, Math.PI * 2);
+        ctx.arc(x, y, s * (0.45 + 0.35 * p), 0, Math.PI * 2);
         ctx.stroke();
         ctx.fillStyle = `rgba(126, 231, 135, ${1 - p})`;
         ctx.font = `bold ${Math.round(s * 0.5)}px system-ui, sans-serif`;

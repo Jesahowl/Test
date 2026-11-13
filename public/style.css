@@ -145,9 +145,9 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 .troop button:disabled { opacity: 0.35; cursor: default; }
 
 #bar .orders { width: 214px; gap: 4px; }
-#squads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; max-height: 84px; overflow-y: auto; align-content: start; }
+#squads { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; max-height: 84px; overflow-y: auto; align-content: start; }
 #squads .none { grid-column: 1 / -1; color: var(--muted); font-size: 11.5px; padding: 6px 2px; }
-#squads .chip { display: flex; align-items: center; gap: 3px; height: 25px; padding: 0 4px 0 3px; border: 1px solid var(--line); border-radius: 7px;
+#squads .chip { display: flex; align-items: center; gap: 2px; height: 25px; padding: 0 3px 0 2px; min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 7px;
   background: var(--raise); color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
 #squads .chip:hover { border-color: var(--accent); }
 #squads .chip .num { min-width: 17px; height: 17px; border-radius: 5px; background: var(--raise-2); color: var(--text); font-weight: 800; font-size: 11px;
