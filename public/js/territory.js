@@ -155,55 +155,25 @@ function drawTerritory() {
   }
 }
 
-// Territory fills and borders in world space. Borders are stroked inside each region
-// (clip + double width) so neighbouring territories show two clean, non-overlapping bands.
-// Territory style: diagonal stripes in the owner's colour inside a dashed border, like a map of
-// claims. Stripes come from a small cached pattern per colour: they keep the same on-screen
-// spacing at any zoom and are pinned to the map, so they don't slide when the camera pans.
-const STRIPE_GAP = 10; // px between stripes on screen
-const stripeCache = new Map();
-function stripePattern(color) {
-  let pat = stripeCache.get(color);
-  if (pat) return pat;
-  const c = document.createElement('canvas');
-  c.width = c.height = STRIPE_GAP;
-  const g = c.getContext('2d');
-  g.strokeStyle = color;
-  g.lineWidth = 2;
-  g.beginPath();
-  for (const o of [-STRIPE_GAP, 0, STRIPE_GAP]) {
-    g.moveTo(o - 1, STRIPE_GAP + 1);
-    g.lineTo(o + STRIPE_GAP + 1, -1);
-  }
-  g.stroke();
-  pat = ctx.createPattern(c, 'repeat');
-  stripeCache.set(color, pat);
-  return pat;
-}
-
+// Territory fills and borders in world space: a see-through fill in the owner's colour inside a
+// solid border. Neighbours share exactly the same border line (see the smoothing above).
 function drawTerritoryShapes(ox, oy, s) {
   ctx.save();
   ctx.translate(ox, oy);
   ctx.scale(s, s);
   ctx.lineJoin = 'round';
-  const unscale = new DOMMatrix().scale(1 / s); // pattern pixels = screen pixels
   for (const { owner, path } of S.terrShapes) {
-    const mine = owner === S.myId;
-    ctx.fillStyle = colorOf(owner, 50, mine ? 0.07 : 0.04); // faint tint so land reads at a glance
-    ctx.fill(path);
-    const pat = stripePattern(colorOf(owner, 55, mine ? 0.22 : 0.15));
-    pat.setTransform(unscale);
-    ctx.fillStyle = pat;
+    ctx.fillStyle = colorOf(owner, 50, owner === S.myId ? 0.16 : 0.12);
     ctx.fill(path);
   }
-  for (const { owner, path } of S.terrShapes) {
+  // my border last, so it stays on top where it meets someone else's
+  const order = [...S.terrShapes].sort((a, b) => (a.owner === S.myId) - (b.owner === S.myId));
+  for (const { owner, path } of order) {
     const mine = owner === S.myId;
-    ctx.setLineDash([8 / s, 6 / s]);
     ctx.strokeStyle = colorOf(owner, 65, mine ? 1 : 0.85);
     ctx.lineWidth = (mine ? 3 : 2.5) / s;
     ctx.stroke(path);
   }
-  ctx.setLineDash([]);
   ctx.restore();
   drawTerritoryLabels(ox, oy, s);
 }
