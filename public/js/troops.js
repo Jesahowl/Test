@@ -1,7 +1,7 @@
 // Troops on the map.
 
 import { interpPos, renderTime } from './net.js';
-import { drawShape, hpBar, onScreen, tokenPath } from './render.js';
+import { drawShape, hpBar, lungeOffset, onScreen, tokenPath } from './render.js';
 import { S, C, colorOf, ctx, grid, players, scale, selUnits, toScreen } from './state.js';
 import { squadPicked } from './squads.js';
 
@@ -20,12 +20,14 @@ function overBuilding(wx, wy) {
 }
 
 function drawUnits(dt) {
+  const now = performance.now();
   const s = scale();
   const rt = renderTime();
   for (const u of S.units.values()) {
     const r = s * 0.34 * (C.UNITS[u.kind].size || 1);
     [u.rx, u.ry] = interpPos(u, rt);
-    const [x, y] = toScreen(u.rx, u.ry);
+    const [lx, ly] = lungeOffset(u.id, u.rx, u.ry, now);
+    const [x, y] = toScreen(u.rx + lx, u.ry + ly);
     if (!onScreen(x, y, s)) continue;
     const mine = u.owner === S.myId;
     // troops standing on a building are drawn see-through, so the building still shows

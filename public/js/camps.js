@@ -1,7 +1,7 @@
 // Barbarian camps: camp markers, tents and campfires, and the barbarians themselves.
 
 import { interpPos, renderTime } from './net.js';
-import { hpBar, label, onScreen } from './render.js';
+import { hpBar, label, lungeOffset, onScreen } from './render.js';
 import { S, C, ctx, scale, toScreen } from './state.js';
 import { polygon } from './structures.js';
 
@@ -61,7 +61,8 @@ function drawCreeps(dt) {
     const px = c.rx;
     const py = c.ry;
     [c.rx, c.ry] = interpPos(c, rt);
-    const [x, y] = toScreen(c.rx, c.ry);
+    const [lx, ly] = lungeOffset(c.id, c.rx, c.ry, now);
+    const [x, y] = toScreen(c.rx + lx, c.ry + ly);
     if (!onScreen(x, y, s * 2)) continue;
     // facing and walking come from how the monster moved since the last frame
     const vx = px === undefined ? 0 : c.rx - px;

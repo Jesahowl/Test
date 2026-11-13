@@ -138,6 +138,7 @@ S.specFollow = true;
 S.allSquads = true;
 S.selSquads = new Set();
 
+S.lunges = new Map(); // troop or barbarian id -> { at, x, y }: a sword swing's dash at its target
 S.pendingOrder = null; // toast text waiting for the server to say how many troops moved
 const keys = new Set();
 

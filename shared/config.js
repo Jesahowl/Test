@@ -57,6 +57,8 @@
     // Personal space: troops keep at least UNIT_SPACING apart (friend or foe) and stay this far from
     // the middle of buildings and barbarians, so they never sit on top of each other.
     UNIT_SPACING: 0.95, // a little more than the widest troop icon, so icons never overlap
+    ENEMY_SPACING: 0.55, // troops of different sides may stand this close (front lines meet)...
+    MELEE_CLOSE: 0.7, // ...and melee troops close in to this distance from the troop they're fighting
     SLOT_RING1: 1.2, // formation rings inside a hex (tiles from its centre): 6 troops...
     SLOT_RING2: 2.05, // ...and 12 more
     STRUCT_BODY: 0.6,
@@ -135,7 +137,7 @@
         color: '#fff59d', desc: 'Very fast, sees far, never fights. While your troops defend, scouts explore on their own, uncovering camps and enemy land',
       },
       medic: {
-        name: 'Medic', key: '3', cost: 90, slots: 1, hp: 200, range: 3, heal: 16, patients: 2, rate: 1, speed: 2.4, sight: 5,
+        name: 'Medic', key: '3', cost: 90, slots: 1, hp: 200, range: 3, heal: 15, patients: 2, rate: 1, speed: 2.4, sight: 5,
         color: '#f48fb1', desc: 'Heals the two most wounded troops near it, cannot attack',
       },
       archer: {

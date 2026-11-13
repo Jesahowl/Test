@@ -1,6 +1,6 @@
 // Rendering basics: canvas sizing, background, labels, health bars and simple shapes.
 
-import { C, canvas, ctx, HEX, scale, toScreen, toWorld } from './state.js';
+import { S, C, canvas, ctx, HEX, scale, toScreen, toWorld } from './state.js';
 import { roundRect } from './structures.js';
 import { drawTerritoryShapes } from './territory.js';
 
@@ -288,4 +288,25 @@ function tokenPath(g, kind, x, y, R) {
   }
 }
 
-export { drawBackground, drawShape, hpBar, label, onScreen, resize, tokenPath };
+// A melee swing: the attacker dashes in at its target and springs back. Returns the offset to draw
+// troop/barbarian `id` (at world x, y) with, in tiles.
+const LUNGE_MS = 240;
+function lungeOffset(id, x, y, now) {
+  const l = S.lunges.get(id);
+  if (!l) return [0, 0];
+  const p = (now - l.at) / LUNGE_MS;
+  if (p < 0) return [0, 0];
+  if (p >= 1) {
+    S.lunges.delete(id);
+    return [0, 0];
+  }
+  const dx = l.x - x;
+  const dy = l.y - y;
+  const d = Math.hypot(dx, dy) || 1;
+  // quick dash out (first third), slower spring back
+  const k = p < 0.33 ? Math.sin((p / 0.33) * (Math.PI / 2)) : Math.cos(((p - 0.33) / 0.67) * (Math.PI / 2));
+  const reach = Math.min(0.45, d * 0.6) * k;
+  return [(dx / d) * reach, (dy / d) * reach];
+}
+
+export { lungeOffset, drawBackground, drawShape, hpBar, label, onScreen, resize, tokenPath };

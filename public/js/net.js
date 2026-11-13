@@ -224,6 +224,10 @@ function applyState(msg) {
       const t = S.towers.get(grid.get(`${Math.floor(f.x)},${Math.floor(f.y)}`));
       if (t) t.waveAt = now + INTERP_DELAY;
     }
+    if (f.k === 'slash' && f.a) {
+      // the attacker lunges at its target (drawn in troops.js / camps.js)
+      S.lunges.set(f.a, { at: now + INTERP_DELAY, x: f.x, y: f.y });
+    }
     if (f.k === 'tshot') {
       // flare the shooting tower's (or core's) crystal
       const tx = Math.floor(f.x1);

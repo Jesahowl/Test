@@ -185,7 +185,7 @@ module.exports = {
       this.fx.push({ k: 'arrow', x1: round2(u.x), y1: round2(u.y), x2: round2(tx), y2: round2(ty), o: u.owner });
     } else {
       this.hurt(target, dmg, u.owner);
-      this.fx.push({ k: 'slash', x: round2(tx), y: round2(ty) });
+      this.fx.push({ k: 'slash', x: round2(tx), y: round2(ty), a: u.id }); // a: who swung (for the lunge)
     }
   },
 
@@ -447,12 +447,13 @@ module.exports = {
   // Push troops apart so none sit on top of each other (friend or foe), and out of buildings and
   // barbarians (but never push a defender off its own land). Each overlap is resolved part of the way per tick, so crowds settle smoothly.
   separateUnits() {
-    const R = C.UNIT_SPACING;
     const before = new Map();
     for (const u of this.units.values()) if (!u.attack) before.set(u, [u.x, u.y]);
     for (const u of this.units.values()) {
-      for (const v of this.nearUnits(u.x, u.y, R)) {
+      for (const v of this.nearUnits(u.x, u.y, C.UNIT_SPACING)) {
         if (v.id <= u.id) continue;
+        // friends keep their full spacing; enemies may close in, so front lines meet
+        const R = v.owner === u.owner ? C.UNIT_SPACING : C.ENEMY_SPACING;
         let dx = v.x - u.x;
         let dy = v.y - u.y;
         let d = Math.hypot(dx, dy);
@@ -559,6 +560,11 @@ module.exports = {
           u.path = [];
           u.dest = null;
           if (u.cd <= 0) this.unitFire(u, shoot, s, def);
+          // melee troops step right up to the troop or barbarian they're fighting
+          if (def.melee && !shoot.isTower && !shoot.isPlayer) {
+            const [fx, fy] = posOf(shoot);
+            this.stepToward(u, fx, fy, C.MELEE_CLOSE, speed * 0.7, dt);
+          }
           continue;
         }
       }

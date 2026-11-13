@@ -126,7 +126,7 @@ module.exports = {
         } else if (foeD <= C.CREEP_REACH) {
           if (c.atkCd <= 0) {
             c.atkCd = 1;
-            this.fx.push({ k: 'slash', x: round2(foe.x), y: round2(foe.y) });
+            this.fx.push({ k: 'slash', x: round2(foe.x), y: round2(foe.y), a: c.id });
             this.damageUnit(foe, def.damage, 0);
           }
           continue;
