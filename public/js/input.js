@@ -210,38 +210,60 @@ window.addEventListener('keydown', (e) => {
 
 // Menu logo: a core crystal.
 (function drawLogo() {
+  // the crystal core, in gold: a rune circle, a stone dais and a floating crystal with shards
   const c = $('logo');
   const g = c.getContext('2d');
   const x = 36;
-  const y = 36;
-  const glow = g.createRadialGradient(x, y, 4, x, y, 36);
-  glow.addColorStop(0, 'rgba(255, 213, 79, 0.55)');
+  const glow = g.createRadialGradient(x, 28, 3, x, 28, 34);
+  glow.addColorStop(0, 'rgba(255, 213, 79, 0.5)');
   glow.addColorStop(1, 'rgba(255, 213, 79, 0)');
   g.fillStyle = glow;
   g.fillRect(0, 0, 72, 72);
+  g.strokeStyle = 'rgba(255, 213, 79, 0.85)';
+  g.lineWidth = 2;
   g.beginPath();
-  for (let i = 0; i < 8; i++) {
-    const a = Math.PI / 8 + (Math.PI / 4) * i;
-    g.lineTo(x + Math.cos(a) * 24, y + Math.sin(a) * 24);
-  }
-  g.closePath();
-  g.fillStyle = '#3a3220';
-  g.fill();
-  g.strokeStyle = '#ffd54f';
-  g.lineWidth = 3;
+  g.ellipse(x, 58, 26, 9, 0, 0, Math.PI * 2);
   g.stroke();
-  const cg = g.createLinearGradient(x - 9, y - 18, x + 9, y + 12);
-  cg.addColorStop(0, '#fff6c8');
-  cg.addColorStop(0.5, '#ffd54f');
-  cg.addColorStop(1, '#a8801c');
-  g.fillStyle = cg;
+  g.setLineDash([3, 4]);
+  g.lineWidth = 1.2;
   g.beginPath();
-  g.moveTo(x, y - 18);
-  g.lineTo(x + 10, y - 2);
-  g.lineTo(x, y + 12);
-  g.lineTo(x - 10, y - 2);
+  g.ellipse(x, 58, 20, 7, 0, 0, Math.PI * 2);
+  g.stroke();
+  g.setLineDash([]);
+  g.fillStyle = '#3a4048';
+  g.strokeStyle = '#22272d';
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(x - 16, 58);
+  g.lineTo(x - 11, 50);
+  g.lineTo(x + 11, 50);
+  g.lineTo(x + 16, 58);
   g.closePath();
   g.fill();
+  g.stroke();
+  const gem = (cx, cy, r, light, dark) => {
+    g.fillStyle = light;
+    g.beginPath();
+    g.moveTo(cx, cy - r * 1.45);
+    g.lineTo(cx + r * 0.75, cy - r * 0.1);
+    g.lineTo(cx, cy + r);
+    g.lineTo(cx - r * 0.75, cy - r * 0.1);
+    g.closePath();
+    g.fill();
+    g.fillStyle = dark;
+    g.beginPath();
+    g.moveTo(cx, cy - r * 1.45);
+    g.lineTo(cx + r * 0.75, cy - r * 0.1);
+    g.lineTo(cx, cy + r);
+    g.closePath();
+    g.fill();
+  };
+  g.shadowColor = '#ffd54f';
+  g.shadowBlur = 10;
+  gem(x, 31, 15, '#fff1b8', '#e0b23a');
+  g.shadowBlur = 0;
+  gem(x - 22, 34, 4, '#fff1b8', '#e0b23a');
+  gem(x + 22, 28, 4, '#fff1b8', '#e0b23a');
 })();
 
 $('play').onclick = join;

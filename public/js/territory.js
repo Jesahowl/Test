@@ -266,11 +266,11 @@ function drawTerritoryLabels(ox, oy, s) {
   ctx.textBaseline = 'middle';
   for (const l of S.terrLabels) {
     const p = players.get(l.owner);
-    if (!p) continue;
+    if (!p || l.owner === S.myId) continue; // your own land doesn't need your name on it
     // size: grows with how much room the region has, within limits, and with zoom
     const px = Math.min(Math.max(0.55, Math.min(l.depth * 0.45, 1.3)) * s, 46);
     if (px < 9) continue;
-    const text = (l.owner === S.myId ? `${p.name} (you)` : p.name).toUpperCase();
+    const text = p.name.toUpperCase();
     ctx.font = `800 ${Math.round(px)}px system-ui, sans-serif`;
     if ('letterSpacing' in ctx) ctx.letterSpacing = `${Math.round(px * 0.12)}px`;
     const x = ox + l.x * s;

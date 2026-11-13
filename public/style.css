@@ -62,7 +62,7 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 .meter > span { position: relative; display: block; text-align: center; font-size: 10.5px; line-height: 14px; font-weight: 700;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
 
-#feed { position: absolute; top: 186px; left: 12px; width: 300px; font-size: 12.5px; pointer-events: none; display: flex; flex-direction: column; gap: 3px; }
+#feed { position: absolute; top: 186px; left: 12px; width: 300px; font-size: 12.5px; pointer-events: none; display: flex; flex-direction: column; justify-content: flex-end; gap: 3px; overflow: hidden; }
 #feed div { align-self: flex-start; max-width: 100%; background: rgba(14, 18, 25, 0.78); border-left: 3px solid var(--line-hi); padding: 3px 9px;
   border-radius: 0 6px 6px 0; transition: opacity 0.5s; }
 
@@ -286,16 +286,11 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 #hud.spectating #feed { top: 12px; }
 
 /* ---------------------------------------------------------------- smaller screens */
-@media (max-width: 1500px) {
-  #tips { bottom: calc(var(--bar-h) + 60px); }
-}
 @media (max-width: 1240px) {
   .troop { width: 96px; }
   .troop .count { font-size: 10px; }
   #bar .orders { width: 196px; }
   .tile { width: 62px; }
-  #minimap-wrap { bottom: calc(var(--bar-h) + 60px); }
-  #selection { bottom: calc(var(--bar-h) + 258px); }
   #feed { width: 240px; }
 }
 @media (max-height: 640px) {

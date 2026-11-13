@@ -1,5 +1,6 @@
 // Entry point: the main loop and start-up.
 
+import { layoutHud } from './layout.js';
 import { buildBar } from './bar.js';
 import { drawCamps, drawCreeps } from './camps.js';
 import { drawCores } from './cores.js';
@@ -64,6 +65,7 @@ function frame(now) {
   if (S.hudTimer <= 0) {
     S.hudTimer = 0.15;
     updateHud();
+    layoutHud();
   }
   requestAnimationFrame(frame);
 }

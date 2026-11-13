@@ -146,6 +146,7 @@ function drawOverlay() {
       byTarget.get(k).nums.push(i);
     });
     for (const { type, key, nums } of byTarget.values()) {
+      if (type === 'defend' && key === `c:${S.myId}`) continue; // home: nothing to point out
       const pos = targetPos(key);
       if (!pos) continue;
       const picked = nums.some((i) => S.selSquads.has(i)) && !selUnits.size;

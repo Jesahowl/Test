@@ -104,15 +104,25 @@ function drawCores(dt) {
     label(p.id === S.myId ? `${p.name} (you)` : p.name, x, y - r * 1.98, Math.max(11, Math.round(s * 0.5)), '#fff');
 
     if (p.shield) {
-      // spawn shield: a shimmering hex bubble
-      const a = 0.35 + 0.2 * Math.sin(now / 250);
-      ctx.strokeStyle = `rgba(121, 192, 255, ${a + 0.2})`;
-      ctx.fillStyle = `rgba(121, 192, 255, ${a * 0.25})`;
-      ctx.lineWidth = 2;
-      polygon(x, y, r * 1.75, 6, now / 5000);
+      // spawn shield: a soft glassy dome over the core, shimmering
+      const a = 0.5 + 0.5 * Math.sin(now / 300);
+      const dx = x;
+      const dy = by - r * 0.15;
+      const dr = r * 1.45;
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(dx, dy, dr, dr * 1.05, 0, Math.PI, 0);
+      ctx.ellipse(dx, dy, dr, dr * 0.4, 0, 0, Math.PI);
+      const dg = ctx.createRadialGradient(dx - dr * 0.35, dy - dr * 0.6, dr * 0.1, dx, dy - dr * 0.3, dr * 1.2);
+      dg.addColorStop(0, `rgba(190, 225, 255, ${0.16 + 0.06 * a})`);
+      dg.addColorStop(1, 'rgba(121, 192, 255, 0.04)');
+      ctx.fillStyle = dg;
       ctx.fill();
+      ctx.strokeStyle = `rgba(160, 210, 255, ${0.35 + 0.2 * a})`;
+      ctx.lineWidth = Math.max(1.5, s * 0.04);
       ctx.stroke();
-      label(`protected ${p.shield}s`, x, y + r * 2.4, Math.max(10, Math.round(s * 0.38)), '#79c0ff');
+      ctx.restore();
+      label(`🛡 ${p.shield}s`, x, by + r * 0.85, Math.max(10, Math.round(s * 0.36)), '#9ccfff');
     }
   }
 }
