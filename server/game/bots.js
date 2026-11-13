@@ -100,11 +100,16 @@ module.exports = {
       return;
     }
 
+    // One scout per wave until two are out exploring; then those slots go to fighters.
+    const scouts = troops.filter((u) => u.kind === 'scout').length;
+    if (scouts >= 2 && p.army.scout) this.armyRemove(p.id, 'scout');
+    else if (scouts < 2 && !p.army.scout && this.slotsUsed(p) < this.waveSize(p)) this.armyAdd(p.id, 'scout');
+
     // Shape the wave: assign free slots to a mix of troop types (free), then buy levels.
     const assigned = this.slotsUsed(p);
     if (assigned < this.waveSize(p)) {
       const r = this.rand();
-      const kind = !p.army.scout ? 'scout' : r < 0.5 ? 'soldier' : r < 0.7 ? 'medic' : 'archer';
+      const kind = r < 0.5 ? 'soldier' : r < 0.7 ? 'medic' : 'archer';
       this.armyAdd(p.id, kind);
     } else if (p.gold >= 120 && roll < 0.7) {
       const kinds = UNIT_KEYS.filter((k) => p.army[k] > 0 && p.levels[k] < C.MAX_LEVEL);

@@ -13,7 +13,9 @@
     // taking towers and cores - see the *_BOUNTY settings and each monster's bounty).
     START_GOLD: 200,
     BASE_INCOME: 1.5, // gold per second
-    INCOME_PER_TILE: 0.015, // extra gold per second for each owned tile
+    INCOME_PER_TILE: 0.015, // extra gold per second for each owned tile...
+    INCOME_FULL_TILES: 400, // ...for the first this many tiles; beyond that each tile pays
+    INCOME_LATE_SHARE: 0.4, // this share of it (so a huge empire doesn't snowball out of reach)
 
     // The core: your base. It shoots like a tower; if it falls, you're out.
     CORE_HP: 2500,
@@ -74,7 +76,7 @@
     SCOUT_LEG_TIME: 25, // seconds before a scout picks a new place to explore // troops on the march engage enemies within (attack range + this)
     TROOP_BOUNTY: 14, // gold for killing an enemy troop
     TROOP_BOUNTY_PER_LEVEL: 6, // extra gold per level of the troop killed
-    TOWER_BOUNTY: 250, // gold for destroying an enemy tower
+    TOWER_BOUNTY: 150, // gold for destroying an enemy tower (which you then also own)
     TOWER_CLAIM_HP: 0.7, // a destroyed tower becomes the destroyer's, at this fraction of max HP
     // Home turf: troops standing on their own land heal and hit harder, so defending is cheaper
     // than attacking and a big army can't simply steamroll a smaller one at its door.
@@ -102,8 +104,8 @@
     SUDDEN_DEATH_SIEGE: 2, // troop damage multiplier against towers and cores
     // Pacing: cores take less damage for the first minutes, and troop damage to buildings
     // ramps up from SIEGE_RAMP_START so pushes get easier as the round goes on.
-    CORE_FORTIFY: 0.7, // fraction of core damage blocked...
-    CORE_FORTIFY_TIME: 420, // ...until this many seconds into the round
+    CORE_FORTIFY: 0.8, // fraction of core damage blocked...
+    CORE_FORTIFY_TIME: 480, // ...until this many seconds into the round
     SIEGE_RAMP_START: 480,
     SIEGE_RAMP_PER_MIN: 0.1, // +10% building damage per minute after that (x2 at 18 min)
     SUDDEN_DEATH_DECAY: 0.002, // fraction of core max HP lost per second in sudden death (never below 1 HP)
@@ -120,7 +122,7 @@
     // Troop types. `cost` sets the price of levelling the type up (see armyLevelCost).
     UNITS: {
       soldier: {
-        name: 'Soldier', key: '1', cost: 60, slots: 1, hp: 300, range: 1.3, damage: 20, rate: 1, speed: 2.3, sight: 5,
+        name: 'Soldier', key: '1', cost: 60, slots: 1, hp: 340, range: 1.3, damage: 22, rate: 1, speed: 2.3, sight: 5,
         melee: true,
         color: '#a5d6a7', desc: 'Sword and shield: the backbone of every wave. Empty wave slots are filled with soldiers',
       },
@@ -129,8 +131,8 @@
         color: '#fff59d', desc: 'Very fast, sees far, never fights. While your troops defend, scouts explore on their own, uncovering camps and enemy land',
       },
       medic: {
-        name: 'Medic', key: '3', cost: 90, slots: 1, hp: 150, range: 3, heal: 12, rate: 1, speed: 2.4, sight: 5,
-        color: '#f48fb1', desc: 'Heals nearby troops, cannot attack',
+        name: 'Medic', key: '3', cost: 90, slots: 1, hp: 200, range: 3, heal: 16, patients: 2, rate: 1, speed: 2.4, sight: 5,
+        color: '#f48fb1', desc: 'Heals the two most wounded troops near it, cannot attack',
       },
       archer: {
         name: 'Archer', key: '4', cost: 80, slots: 1, hp: 170, range: 5, damage: 26, rate: 1.1, speed: 2.4, sight: 6,
@@ -142,7 +144,7 @@
     // Fixed structures.
     TOWERS: {
       tower: {
-        name: 'Tower', key: 'B', cost: 120, hp: 1400, range: 5, damage: 32, rate: 1,
+        name: 'Tower', key: 'B', cost: 120, hp: 2400, range: 5, damage: 40, rate: 1,
         color: '#80deea', desc: 'Zaps enemy troops that come near. Build on your own land',
       },
       barracks: {
@@ -285,7 +287,9 @@
   };
 
   CONFIG.income = function (territory) {
-    return CONFIG.BASE_INCOME + territory * CONFIG.INCOME_PER_TILE;
+    const full = Math.min(territory, CONFIG.INCOME_FULL_TILES);
+    const late = Math.max(0, territory - CONFIG.INCOME_FULL_TILES);
+    return CONFIG.BASE_INCOME + (full + late * CONFIG.INCOME_LATE_SHARE) * CONFIG.INCOME_PER_TILE;
   };
 
   if (typeof module !== 'undefined' && module.exports) {

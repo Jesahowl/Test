@@ -44,6 +44,7 @@ module.exports = {
 
   medicTick(u, def, s, tgt, speed, dt) {
     let healed = 0;
+    const wounded = []; // in reach: the most wounded get treated (def.patients at a time)
     let patient = null;
     let worst = 1;
     let buddy = null;
@@ -52,10 +53,7 @@ module.exports = {
       if (f.owner !== u.owner) continue;
       const fd = dist(u.x, u.y, f.x, f.y);
       if (f.hp < f.maxHp) {
-        if (u.cd <= 0 && fd <= s.range) {
-          f.hp = Math.min(f.maxHp, f.hp + s.heal);
-          healed++;
-        }
+        if (u.cd <= 0 && fd <= s.range) wounded.push(f);
         if (fd < 10 && f.hp / f.maxHp < worst) {
           worst = f.hp / f.maxHp;
           patient = f;
@@ -64,6 +62,13 @@ module.exports = {
       if (f !== u && !C.UNITS[f.kind].heal && fd < buddyD && (!tgt || f.attack)) {
         buddyD = fd;
         buddy = f;
+      }
+    }
+    if (wounded.length) {
+      wounded.sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp);
+      for (const f of wounded.slice(0, def.patients || 1)) {
+        f.hp = Math.min(f.maxHp, f.hp + s.heal);
+        healed++;
       }
     }
     if (healed) {
