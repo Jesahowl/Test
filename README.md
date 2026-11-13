@@ -127,7 +127,8 @@ test/                   node:test suite (game rules, waves & orders, jungle, rou
 - **Spatial grid.** Troops are bucketed into 4x4-tile cells each tick, so targeting, tower fire, splash, healing and
   healing only look at nearby troops (24 players: about 4 ms per tick).
 - **Territory.** Each tile belongs to whichever core/tower claims it most strongly; cores hold nearby land twice as strongly.
-  Borders are traced, smoothed and drawn as vector paths on the client.
+  Borders are traced, lightly smoothed and drawn as vector paths on the client: each player's land is
+  diagonal stripes in their colour inside a dashed border, like a map of claims.
 - **Troop movement.** Attacking troops follow a flow field toward their target (Dijkstra from the goal tile, one per
   active goal, rebuilt lazily when structures change). Defending troops plan short BFS paths within their own land and
   patrol around the structure they guard.

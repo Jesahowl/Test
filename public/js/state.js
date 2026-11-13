@@ -18,8 +18,8 @@ const CREEP_KEYS = Object.keys(C.CREEPS);
 const CAMP_KEYS = Object.keys(C.CAMP_TYPES);
 
 const TPX = 2; // minimap territory canvas pixels per tile
-const SMOOTH_WINDOW = 2; // outline points averaged on each side when smoothing territory
-const SMOOTH_PASSES = 2;
+const SMOOTH_WINDOW = 1; // outline points averaged on each side when smoothing territory
+const SMOOTH_PASSES = 1;
 
 // ------------------------------------------------------------------ DOM
 const $ = (id) => document.getElementById(id);
