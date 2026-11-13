@@ -98,7 +98,7 @@ test('spawn protection keeps a new core and its towers from taking damage', () =
   assert.strictEqual(b.core.hp, C.CORE_HP - 500);
 });
 
-test('the conqueror takes the gold, the surviving troops and the core site', () => {
+test('the conqueror takes the gold, all the land, the surviving troops and the core site', () => {
   const { g, a, b } = duel(6);
   const t = outpost(g, b);
   const loyal = troops(g, b, 'soldier', 3, b.core.x + 0.5, b.core.y + 2);
@@ -107,7 +107,10 @@ test('the conqueror takes the gold, the surviving troops and the core site', () 
   b.gold = 777;
   const gold = a.gold;
   const site = { x: b.core.x, y: b.core.y };
+  const theirLand = [];
+  for (let k = 0; k < g.terr.length; k++) if (g.terr[k] === b.id) theirLand.push(k);
   g.damageCore(b, C.CORE_HP, a.id);
+  assert.ok(theirLand.every((k) => g.terr[k] === a.id), 'every tile of their land is now the conqueror\'s');
 
   assert.ok(death);
   assert.strictEqual(death.info.killer, 'A');

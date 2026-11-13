@@ -170,9 +170,9 @@ module.exports = {
   },
 
   // A core has fallen (or its player left). The player is out of the game. If another player
-  // destroyed it, they take the spoils: all the victim's gold (plus a bounty), every troop the
-  // victim still had standing, and a new tower where the core stood, garrisoned by those troops.
-  // The victim's other towers become ruins.
+  // destroyed it, they take the spoils: all the victim's gold (plus a bounty), all of their land,
+  // every troop the victim still had standing, and a new tower where the core stood, garrisoned by
+  // those troops. The victim's other towers become ruins (which the conqueror can buy back).
   killPlayer(p, killerId, leftGame = false) {
     if (!p.alive) return;
     this.recordStanding(p, this.players.size, leftGame);
@@ -187,8 +187,19 @@ module.exports = {
     for (const t of this.towers.values()) {
       if (t.owner === p.id) this.ruinTower(t, p.name);
     }
-    // Their land opens up: empty, for anyone to buy.
-    this.releaseLand(p.id);
+    // Their land: all of it goes to whoever destroyed the core; otherwise (they left, or nobody
+    // in particular brought it down) it opens up, empty, for anyone to buy.
+    let landTaken = 0;
+    if (conquered) {
+      for (let k = 0; k < this.terr.length; k++) {
+        if (this.terr[k] !== p.id) continue;
+        this.terr[k] = killer.id;
+        landTaken++;
+      }
+      this.terrDirty = true;
+    } else {
+      this.releaseLand(p.id);
+    }
 
     // The core site becomes a tower for the conqueror.
     let site = null;
@@ -237,7 +248,7 @@ module.exports = {
       p.gold = 0;
       // Waves that were pushing on this player head home instead of wandering off.
       if (killer.lastOrder.type === 'attack' && !this.orderValid(killer.id, killer.lastOrder)) killer.lastOrder = { type: 'defend', anchor: 0 };
-      this.pushFeed(`${killer.name} destroyed ${p.name}'s core: +${bounty}g, ${troopsTaken} troop${troopsTaken === 1 ? '' : 's'} and a new tower`);
+      this.pushFeed(`${killer.name} destroyed ${p.name}'s core: +${bounty}g, all ${landTaken} tiles of their land, ${troopsTaken} troop${troopsTaken === 1 ? '' : 's'} and a new tower`);
     } else if (leftGame) {
       this.pushFeed(`${p.name} left - their base lies in ruins`);
     } else {
@@ -254,6 +265,7 @@ module.exports = {
         killerId: conquered ? killer.id : 0,
         troopsTaken,
         goldTaken,
+        landTaken,
         survived: Math.round(this.time - p.spawnTime),
         peakTerritory: p.peakTerritory,
         kills: p.kills,
