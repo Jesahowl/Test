@@ -1,9 +1,11 @@
 // Buying land: press L (or the Land button), then click border tiles or drag along your border.
+// Double-clicking outside your land buys the whole ring around it.
 // Tiles you can buy light up near the cursor; a drag collects tiles (each must touch your land or
 // a tile already in the drag) and buys them all when you let go, as far as your gold goes.
 
 import { sendMsg } from './net.js';
 import { label } from './render.js';
+import { toast } from './screens.js';
 import { S, C, ctx, mouse, players, scale, terr, toScreen } from './state.js';
 
 const W = C.MAP_W;
@@ -77,6 +79,46 @@ function landUp() {
   for (let i = 0; i < d.tiles.length; i += C.LAND_BUY_MAX) sendMsg({ t: 'land', tiles: d.tiles.slice(i, i + C.LAND_BUY_MAX) });
 }
 
+// Double-click outside my land: buy the whole ring of empty tiles around my border (land grows one
+// tile outward everywhere). If gold runs short, the tiles nearest the double-click come first.
+let expansions = 0;
+function expandAll(wx, wy) {
+  if (!S.myId || !S.me) return;
+  // Every other ring also takes the diagonal corners, so repeated rings stay round rather than
+  // turning into a diamond (side tiles only) or a square (corners every time).
+  const corners = expansions++ % 2 === 1;
+  const ring = [];
+  const pending = new Set();
+  for (let k = 0; k < W * H; k++) {
+    if (terr[k]) continue;
+    const x = k % W;
+    const y = (k - x) / W;
+    const d = Math.hypot(x + 0.5 - wx, y + 0.5 - wy);
+    if (canBuy(k, null)) ring.push([k, d, 0]);
+    else if (corners) {
+      const mine = (tx, ty) => tx >= 0 && ty >= 0 && tx < W && ty < H && terr[ty * W + tx] === S.myId;
+      if (mine(x - 1, y - 1) || mine(x + 1, y - 1) || mine(x - 1, y + 1) || mine(x + 1, y + 1)) ring.push([k, d, 1]);
+    }
+  }
+  if (!ring.length) return;
+  // side tiles first (nearest the double-click first), then the corners they make reachable
+  ring.sort((a, b) => a[2] - b[2] || a[1] - b[1]);
+  for (const [k] of ring) pending.add(k);
+  // as many as the gold covers
+  let n = 0;
+  let gold = S.me.gold;
+  const land = myLand();
+  while (n < ring.length && C.landCost(land + n) <= gold) gold -= C.landCost(land + n++);
+  if (!n) {
+    toast(`Not enough gold: the next tile costs ${C.landCost(land)}g`);
+    return;
+  }
+  // corners only count if a side tile next to them is being bought too
+  const tiles = ring.slice(0, n).filter((r) => !r[2] || [r[0] - 1, r[0] + 1, r[0] - W, r[0] + W].some((j) => pending.has(j))).map((r) => r[0]);
+  for (let i = 0; i < tiles.length; i += C.LAND_BUY_MAX) sendMsg({ t: 'land', tiles: tiles.slice(i, i + C.LAND_BUY_MAX) });
+  S.effects.push({ k: 'ping', x: wx, y: wy, born: performance.now() });
+}
+
 function drawLandMode() {
   const s = scale();
   const d = S.landDrag;
@@ -130,4 +172,4 @@ function drawLandMode() {
   if (text) label(text, mouse.sx + 18 + text.length * 3.3, mouse.sy + 26, 12, color);
 }
 
-export { canBuy, drawLandMode, landDown, landMove, landUp };
+export { canBuy, drawLandMode, expandAll, landDown, landMove, landUp, myLand };

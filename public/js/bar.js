@@ -23,7 +23,7 @@ function buildBar() {
   bb.innerHTML = `<kbd>${bd.key}</kbd><span class="count"></span><img src="${iconURL('barracks')}" alt="">${bd.name}<span class="cost"></span>`;
   bb.onclick = () => toggleBuild('barracks');
   const lb = $('land-button');
-  lb.dataset.tip = `<span class="t">Buy land <kbd>L</kbd></span>Click empty tiles touching your border, or <b>drag along it</b> to buy a strip. Each tile costs ${C.LAND_BASE_COST}g + ${C.LAND_COST_PER_TILE}g for every tile you own. <span class="m">Land = more gold and a bigger army. Enemy land can't be bought: take their towers to open it up.</span>`;
+  lb.dataset.tip = `<span class="t">Buy land <kbd>L</kbd></span>Click empty tiles touching your border, or <b>drag along it</b> to buy a strip. <b>Double-click</b> outside your land to grow it one tile outward all round. Each tile costs ${C.LAND_BASE_COST}g + ${C.LAND_COST_PER_TILE}g for every tile you own. <span class="m">Land = more gold and a bigger army. Enemy land can't be bought: take their towers to open it up.</span>`;
   lb.innerHTML = `<kbd>L</kbd><img src="${iconURL('land')}" alt="">Land<span class="cost"></span>`;
   lb.onclick = () => toggleBuild('land');
 

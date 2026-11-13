@@ -1,12 +1,12 @@
 // Input: mouse, keyboard, minimap and help window.
 
-import { landDown, landMove, landUp } from './land.js';
+import { expandAll, landDown, landMove, landUp } from './land.js';
 import { newSquadFromPicked, orderAt, pickSquadOf, selectAllSquads, squadKey, toggleBuild, toggleNewWaves } from './bar.js';
 import { sendMsg } from './net.js';
 import { clearSelection } from './overlay.js';
 import { resize } from './render.js';
 import { join, specNext, startSpectating } from './screens.js';
-import { S, $, C, cam, canvas, grid, keys, mini, mouse, players, scale, selUnits, toWorld } from './state.js';
+import { S, $, C, cam, canvas, grid, keys, mini, mouse, players, scale, selUnits, terr, toWorld } from './state.js';
 import { orderTargetAt } from './targets.js';
 import { hideTip } from './ui.js';
 
@@ -105,6 +105,16 @@ window.addEventListener('mouseup', (e) => {
 });
 
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// Double-click outside your land: expand your land outward all round (buying the border ring).
+canvas.addEventListener('dblclick', (e) => {
+  if (e.button !== 0 || !S.myId || S.spectating || (S.buildKind && S.buildKind !== 'land')) return;
+  updateMouseWorld();
+  const tx = Math.floor(mouse.wx);
+  const ty = Math.floor(mouse.wy);
+  if (tx < 0 || ty < 0 || tx >= C.MAP_W || ty >= C.MAP_H || terr[ty * C.MAP_W + tx] === S.myId) return;
+  expandAll(mouse.wx, mouse.wy);
+});
 
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();

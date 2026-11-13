@@ -5,7 +5,7 @@ import { S, $, C, UNIT_KEYS } from './state.js';
 // ---- first-game tips: one at a time, each ticks off when you do the thing.
 const TIPS = [
   { id: 'attack', text: 'Your core sends troops every 20 seconds. <b>Right-click</b> an enemy tower, core or camp to send them. Press <kbd>H</kbd> to bring everyone home.' },
-  { id: 'land', text: 'Press <kbd>L</kbd> and <b>drag along your border</b> to buy land. Land means more gold and a bigger army. Each tile costs a little more the more you own.' },
+  { id: 'land', text: '<b>Double-click</b> outside your land to grow it all round, or press <kbd>L</kbd> and <b>drag along your border</b> to buy just where you want. Land means more gold and a bigger army. Each tile costs a little more the more you own.' },
   { id: 'tower', text: 'Press <kbd>B</kbd> and click your land to build a <b>tower</b>. Towers zap enemies and hold your land: lose one and the land around it opens up.' },
   { id: 'barracks', text: 'Press <kbd>R</kbd> and click your land for a <b>barracks</b>: <b>+4 troops</b> in every wave, marching out from it.' },
   { id: 'mix', text: 'Choose your wave with the <b>+</b> buttons. <b>Scouts</b> explore the fog, <b>archers</b> shoot from range, <b>medics</b> heal.' },

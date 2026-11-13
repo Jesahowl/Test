@@ -158,7 +158,7 @@
     LAND_BASE_COST: 5,
     LAND_COST_PER_TILE: 0.07,
     LAND_BREACH: 3,
-    LAND_BUY_MAX: 80, // tiles one buy message may ask for (a drag along the border)
+    LAND_BUY_MAX: 250, // tiles one buy message may ask for (a drag, or a whole ring of border)
 
     // ---- Jungle: neutral camps that sit still, fight back when attacked, and pay out when cleared.
     CAMP_COUNT: 12,
