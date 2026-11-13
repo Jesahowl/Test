@@ -11,6 +11,8 @@ const ROOT = path.join(__dirname, '..');
 const STATIC = {
   '/': 'public/index.html',
   '/index.html': 'public/index.html',
+  '/hex': 'public/hex-preview.html',
+  '/hex-preview.html': 'public/hex-preview.html',
   '/style.css': 'public/style.css',
   '/shared/config.js': 'shared/config.js',
   '/shared/pathfinding.js': 'shared/pathfinding.js',
