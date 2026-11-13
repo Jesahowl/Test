@@ -1,32 +1,26 @@
-// Overlays: build and land previews, order lines and markers, and the minimap.
+// Overlays: build and land previews (in hexes), order lines and markers, and the minimap.
 
 import { squadsLabel } from './bar.js';
 import { mySquads, squadPicked } from './squads.js';
 import { drawShape, label } from './render.js';
-import { S, C, canvas, colorOf, ctx, FOG_PAD, fogSoft, grid, mctx, mini, mouse, players, scale, selUnits, terr, terrCanvas, toScreen, toWorld } from './state.js';
+import { S, C, HEX, canvas, colorOf, ctx, FOG_PAD, fogSoft, grid, mctx, mini, mouse, players, scale, selUnits, terr, terrCanvas, toScreen, toWorld } from './state.js';
 import { campVerb, isMineTarget, orderTargetAt, targetName, targetPos } from './targets.js';
-import { drawLandMode } from './land.js';
+import { drawLandMode, hexPath } from './land.js';
 
-// ---- building preview. Buildings go on my own land with a ring of my land around them (3x3).
-function ownsBlock(x, y) {
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      const nx = x + dx;
-      const ny = y + dy;
-      if (nx < 0 || ny < 0 || nx >= C.MAP_W || ny >= C.MAP_H || terr[ny * C.MAP_W + nx] !== S.myId) return false;
-    }
-  }
-  return true;
-}
-
-// Why a building can't go at (x, y), or null if it can.
-function buildProblem(x, y) {
-  if (!S.me || x < 0 || y < 0 || x >= C.MAP_W || y >= C.MAP_H) return 'Out of bounds';
-  if (grid.has(`${x},${y}`)) return 'Something is already here';
-  for (const p of players.values()) if (p.x === x && p.y === y) return 'Something is already here';
-  if (!ownsBlock(x, y)) return terr[y * C.MAP_W + x] === S.myId ? 'Too close to your border: build a tile further in' : 'Build on your own land (press L to buy more)';
-  if (nearEnemyBuilding(x, y)) return 'Too close to an enemy building';
-  return null;
+// ---- building preview. Buildings stand at the centre of one of my hexes, one per hex.
+// The hex under (x, y), and why a building can't go there (null if it can).
+function buildSpot(x, y) {
+  if (!S.me || x < 0 || y < 0 || x >= C.MAP_W || y >= C.MAP_H) return { hex: null, problem: 'Out of bounds' };
+  const hex = HEX.hexes[HEX.tileHex[y * C.MAP_W + x]];
+  const cx = hex.centre % C.MAP_W;
+  const cy = (hex.centre - cx) / C.MAP_W;
+  let problem = null;
+  if (terr[hex.tiles[0]] !== S.myId) problem = 'Build on your own land (press L to claim more)';
+  else if (hex.centre < 0 || !hex.full) problem = 'Too close to the edge of the map';
+  else if (grid.has(`${cx},${cy}`) || [...players.values()].some((p) => HEX.tileHex[p.y * C.MAP_W + p.x] === hex.i)
+    || [...S.towers.values()].some((t) => HEX.tileHex[t.y * C.MAP_W + t.x] === hex.i)) problem = 'There is already a building in this hex';
+  else if (nearEnemyBuilding(cx, cy)) problem = 'Too close to an enemy building';
+  return { hex, cx, cy, problem };
 }
 
 // Mirrors the server: no building within ENEMY_BUILD_GAP tiles of another player's building or core.
@@ -255,21 +249,19 @@ function drawOverlay() {
     return;
   }
   if (S.buildKind && S.myId) {
-    const tx = Math.floor(mouse.wx);
-    const ty = Math.floor(mouse.wy);
-    const problem = buildProblem(tx, ty);
+    const spot = buildSpot(Math.floor(mouse.wx), Math.floor(mouse.wy));
+    const { problem } = spot;
     const ok = !problem;
-    // the 3x3 of my land the building needs
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        const nx = tx + dx;
-        const ny = ty + dy;
-        if (nx < 0 || ny < 0 || nx >= C.MAP_W || ny >= C.MAP_H) continue;
-        const [sx, sy] = toScreen(nx, ny);
-        ctx.fillStyle = terr[ny * C.MAP_W + nx] === S.myId ? 'rgba(126,231,135,0.18)' : 'rgba(248,81,73,0.3)';
-        ctx.fillRect(sx + 1, sy + 1, s - 2, s - 2);
-      }
-    }
+    if (!spot.hex) return;
+    const tx = spot.cx;
+    const ty = spot.cy;
+    // the hex it would go in
+    hexPath(spot.hex, s, 2);
+    ctx.fillStyle = ok ? 'rgba(126,231,135,0.2)' : 'rgba(248,81,73,0.25)';
+    ctx.fill();
+    ctx.strokeStyle = ok ? 'rgba(126,231,135,0.8)' : 'rgba(248,81,73,0.8)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
     if (problem) label(problem, mouse.sx + 22 + problem.length * 3.2, mouse.sy + 26, 12, '#ffa198');
     const st = C.towerStats(S.buildKind, 1);
     if (st.range) drawRange(tx + 0.5, ty + 0.5, st.range, ok ? 'rgba(88,166,255,A)' : 'rgba(248,81,73,A)');
@@ -277,9 +269,6 @@ function drawOverlay() {
     ctx.globalAlpha = 0.6;
     drawShape(S.buildKind, x, y, s * 0.45, ok ? C.TOWERS[S.buildKind].color : '#f85149');
     ctx.globalAlpha = 1;
-    ctx.strokeStyle = ok ? '#58a6ff' : '#f85149';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x - s / 2, y - s / 2, s, s);
   }
 }
 

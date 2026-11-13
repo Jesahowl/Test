@@ -17,6 +17,7 @@ const STATIC = {
   '/shared/config.js': 'shared/config.js',
   '/shared/pathfinding.js': 'shared/pathfinding.js',
   '/shared/vision.js': 'shared/vision.js',
+  '/shared/hex.js': 'shared/hex.js',
 };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 

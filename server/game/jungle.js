@@ -69,8 +69,15 @@ module.exports = {
   // Move a camp to a new spot (its monsters must already be gone).
   moveCamp(camp) {
     const spot = this.pickCampSpot(camp);
-    camp.x = spot.x;
-    camp.y = spot.y;
+    // camps stand at the centre of a hex
+    const hx = this.hex.hexes[this.hexAt(spot.x, spot.y)];
+    if (hx.centre >= 0 && !this.grid[hx.centre]) {
+      camp.x = hx.centre % this.w;
+      camp.y = (hx.centre - camp.x) / this.w;
+    } else {
+      camp.x = spot.x;
+      camp.y = spot.y;
+    }
   },
 
   spawnCamp(camp) {

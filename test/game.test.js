@@ -25,24 +25,26 @@ test('names are sanitised', () => {
   assert.strictEqual(g.addPlayer('').name, 'Player');
 });
 
-test('buildings go on your own land, a tile in from the border; towers claim no land', () => {
+test('buildings stand at the centre of one of your hexes, one per hex; towers claim no land', () => {
   const { g, a, b } = duel(3);
-  const inside = edgeTile(g, a, 0, 1, -2);
-  const border = edgeTile(g, a, 1, 0, -1); // on my land but touching the edge
-  const outside = edgeTile(g, a, -1, 0, 1);
+  const core = g.hex.hexes[g.hexAt(a.core.x, a.core.y)];
+  const next = g.hex.hexes[core.n[0]];
   const before = a.territory;
-  assert.strictEqual(g.build(a.id, inside.x, inside.y, 'tower'), null);
+  // any tile in the hex will do: the tower goes to its centre
+  const tile = next.tiles.find((k) => k !== next.centre);
+  assert.strictEqual(g.build(a.id, tile % g.w, Math.floor(tile / g.w), 'tower'), null);
+  const t = [...g.towers.values()].find((o) => o.owner === a.id);
+  assert.strictEqual(g.idx(t.x, t.y), next.centre, 'snapped to the hex centre');
   g.update(0.05);
   assert.strictEqual(a.territory, before, 'a tower claims no land');
-  assert.match(g.build(a.id, inside.x, inside.y, 'tower'), /occupied/);
-  assert.match(g.build(a.id, a.core.x, a.core.y, 'tower'), /occupied/);
-  assert.match(g.build(a.id, border.x, border.y, 'tower'), /own land/);
+  assert.match(g.build(a.id, t.x, t.y, 'barracks'), /already a building/);
+  assert.match(g.build(a.id, a.core.x, a.core.y, 'tower'), /already a building/);
+  const outside = edgeTile(g, a, -1, 0, 2);
   assert.match(g.build(a.id, outside.x, outside.y, 'barracks'), /own land/);
-  assert.match(g.build(a.id, b.core.x + 2, b.core.y, 'tower'), /own land|enemy/);
+  assert.match(g.build(a.id, b.core.x, b.core.y + 3, 'tower'), /own land/);
   assert.match(g.build(a.id, -1, 0, 'tower'), /bounds/);
   assert.match(g.build(a.id, 1.5, 0, 'tower'), /bounds/);
-  assert.match(g.build(a.id, inside.x, inside.y, 'wall'), /Invalid/);
-  const t = [...g.towers.values()].find((o) => o.owner === a.id);
+  assert.match(g.build(a.id, t.x, t.y, 'wall'), /Invalid/);
   assert.strictEqual(g.upgrade(a.id, t.id), null);
   assert.strictEqual(t.maxHp, C.towerStats('tower', 2).hp);
   assert.strictEqual(g.sell(a.id, t.id), null);
@@ -50,39 +52,46 @@ test('buildings go on your own land, a tile in from the border; towers claim no 
   assert.strictEqual(a.territory, before, 'selling keeps the land');
 });
 
-test('land is bought tile by tile at the border, pricier as you grow', () => {
+test('land is claimed hex by hex at the border, pricier as you grow', () => {
   const { g, a, b } = duel(4);
-  a.gold = 1000;
+  a.gold = 5000;
   const start = a.territory;
-  assert.ok(start > 100, 'a core starts with a circle of land');
-  const edge = edgeTile(g, a, 1, 0); // first empty tile east of the core
-  const k = g.idx(edge.x, edge.y);
-  const far = g.idx(edge.x + 3, edge.y);
-  assert.match(g.buyLand(a.id, [far]), /touch your land/);
-  const cost1 = C.landCost(start);
-  assert.strictEqual(g.buyLand(a.id, [k, g.idx(edge.x + 1, edge.y), g.idx(edge.x + 2, edge.y)]), null, 'a drag grows outward tile by tile');
-  assert.strictEqual(g.lastBuy.n, 3);
-  assert.strictEqual(a.gold, 1000 - cost1 - C.landCost(start + 1) - C.landCost(start + 2));
+  assert.ok(start > 90, `a core starts with its hex and the six round it (${start} tiles)`);
+  const core = g.hex.hexes[g.hexAt(a.core.x, a.core.y)];
+  assert.ok(core.n.every((j) => g.hexOwner[j] === a.id));
+  const ring = g.hex.hexes.filter((h) => g.canBuyHex(a.id, h.i));
+  assert.ok(ring.length >= 6, 'the hexes touching my land are for sale');
+  const far = g.hex.hexes.find((h) => !g.hexOwner[h.i] && !g.canBuyHex(a.id, h.i) && g.hex.dist(h, core) > 4);
+  assert.match(g.buyLand(a.id, [far.i]), /touch your land/);
+  const h1 = ring[0];
+  const cost1 = g.hexCost(h1.i, start);
+  assert.strictEqual(cost1, C.landCost(start) * h1.tiles.length);
+  assert.strictEqual(g.buyLand(a.id, [h1.i]), null);
+  assert.strictEqual(a.gold, 5000 - cost1);
   g.update(0.05);
-  assert.strictEqual(a.territory, start + 3);
-  assert.ok(C.landCost(400) > C.landCost(100), 'bigger realms pay more per tile');
+  assert.strictEqual(a.territory, start + h1.tiles.length);
+  assert.ok(h1.tiles.every((k) => g.terr[k] === a.id), 'every tile in the hex is mine');
+  // a drag: hexes in order, each touching my land or the one before
+  const h2 = g.hex.hexes[h1.n.find((j) => !g.hexOwner[j] && g.hex.dist(g.hex.hexes[j], core) > g.hex.dist(h1, core))];
+  assert.strictEqual(g.buyLand(a.id, [h2.i]), null);
+  assert.ok(C.landCost(400) > C.landCost(100), 'bigger realms pay more');
   // enemy land can't be bought, and gold runs out
-  const enemyTile = g.idx(b.core.x, b.core.y + 1);
-  assert.match(g.buyLand(a.id, [enemyTile]), /someone else|touch/);
+  assert.match(g.buyLand(a.id, [g.hexAt(b.core.x, b.core.y)]), /someone else|touch/);
   a.gold = 0;
-  assert.match(g.buyLand(a.id, [g.idx(edge.x + 3, edge.y)]), /gold/);
+  assert.match(g.buyLand(a.id, [g.hex.hexes.find((h) => g.canBuyHex(a.id, h.i)).i]), /gold/);
 });
 
-test('taking a tower opens up the land around it', () => {
+test('taking a tower opens up the hexes round it', () => {
   const { g, a, b } = duel(5);
   const t = outpost(g, b);
-  const near = g.idx(t.x - 2, t.y);
-  assert.strictEqual(g.terr[near], b.id);
+  const th = g.hex.hexes[g.hexAt(t.x, t.y)];
+  const ringOwned = th.n.filter((j) => g.hexOwner[j] === b.id);
+  assert.ok(ringOwned.length, 'b owns hexes round its tower');
   g.transferTower(t, a.id);
-  assert.strictEqual(g.terr[g.idx(t.x, t.y)], a.id, 'the new owner gets the ground the tower stands on');
-  assert.strictEqual(g.terr[g.idx(t.x + 1, t.y + 1)], a.id);
-  assert.strictEqual(g.terr[near], 0, "the old owner's land nearby opens up");
-  assert.strictEqual(g.buyLand(a.id, [near]), null, 'and the taker can buy it');
+  assert.strictEqual(g.hexOwner[th.i], a.id, "the captor gets the tower's hex");
+  assert.ok(ringOwned.every((j) => g.hexOwner[j] === 0 || g.buildingHexes()[j] === b.id), "b's hexes next to it open up");
+  const open = ringOwned.find((j) => g.hexOwner[j] === 0);
+  assert.strictEqual(g.buyLand(a.id, [open]), null, 'and the captor can claim them');
 });
 
 test('spawn protection keeps a new core and its towers from taking damage', () => {
@@ -238,29 +247,30 @@ test('bases spawn at random spots, spread far apart', () => {
     for (let i = 0; i < 6; i++) ps.push(g.addPlayer(`P${i}`));
     firsts.add(`${ps[0].core.x},${ps[0].core.y}`);
     for (const a of ps) {
-      assert.ok(a.core.x >= C.SPAWN_MARGIN && a.core.y >= C.SPAWN_MARGIN && a.core.x < g.w - C.SPAWN_MARGIN && a.core.y < g.h - C.SPAWN_MARGIN);
+      const m = C.SPAWN_MARGIN - C.HEX_R; // (cores sit at hex centres)
+      assert.ok(a.core.x >= m && a.core.y >= m && a.core.x < g.w - m && a.core.y < g.h - m);
       for (const b of ps) {
-        if (a !== b) assert.ok(Math.hypot(a.core.x - b.core.x, a.core.y - b.core.y) >= 30, 'six bases at least 30 tiles apart');
+        if (a !== b) assert.ok(Math.hypot(a.core.x - b.core.x, a.core.y - b.core.y) >= 26, 'six bases well apart');
       }
     }
   }
   assert.ok(firsts.size >= 5, 'a different layout each game');
 });
 
-test("a building's ground stays its owner's: never released, bought or granted away", () => {
+test("a building's hex stays its owner's: never released, claimed or granted away", () => {
   const { g, a, b } = duel(5);
   const t = outpost(g, b);
-  // a second tower of b's right next to the first (on the core's side of it)
-  const t2x = t.x - 2;
-  assert.strictEqual(g.build(b.id, t2x, t.y, 'tower'), null);
+  const th = g.hex.hexes[g.hexAt(t.x, t.y)];
+  // a second tower of b's in the next hex (b owns it: it's next to the outpost on b's side)
+  const nj = th.n.find((j) => g.hexOwner[j] === b.id && g.hex.hexes[j].centre >= 0 && g.hex.hexes[j].full);
+  const nh = g.hex.hexes[nj];
+  assert.strictEqual(g.build(b.id, nh.centre % g.w, Math.floor(nh.centre / g.w), 'tower'), null);
   g.transferTower(t, a.id);
-  assert.strictEqual(g.terr[g.idx(t.x, t.y)], a.id, 'the captor gets the captured tower\'s tile');
-  assert.strictEqual(g.terr[g.idx(t2x, t.y)], b.id, "b's other tower keeps its ground");
-  assert.strictEqual(g.terr[g.idx(t2x - 1, t.y)], b.id, '...and the ring around it');
-  // and nobody can buy the ground around an enemy building
-  const k = g.idx(t2x - 1, t.y + 1);
-  g.terr[k] = 0; g.terrDirty = true;
-  assert.ok(!g.canBuyTile(a.id, k));
+  assert.strictEqual(g.hexOwner[th.i], a.id, "the captor gets the captured tower's hex");
+  assert.strictEqual(g.hexOwner[nj], b.id, "b's other tower keeps its hex");
+  // nobody can be granted the hex of someone else's building
+  g.grantBlock(a.id, nh.centre % g.w, Math.floor(nh.centre / g.w));
+  assert.strictEqual(g.hexOwner[nj], b.id);
 });
 
 test("a building can't be sold while it's under attack", () => {

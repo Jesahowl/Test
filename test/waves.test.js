@@ -29,18 +29,22 @@ test('waves stop at the land-based troop cap', () => {
   assert.strictEqual(mine(g, a).length, cap);
 });
 
-function barracksAt(g, p, dx, dy) {
-  const err = g.build(p.id, p.core.x + dx, p.core.y + dy, 'barracks');
+// A barracks in the n-th hex next to p's core.
+function barracksAt(g, p, n) {
+  const h = g.hex.hexes[g.hex.hexes[g.hexAt(p.core.x, p.core.y)].n[n]];
+  const x = h.centre % g.w;
+  const y = (h.centre - x) / g.w;
+  const err = g.build(p.id, x, y, 'barracks');
   if (err) throw new Error(err);
-  return [...g.towers.values()].find((t) => t.x === p.core.x + dx && t.y === p.core.y + dy);
+  return [...g.towers.values()].find((t) => t.x === x && t.y === y);
 }
 
 test('each barracks adds 4 troops to every wave, spawning at the barracks', () => {
   const { g, a } = duel(16);
   const gold = a.gold;
-  const b1 = barracksAt(g, a, 4, 0);
+  const b1 = barracksAt(g, a, 0);
   assert.strictEqual(a.gold, gold - C.buildCost('barracks', 0));
-  const b2 = barracksAt(g, a, -4, 0);
+  const b2 = barracksAt(g, a, 3);
   assert.strictEqual(a.gold, gold - C.buildCost('barracks', 0) - C.buildCost('barracks', 1));
   assert.ok(C.buildCost('barracks', 1) > C.buildCost('barracks', 0), 'each one costs more');
   assert.strictEqual(g.waveSize(a), C.BASE_WAVE + 2 * C.BARRACKS_TROOPS);
@@ -56,14 +60,14 @@ test('each barracks adds 4 troops to every wave, spawning at the barracks', () =
   const out = edgeTile(g, a, 0, 1, 1);
   assert.match(g.build(a.id, out.x, out.y, 'barracks'), /own land/);
   assert.match(g.upgrade(a.id, b1.id), /can't be upgraded/);
-  for (let i = 2; i < C.MAX_BARRACKS; i++) barracksAt(g, a, 0, i === 2 ? 2 : i === 3 ? -2 : 3);
-  assert.match(g.build(a.id, a.core.x + 3, a.core.y + 3, 'barracks'), /at most/);
+  for (let i = 2; i < C.MAX_BARRACKS; i++) barracksAt(g, a, [1, 2, 4][i - 2]);
+  { const h = g.hex.hexes[g.hex.hexes[g.hexAt(a.core.x, a.core.y)].n[5]]; assert.match(g.build(a.id, h.centre % g.w, Math.floor(h.centre / g.w), 'barracks'), /at most/); }
   assert.strictEqual(g.waveSize(a), C.BASE_WAVE + C.MAX_BARRACKS * C.BARRACKS_TROOPS);
 });
 
 test('losing a barracks shrinks your waves; the player who takes it gets the troops', () => {
   const { g, a, b } = duel(17);
-  const bar = barracksAt(g, a, 2, 0);
+  const bar = barracksAt(g, a, 0);
   assert.strictEqual(g.waveSize(b), C.BASE_WAVE);
   g.transferTower(bar, b.id, 'destroyed');
   assert.strictEqual(g.waveSize(a), C.BASE_WAVE);
@@ -419,7 +423,7 @@ test('squads: merging, and moving picked troops between squads', () => {
     return mine(g, a).filter((u) => !before.has(u));
   };
   for (const k of Object.keys(a.army)) a.army[k] = 0; // all soldiers: none wander off scouting
-  barracksAt(g, a, 4, 0); // 8 troops a wave
+  barracksAt(g, a, 0); // 8 troops a wave
   const w1 = wave();
   const w2 = wave();
   g.order(a.id, null, { k: 't', id: t.id }, [w2[0].sq]);

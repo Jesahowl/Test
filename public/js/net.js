@@ -84,7 +84,7 @@ function handle(msg) {
       S.pendingOrder = null;
       break;
     case 'bought':
-      toast(`+${msg.n} land (−${msg.gold}g)`, true);
+      toast(`+${msg.n} hex${msg.n === 1 ? "" : "es"} of land (−${msg.gold}g)`, true);
       tipDone('land');
       break;
     case 'ordered':

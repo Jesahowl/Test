@@ -6,16 +6,22 @@
 const { C } = require('./common');
 
 module.exports = {
-  // Place a tower or barracks on your own land.
+  // Place a tower or barracks in one of your own hexes: it stands at the hex's centre, one building
+  // per hex. (x, y) is any tile in the hex.
   build(pid, x, y, kind) {
     const p = this.players.get(pid);
     const def = C.TOWERS[kind];
     if (!p || !p.alive || !def) return 'Invalid build';
     if (!Number.isInteger(x) || !Number.isInteger(y) || !this.inBounds(x, y)) return 'Out of bounds';
-    const k = this.idx(x, y);
-    if (!this.ownsBlock(pid, x, y)) return `${def.name}s go on your own land, at least a tile in from the border`;
-    if (this.grid[k] !== 0) return 'Tile is occupied';
-    if (this.nearEnemyBuilding(pid, x, y)) return `Too close to an enemy building (keep ${C.ENEMY_BUILD_GAP} tiles away)`;
+    const hx = this.hex.hexes[this.hexAt(x, y)];
+    if (this.hexOwner[hx.i] !== pid) return `${def.name}s go on your own land`;
+    if (hx.centre < 0 || !hx.full) return 'Too close to the edge of the map';
+    if (this.buildingHexes()[hx.i]) return 'There is already a building in that hex';
+    x = hx.centre % this.w;
+    y = (hx.centre - x) / this.w;
+    const k = hx.centre;
+    if (this.grid[k] !== 0) return 'There is already a building in that hex';
+    if (this.nearEnemyBuilding(pid, x, y)) return 'Too close to an enemy building (not in the hex next to one)';
     const owned = this.countOwned(pid, kind);
     if (kind === 'barracks' && owned >= C.MAX_BARRACKS) return `You can have at most ${C.MAX_BARRACKS} barracks`;
     const cost = C.buildCost(kind, owned);
@@ -50,14 +56,9 @@ module.exports = {
     return n;
   },
 
-  // Does pid own the 3x3 block around (x, y)? Buildings need it, so they sit well inside their land.
+  // Does pid own the hex at tile (x, y)?
   ownsBlock(pid, x, y) {
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        if (!this.inBounds(x + dx, y + dy) || this.terr[this.idx(x + dx, y + dy)] !== pid) return false;
-      }
-    }
-    return true;
+    return this.inBounds(x, y) && this.hexOwner[this.hexAt(x, y)] === pid;
   },
 
   upgrade(pid, id) {

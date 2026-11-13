@@ -156,10 +156,10 @@ function updateTowerAndArmy(gold, perWave) {
   tb.classList.toggle('active', S.buildKind === 'tower');
   tb.classList.toggle('poor', gold < C.TOWERS.tower.cost);
   const lb = $('land-button');
-  const tileCost = C.landCost((players.get(S.myId) || { territory: 0 }).territory);
+  const hexCost = Math.round(C.landCost((players.get(S.myId) || { territory: 0 }).territory) * 2.598 * C.HEX_R * C.HEX_R);
   lb.classList.toggle('active', S.buildKind === 'land');
-  lb.classList.toggle('poor', gold < tileCost);
-  lb.querySelector('.cost').textContent = `${tileCost}g/tile`;
+  lb.classList.toggle('poor', gold < hexCost);
+  lb.querySelector('.cost').textContent = `~${hexCost}g/hex`;
   const bb = $('barracks-button');
   const owned = [...S.towers.values()].filter((t) => t.owner === S.myId && t.kind === 'barracks').length;
   const bCost = C.buildCost('barracks', owned);

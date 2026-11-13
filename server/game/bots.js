@@ -47,11 +47,9 @@ module.exports = {
   // randomness so bots don't all grow the same way.
   botBuyLand(p, n) {
     const cands = [];
-    for (let k = 0; k < this.terr.length; k++) {
-      if (this.terr[k] || !this.canBuyTile(p.id, k)) continue;
-      const x = k % this.w;
-      const y = (k - x) / this.w;
-      cands.push([k, Math.hypot(x - p.core.x, y - p.core.y) + this.rand() * 3]);
+    for (const h of this.hex.hexes) {
+      if (!this.canBuyHex(p.id, h.i)) continue;
+      cands.push([h.i, Math.hypot(h.cx - p.core.x, h.cy - p.core.y) + this.rand() * 4]);
     }
     cands.sort((a, b) => a[1] - b[1]);
     if (cands.length) this.buyLand(p.id, cands.slice(0, n).map((c) => c[0]));
@@ -66,10 +64,10 @@ module.exports = {
     const roll = this.rand();
 
     // Grow: buy land at the border, keeping some gold back for buildings and troops.
-    const tileCost = C.landCost(p.territory);
+    const hexCost = C.landCost(p.territory) * 16; // about one hex
     const keep = 60 + (towers.length < 2 ? C.TOWERS.tower.cost : 0);
-    if (p.gold >= keep + tileCost * 3 && roll < 0.75) {
-      const n = Math.min(10, Math.floor((p.gold - keep) / tileCost));
+    if (p.gold >= keep + hexCost && roll < 0.75) {
+      const n = Math.min(2, Math.floor((p.gold - keep) / hexCost));
       this.botBuyLand(p, n);
     }
 

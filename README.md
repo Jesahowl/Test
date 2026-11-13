@@ -47,9 +47,9 @@ closes after a minute. **Play** still drops you into the always-running public g
 | **Moving** | **Right-click empty ground** to send the picked squads there. They hold the spot, fight enemies that come within 6 tiles of it, and come back to it afterwards. |
 | **Hunting** | **Right-click an enemy troop** to send your troops after it. They chase it down and focus it, ignoring other enemies on the way. When it dies they go after its squadmates within 6 tiles, then head home once the squad is gone. A red crosshair marks troops you're hunting. Hunts use the picked squads (or picked troops) like other orders, but are a one-off: the squads keep their standing orders. |
 | **The push** | Troops march across the map (pathfinding around structures), fight whatever they meet, then hit the target. When a tower falls, the push rolls on to that player's next tower, then their core. |
-| **Land** | You start with a circle of land around your core. **Buy more with gold**: press `L` (or the **Land** button), then click empty tiles touching your border, or **drag along it** to buy a strip. **Double-click anywhere outside your land** to grow it one tile outward all round (if your gold doesn't cover the whole ring, the tiles nearest where you clicked come first). Each tile costs 5g + 0.07g for every tile you already own, so bigger realms pay more (about 14g a tile at the start). **Enemy land can't be bought**: take or destroy one of their towers and their land within 3 tiles of it opens up (the taker gets the ground the tower stands on), and **destroying a core wins you all of that player's land** (a player who leaves is replaced by a bot, who keeps it). Open land can be bought by anyone whose land touches it. The ground under and right around any building always stays its owner's: it's never opened up, handed over or for sale. |
-| **Towers** | Zap enemy troops with lightning and **hold your land** (they claim none themselves). Each is a wizard tower whose top floats in pieces above its broken stump, held up by magic around a crystal. Your core (a great crystal over a rune circle) zaps too. Barracks are crystal halls: stone halls with crystals on the roof ridge and a doorway that flares as each wave marches out. Higher levels: a taller stump with a band, a spinning rune ring, gold runes and a glowing aura. Towers and barracks go on your own land with at least a tile of your land all round them (so they never stick out over the border), and not within 3 tiles of an enemy building or core. |
-| **Taking towers** | **Destroy** one and it becomes yours (+150g): it keeps its level, comes back at 70% health, and the enemy's land within 3 tiles of it opens up (you get the ground it stands on). The attackers stay on as its garrison and your waves push on to that player's next tower. Towers only become ruins when their owner's core falls with nobody to take them. |
+| **Land** | The map is a grid of **hexagons**, and land is owned hex by hex. You start with your core's hex and the six around it. **Claim more with gold**: press `L` (or the **Land** button), then click an empty hex touching your border, or **drag along it** to claim a strip. **Double-click anywhere outside your land** to grow it one hex outward all round (if your gold doesn't cover the whole ring, the hexes nearest where you clicked come first). A hex costs more the more land you own (about 140g each at the start). **Enemy land can't be claimed**: take one of their towers and their hexes next to it open up (you get the tower's hex), and **destroying a core wins you all of that player's land** (a player who leaves is replaced by a bot, who keeps it). Open hexes can be claimed by anyone whose land touches them. A hex with a building in it always stays its owner's. |
+| **Towers** | Zap enemy troops with lightning and **hold your land** (they claim none themselves). Each is a wizard tower whose top floats in pieces above its broken stump, held up by magic around a crystal. Your core (a great crystal over a rune circle) zaps too. Barracks are crystal halls: stone halls with crystals on the roof ridge and a doorway that flares as each wave marches out. Higher levels: a taller stump with a band, a spinning rune ring, gold runes and a glowing aura. Towers and barracks stand at the centre of one of your own hexes, one building per hex, and not in a hex next to an enemy building or core. |
+| **Taking towers** | **Destroy** one and it becomes yours (+150g): it keeps its level, comes back at 70% health, and the enemy's hexes next to it open up (you get the tower's own hex). The attackers stay on as its garrison and your waves push on to that player's next tower. Towers only become ruins when their owner's core falls with nobody to take them. |
 | **Gold** | Land pays a steady income (1.5g/s + 0.015g/s per tile; tiles beyond 400 pay 40% of that, so a huge empire doesn't run away with the game). The rest comes from fighting: 14g per enemy troop killed (+6 per troop level), 40–250g per barbarian (a whole camp pays 120–370g), 150g for a tower, and 250g plus all of their gold for a core. Each bounty pops up where you earned it, and the death screen breaks down where your gold came from. |
 | **Barbarian camps** | 12 neutral barbarian camps, spread out (each is placed as far as possible from the others, at least 18 tiles apart), in three sizes: **Raider Camp** (3 axe raiders, 120g), **Barbarian Outpost** (a club-wielding brute + 2 raiders, 190g) and **Warlord's Fort** (a crowned warlord + 2 spearmen, 370g + buff). Each camp is a **tent village** on trampled earth: 3 tents for a Raider Camp, 4 plus war banners for an Outpost, and 5 with a watchtower for the Warlord's Fort (its beacon fire marks the buff). Barbarians are red-rimmed tokens with horned helmets; the weapon tells you the type. They're passive until attacked, then the whole camp fights back. Hover a camp to see what it pays; right-click it to send troops. They come back after 45s (the Warlord's Fort after 90s) **in a new random spot**, shown on the map and minimap with a countdown ring. |
 | **Jungle buff** | Defeating a **Warlord's Fort** (marked 🔥 buff) empowers all your troops for 60s: **+30% damage and 25% less damage taken**. Buffed troops glow orange and a 🔥 shows next to your name. |
@@ -91,9 +91,9 @@ and get a turning gold rune ring at level 4 and a radiant aura at level 5.
 | `Esc` | Clear picked troops / selected building |
 | `H` | Every squad defends your core |
 | `R` | Place a barracks (your own land only): +4 troops per wave |
-| `L` | Buy land: click empty tiles at your border, or drag along it (shows the price) |
-| Double-click outside your land | Grow your land one tile outward all round |
-| `B` | Place a tower (shows the 3x3 of your land it needs) |
+| `L` | Claim land: click empty hexes at your border, or drag along it (shows the price) |
+| Double-click outside your land | Grow your land one hex outward all round |
+| `B` | Place a tower in one of your hexes (it stands at the hex's centre) |
 | `U` / `Del` | Upgrade / sell the selected tower (no selling for 5s after it's hit) |
 | `WASD` / arrows / right-drag | Pan. Wheel zooms. `Space` jumps home. Click the minimap to jump. `?` opens the controls & how-to-play window. |
 
@@ -116,6 +116,7 @@ rounds (`ROUND_JOIN_WINDOW`, `ROUND_SUDDEN_DEATH`, `SUDDEN_DEATH_*`, `CORE_FORTI
 shared/config.js        game constants + stat/cost helpers (used by Node and the browser)
 shared/pathfinding.js   flow-field Dijkstra used by marching troops
 shared/vision.js        fog of war: who can see which tiles (server filtering + client drawing)
+shared/hex.js           the hex grid: which hex each tile is in, neighbours, corners (land, buildings, borders)
 server/index.js         HTTP static server + WebSocket, routes players to rooms, 20 Hz tick
 server/room.js          a room: its game, rounds/lobby, and the 10 Hz per-player state broadcast
 server/game.js          the Game class core: state, spatial grid, tick, snapshots
@@ -141,11 +142,13 @@ test/                   node:test suite (game rules, waves & orders, jungle, rou
   gold, army plan, standing order and wave timer. Territory is sent run-length encoded, only when it changes.
 - **Spatial grid.** Troops are bucketed into 4x4-tile cells each tick, so targeting, tower fire, splash, healing and
   healing only look at nearby troops (24 players: about 4 ms per tick).
-- **Territory.** Land is kept tile by tile: a core starts with a circle, players buy empty tiles touching their land,
-  land opens up around a tower when it's taken (within 3 tiles), and a destroyed core's land all goes to the player who destroyed it. Borders are traced along tile edges and smoothed as one network (a corner two territories share moves the
-  same way for both, so they always meet exactly and an outline barely changes when a neighbour arrives).
-  Each player's land is a see-through fill in their colour with a solid border drawn just inside its own
-  edge (so two neighbours' borders sit side by side), and the owner's name written across it.
+- **Territory.** The map is a hex grid (`shared/hex.js`, shared by server and browser) laid over the fine
+  tile grid that troop movement, pathfinding and fog use: every tile belongs to the hex its centre falls in.
+  Land is owned per hex: a core starts with its hex and the six around it, players claim empty hexes touching
+  their land, a taken tower opens up its old owner's hexes next to it, and a destroyed core's land all goes to the
+  player who destroyed it. Each player's land is outlined along the hex edges where it meets other land (chained
+  into closed loops and drawn as vector paths), with a see-through fill in their colour, a solid border just inside
+  its own edge, and the owner's name written across it.
 - **Troop movement.** Attacking troops follow a flow field toward their target (Dijkstra from the goal tile, one per
   active goal, rebuilt lazily when structures change). Defending troops plan short BFS paths within their own land and
   patrol around the structure they guard.

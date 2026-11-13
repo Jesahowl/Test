@@ -199,8 +199,8 @@ class Room {
       case 'capture':
         return game.capture(client.pid, msg.id);
       case 'land': {
-        const tiles = Array.isArray(msg.tiles) ? msg.tiles.slice(0, C.LAND_BUY_MAX).map(Number) : null;
-        const err = game.buyLand(client.pid, tiles);
+        const hexes = Array.isArray(msg.hexes) ? msg.hexes.slice(0, C.LAND_BUY_MAX).map(Number) : null;
+        const err = game.buyLand(client.pid, hexes);
         if (game.lastBuy && game.lastBuy.n) send(client, { t: 'bought', n: game.lastBuy.n, gold: game.lastBuy.gold });
         return game.lastBuy && game.lastBuy.n ? null : err;
       }

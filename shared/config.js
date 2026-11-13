@@ -22,9 +22,10 @@
     CORE_RANGE: 5,
     CORE_DAMAGE: 60,
     CORE_RATE: 1,
-    CORE_CLAIM: 6, // the land a new core starts with: a circle this big around it
+    CORE_CLAIM: 6, // how far apart bases must be (a new core starts with its hex and the six around it)
+    HEX_R: 2.5, // hex radius in tiles: land, buildings and borders work in hexes this big (about 16 tiles each)
     // Rival buildings must keep ENEMY_BUILD_GAP tiles apart.
-    ENEMY_BUILD_GAP: 3,
+    ENEMY_BUILD_GAP: 4.6, // no building in a hex next to an enemy building
     CORE_KILL_BOUNTY: 250, // plus all of the victim's gold
     SPAWN_MARGIN: 10, // cores spawn at least this far from the map edge
     SPAWN_CANDIDATES: 300, // random spots tried per spawn; the one furthest from other bases wins
@@ -154,14 +155,14 @@
       },
     },
 
-    // ---- Land: bought tile by tile with gold. A tile must be empty and touch your land; it costs
-    // LAND_BASE_COST + LAND_COST_PER_TILE for every tile you already own (bigger realms pay more).
-    // Enemy land can't be bought: taking or destroying an enemy tower opens up their land within
-    // LAND_BREACH tiles of it (it becomes empty, for anyone to buy), and a fallen core's land opens up.
+    // ---- Land: bought hex by hex with gold. A hex must be empty and touch your land; it costs, for
+    // each tile in it, LAND_BASE_COST + LAND_COST_PER_TILE for every tile you already own (bigger
+    // realms pay more). Enemy land can't be bought: taking an enemy tower opens up their hexes next to
+    // it (for anyone to buy), and destroying a core wins all of that player's land.
     LAND_BASE_COST: 5,
     LAND_COST_PER_TILE: 0.07,
-    LAND_BREACH: 3,
-    LAND_BUY_MAX: 250, // tiles one buy message may ask for (a drag, or a whole ring of border)
+    LAND_BREACH: 1, // hex rings round a taken tower whose land opens up
+    LAND_BUY_MAX: 120, // hexes one buy message may ask for (a drag, or a whole ring of border)
 
     // ---- Jungle: neutral camps that sit still, fight back when attacked, and pay out when cleared.
     CAMP_COUNT: 12,

@@ -1,14 +1,15 @@
 'use strict';
 
-// Territory: which player owns each tile, and its run-length encoding for clients.
-// Land is kept tile by tile: a new core starts with a circle of it, players buy more with gold
-// (empty tiles touching their land), and it opens up again when a tower or core falls.
+// Territory on the hex grid: which player owns each hex. Each hex covers a patch of fine tiles
+// (game.terr per tile is kept in step, for movement, fog and drawing). A new core starts with its
+// hex and the six around it; players buy empty hexes that touch their land; land opens up around a
+// tower when it's taken, and a destroyed core's land all goes to whoever destroyed it.
 // These methods are mixed into Game (see ../game.js), so `this` is the game.
 
 const { C } = require('./common');
 
 module.exports = {
-  // Recount everyone's land after it changed.
+  // Recount everyone's land (in tiles) after it changed.
   recomputeTerritory() {
     const counts = new Map();
     for (let i = 0; i < this.terr.length; i++) {
@@ -23,131 +24,117 @@ module.exports = {
     this.terrVersion++;
   },
 
-  // Who owns the building (core, tower or barracks) standing on or right next to each tile: the
-  // 3x3 under a building always stays its owner's, whatever else happens to the land around it.
-  // 0 = no building there. Rebuilt whenever buildings change.
-  footprints() {
+  hexAt(x, y) {
+    return this.hex.tileHex[this.idx(x, y)];
+  },
+
+  // Hex i becomes pid's (0: empty).
+  setHex(i, pid) {
+    const h = this.hex.hexes[i];
+    this.hexOwner[i] = pid;
+    for (const k of h.tiles) this.terr[k] = pid;
+    this.terrDirty = true;
+  },
+
+  // Who owns the building standing in each hex (0 = none). Rebuilt when buildings change.
+  buildingHexes() {
     const key = `${this.structVersion}:${this.players.size}`;
-    if (this.footKey === key) return this.foot;
-    this.footKey = key;
-    if (!this.foot) this.foot = new Int32Array(this.w * this.h);
-    this.foot.fill(0);
-    const mark = (x, y, owner) => {
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          if (this.inBounds(x + dx, y + dy)) this.foot[this.idx(x + dx, y + dy)] = owner;
-        }
-      }
-    };
-    for (const t of this.towers.values()) if (t.owner) mark(t.x, t.y, t.owner);
-    for (const p of this.players.values()) if (p.alive) mark(p.core.x, p.core.y, p.id);
-    // where two buildings stand side by side, the tile right under each one is still its own
-    for (const t of this.towers.values()) if (t.owner) this.foot[this.idx(t.x, t.y)] = t.owner;
-    for (const p of this.players.values()) if (p.alive) this.foot[this.idx(p.core.x, p.core.y)] = p.id;
-    return this.foot;
+    if (this.bhKey === key) return this.bh;
+    this.bhKey = key;
+    if (!this.bh) this.bh = new Int32Array(this.hex.hexes.length);
+    this.bh.fill(0);
+    for (const t of this.towers.values()) if (t.owner) this.bh[this.hexAt(t.x, t.y)] = t.owner;
+    for (const p of this.players.values()) if (p.alive) this.bh[this.hexAt(p.core.x, p.core.y)] = p.id;
+    return this.bh;
   },
 
-  // The land a new core starts with: the empty tiles in a circle around it.
+  // The land a new core starts with: its hex and the empty hexes around it.
   claimStart(p) {
-    const r = C.CORE_CLAIM + 0.25;
-    const R = Math.ceil(r);
-    for (let dy = -R; dy <= R; dy++) {
-      for (let dx = -R; dx <= R; dx++) {
-        const x = p.core.x + dx;
-        const y = p.core.y + dy;
-        if (!this.inBounds(x, y) || Math.hypot(dx, dy) > r) continue;
-        const k = this.idx(x, y);
-        if (!this.terr[k]) this.terr[k] = p.id;
-      }
-    }
-    this.terrDirty = true;
+    const i = this.hexAt(p.core.x, p.core.y);
+    this.setHex(i, p.id);
+    for (const j of this.hex.hexes[i].n) if (!this.hexOwner[j]) this.setHex(j, p.id);
   },
 
-  // pid's tiles within r of (cx, cy) become empty (r = Infinity: all of them), except the ground
-  // under pid's own buildings.
-  releaseLand(pid, cx = 0, cy = 0, r = Infinity) {
-    const foot = this.footprints();
-    for (let k = 0; k < this.terr.length; k++) {
-      if (this.terr[k] !== pid || foot[k] === pid) continue;
-      if (r !== Infinity) {
-        const x = k % this.w;
-        const y = (k - x) / this.w;
-        if (Math.hypot(x - cx, y - cy) > r + 0.25) continue;
-      }
-      this.terr[k] = 0;
+  // pid's hexes within `rings` of the hex at tile (x, y) become empty (rings = Infinity: all of
+  // them), except hexes with one of pid's buildings in.
+  releaseLand(pid, x = 0, y = 0, rings = Infinity) {
+    const bh = this.buildingHexes();
+    const centre = rings === Infinity ? null : this.hex.hexes[this.hexAt(x, y)];
+    for (const h of this.hex.hexes) {
+      if (this.hexOwner[h.i] !== pid || bh[h.i] === pid) continue;
+      if (centre && this.hex.dist(h, centre) > rings) continue;
+      this.setHex(h.i, 0);
     }
-    this.terrDirty = true;
   },
 
-  // The 3x3 block around (cx, cy) becomes pid's (the ground a captured building stands on), except
-  // ground under someone else's building.
-  grantBlock(pid, cx, cy) {
-    const foot = this.footprints();
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        if (!this.inBounds(cx + dx, cy + dy)) continue;
-        const k = this.idx(cx + dx, cy + dy);
-        if (foot[k] && foot[k] !== pid) continue;
-        this.terr[k] = pid;
-      }
-    }
-    this.terrDirty = true;
+  // The hex at tile (x, y) becomes pid's (the ground a captured building stands on), unless
+  // someone else's building is in it.
+  grantBlock(pid, x, y) {
+    const i = this.hexAt(x, y);
+    const b = this.buildingHexes()[i];
+    if (b && b !== pid) return;
+    this.setHex(i, pid);
   },
 
-  // Can pid buy tile k: empty, touching their land, and not leaving two players' land touching
-  // only at a corner (which can't be drawn cleanly)?
-  canBuyTile(pid, k) {
-    if (k < 0 || k >= this.terr.length || this.terr[k]) return false;
-    const foot = this.footprints()[k];
-    if (foot && foot !== pid) return false; // the ground around someone else's building
-    const x = k % this.w;
-    const y = (k - x) / this.w;
-    const at = (tx, ty) => (this.inBounds(tx, ty) ? this.terr[this.idx(tx, ty)] : -1);
-    if (at(x - 1, y) !== pid && at(x + 1, y) !== pid && at(x, y - 1) !== pid && at(x, y + 1) !== pid) return false;
-    for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-      // a 2x2 block where my land would touch my land only diagonally, across another player's
-      const h = at(x + dx, y);
-      if (at(x + dx, y + dy) === pid && h > 0 && h !== pid && at(x, y + dy) === h) return false;
+  // All of `from`'s hexes become `to`'s. Returns how many tiles changed hands.
+  transferLand(from, to) {
+    let tiles = 0;
+    for (const h of this.hex.hexes) {
+      if (this.hexOwner[h.i] !== from) continue;
+      this.setHex(h.i, to);
+      tiles += h.tiles.length;
     }
+    return tiles;
+  },
+
+  // Can pid buy hex i: empty, touching their land, and not where a barbarian camp stands?
+  canBuyHex(pid, i) {
+    const h = this.hex.hexes[i];
+    if (!h || this.hexOwner[i]) return false;
+    if (!h.n.some((j) => this.hexOwner[j] === pid)) return false;
+    for (const c of this.camps) if (c.alive && this.hexAt(c.x, c.y) === i) return false;
     return true;
   },
 
-  // Buy tiles (in order, so a drag along the border can grow outward). Each costs
-  // C.landCost(land owned so far). Stops when gold runs out. Returns null or an error string;
-  // this.lastBuy says how many tiles were bought and for how much.
-  buyLand(pid, tiles) {
+  // Gold for hex i for a player who owns `land` tiles: the land price per tile, for each tile in it.
+  hexCost(i, land) {
+    return C.landCost(land) * this.hex.hexes[i].tiles.length;
+  },
+
+  // Buy hexes (in order, so a drag along the border can grow outward). Stops when gold runs out.
+  // Returns null or an error string; this.lastBuy says how many hexes were bought, for how much.
+  buyLand(pid, hexes) {
     this.lastBuy = { n: 0, gold: 0 };
     const p = this.players.get(pid);
     if (!p || !p.alive) return 'Invalid purchase';
-    if (!Array.isArray(tiles) || !tiles.length) return 'No land picked';
+    if (!Array.isArray(hexes) || !hexes.length) return 'No land picked';
     let land = p.territory;
     let reason = null;
-    for (const k of tiles.slice(0, C.LAND_BUY_MAX)) {
-      if (!Number.isInteger(k)) continue;
-      if (!this.canBuyTile(pid, k)) {
-        if (!reason) reason = this.terr[k] > 0 && this.terr[k] !== pid ? "You can't buy someone else's land: take their towers" : 'Land must be empty and touch your land';
+    for (const i of hexes.slice(0, C.LAND_BUY_MAX)) {
+      if (!Number.isInteger(i) || i < 0 || i >= this.hexOwner.length) continue;
+      if (!this.canBuyHex(pid, i)) {
+        if (!reason) reason = this.hexOwner[i] > 0 && this.hexOwner[i] !== pid ? "You can't buy someone else's land: take their towers" : 'Land must be empty and touch your land';
         continue;
       }
-      const cost = C.landCost(land);
+      const cost = this.hexCost(i, land);
       if (p.gold < cost) {
         reason = 'Not enough gold';
         break;
       }
       p.gold -= cost;
-      this.terr[k] = pid;
-      land++;
+      this.setHex(i, pid);
+      land += this.hex.hexes[i].tiles.length;
       this.lastBuy.n++;
       this.lastBuy.gold += cost;
     }
     if (this.lastBuy.n) {
       p.territory = land;
-      this.terrDirty = true;
       return null;
     }
     return reason || 'No land bought';
   },
 
-  // Run-length encoded territory: [owner, count, owner, count, ...]
+  // Run-length encoded territory per tile: [owner, count, owner, count, ...]
   encodeTerritory() {
     const out = [];
     let cur = this.terr[0];

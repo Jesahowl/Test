@@ -13,6 +13,7 @@
 // The Game class is split by topic: this file holds the core (state, spatial grid, the tick and
 // snapshots); the rest live in ./game/*.js and are mixed into Game's prototype below.
 
+const Hex = require('../shared/hex');
 const { C, KIND_KEYS, UNIT_KEYS, CREEP_KEYS, CAMP_KEYS, UGRID, UGRID_SLACK, dist } = require('./game/common');
 
 class Game {
@@ -39,6 +40,9 @@ class Game {
     this.grid = new Int32Array(this.w * this.h);
     // terr: owner player id per tile, 0 = unclaimed
     this.terr = new Int32Array(this.w * this.h);
+    // the hex grid land is bought and drawn in (each hex covers a patch of tiles)
+    this.hex = Hex.build(this.w, this.h, C.HEX_R);
+    this.hexOwner = new Int32Array(this.hex.hexes.length);
     this.terrDirty = true;
     this.terrVersion = 0;
 

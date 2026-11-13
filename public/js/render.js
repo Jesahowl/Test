@@ -1,6 +1,6 @@
 // Rendering basics: canvas sizing, background, labels, health bars and simple shapes.
 
-import { C, canvas, ctx, scale, toScreen, toWorld } from './state.js';
+import { C, canvas, ctx, HEX, scale, toScreen, toWorld } from './state.js';
 import { roundRect } from './structures.js';
 import { drawTerritoryShapes } from './territory.js';
 
@@ -20,23 +20,26 @@ function drawBackground() {
   ctx.fillStyle = '#121820';
   ctx.fillRect(ox, oy, C.MAP_W * s, C.MAP_H * s);
 
-  if (s >= 14) {
+  // the hex grid: a faint outline round every hex in view
+  if (s >= 6) {
     const [x0, y0] = toWorld(0, 0);
     const [x1, y1] = toWorld(canvas.width, canvas.height);
-    ctx.strokeStyle = 'rgba(255,255,255,0.035)';
+    const pad = C.HEX_R + 1;
+    ctx.strokeStyle = 'rgba(255,255,255,0.055)';
     ctx.lineWidth = 1;
+    ctx.save();
     ctx.beginPath();
-    for (let x = Math.max(0, Math.floor(x0)); x <= Math.min(C.MAP_W, Math.ceil(x1)); x++) {
-      const sx = Math.round(ox + x * s) + 0.5;
-      ctx.moveTo(sx, Math.max(oy, 0));
-      ctx.lineTo(sx, Math.min(oy + C.MAP_H * s, canvas.height));
-    }
-    for (let y = Math.max(0, Math.floor(y0)); y <= Math.min(C.MAP_H, Math.ceil(y1)); y++) {
-      const sy = Math.round(oy + y * s) + 0.5;
-      ctx.moveTo(Math.max(ox, 0), sy);
-      ctx.lineTo(Math.min(ox + C.MAP_W * s, canvas.width), sy);
+    ctx.rect(ox, oy, C.MAP_W * s, C.MAP_H * s);
+    ctx.clip();
+    ctx.beginPath();
+    for (const h of HEX.hexes) {
+      if (h.cx < x0 - pad || h.cx > x1 + pad || h.cy < y0 - pad || h.cy > y1 + pad) continue;
+      const cs = HEX.corners(h);
+      ctx.moveTo(ox + cs[5][0] * s, oy + cs[5][1] * s);
+      for (let k = 0; k < 3; k++) ctx.lineTo(ox + cs[k][0] * s, oy + cs[k][1] * s);
     }
     ctx.stroke();
+    ctx.restore();
   }
 
   drawTerritoryShapes(ox, oy, s);

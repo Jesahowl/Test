@@ -67,10 +67,13 @@ module.exports = {
     for (const t of this.towers.values()) if (t.owner) others.push({ x: t.x, y: t.y, w: C.CORE_CLAIM });
     const cands = [];
     for (let i = 0; i < C.SPAWN_CANDIDATES; i++) {
-      const x = margin + Math.floor(this.rand() * (this.w - margin * 2));
-      const y = margin + Math.floor(this.rand() * (this.h - margin * 2));
-      const k = this.idx(x, y);
-      if (this.grid[k] !== 0 || this.terr[k] !== 0) continue;
+      // a random spot, moved to the centre of its hex (cores stand at hex centres)
+      const hx = this.hex.hexes[this.hexAt(margin + Math.floor(this.rand() * (this.w - margin * 2)), margin + Math.floor(this.rand() * (this.h - margin * 2)))];
+      if (hx.centre < 0 || !hx.full) continue;
+      const k = hx.centre;
+      const x = k % this.w;
+      const y = (k - x) / this.w;
+      if (this.grid[k] !== 0 || this.hexOwner[hx.i] || hx.n.some((j) => this.hexOwner[j])) continue;
       if (this.camps.some((c) => c.alive && dist(x, y, c.x, c.y) < 7)) continue;
       let score = Infinity; // distance to the nearest base (buildings count as a bit closer than they are)
       for (const o of others) score = Math.min(score, dist(x, y, o.x, o.y) - o.w);
@@ -216,12 +219,7 @@ module.exports = {
     // in particular brought it down) it opens up, empty, for anyone to buy.
     let landTaken = 0;
     if (conquered) {
-      for (let k = 0; k < this.terr.length; k++) {
-        if (this.terr[k] !== p.id) continue;
-        this.terr[k] = killer.id;
-        landTaken++;
-      }
-      this.terrDirty = true;
+      landTaken = this.transferLand(p.id, killer.id);
     } else {
       this.releaseLand(p.id);
     }

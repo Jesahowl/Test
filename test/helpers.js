@@ -37,24 +37,42 @@ function edgeTile(g, p, dx, dy, extra = 0) {
   return { x: x + dx * extra, y: y + dy * extra };
 }
 
-// Build a tower for p out in direction (dx, dy): buy a broad strip of land past the border first
-// (as a player would), then build near its far end.
-function outpost(g, p, dx = 1, dy = 0) {
-  const e = edgeTile(g, p, dx, dy);
-  for (let i = 0; i < 8; i++) {
-    for (let w = -4; w <= 4; w++) {
-      const x = e.x + dx * i + dy * w;
-      const y = e.y + dy * i + dx * w;
-      if (g.inBounds(x, y) && !g.terr[g.idx(x, y)]) g.buyLand(p.id, [g.idx(x, y)]);
+// Claim hexes for p out towards (tx, ty) (as a player would, along the way), so it can build there.
+function claimTowards(g, p, tx, ty) {
+  const target = g.hex.hexes[g.hexAt(tx, ty)];
+  for (let n = 0; n < 40 && g.hexOwner[target.i] !== p.id; n++) {
+    let best = -1;
+    let bestD = Infinity;
+    for (const h of g.hex.hexes) {
+      if (!g.canBuyHex(p.id, h.i)) continue;
+      const d = Math.hypot(h.cx - target.cx, h.cy - target.cy);
+      if (d < bestD) { bestD = d; best = h.i; }
     }
+    if (best < 0 || g.buyLand(p.id, [best])) break;
   }
-  const t = { x: e.x + dx * 5, y: e.y + dy * 5 };
-  const err = g.build(p.id, t.x, t.y, 'tower');
-  if (err) throw new Error(err);
+  // and the hexes round it, so it isn't on the border
+  for (const j of target.n) if (g.canBuyHex(p.id, j)) g.buyLand(p.id, [j]);
   g.update(0.05);
-  return [...g.towers.values()].find((o) => o.x === t.x && o.y === t.y);
+  return target;
 }
 
+// Build a tower for p out in direction (dx, dy), about 12 tiles from its core (claiming the land
+// on the way first).
+function outpost(g, p, dx = 1, dy = 0, far = 12) {
+  for (let d = far; d >= 6; d--) {
+    const tx = Math.round(p.core.x + dx * d);
+    const ty = Math.round(p.core.y + dy * d);
+    if (!g.inBounds(tx, ty)) continue;
+    const h = g.hex.hexes[g.hexAt(tx, ty)];
+    if (h.centre < 0 || !h.full) continue;
+    claimTowards(g, p, tx, ty);
+    const err = g.build(p.id, tx, ty, 'tower');
+    if (err) throw new Error(err);
+    g.update(0.05);
+    return [...g.towers.values()].find((o) => g.hexAt(o.x, o.y) === h.i);
+  }
+  throw new Error('no room for an outpost');
+}
 // Spawn n troops for p at (x, y).
 function troops(g, p, kind, n, x, y, level = 1) {
   const out = [];
@@ -77,4 +95,4 @@ function run(g, seconds, until) {
   return false;
 }
 
-module.exports = { Game, seeded, duel, edgeTile, outpost, troops, run };
+module.exports = { Game, seeded, duel, edgeTile, claimTowards, outpost, troops, run };

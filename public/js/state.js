@@ -78,6 +78,8 @@ S.terrShapes = []; // [{ owner, path: Path2D in tile units }]
 // live activity; the fog overlay covers the rest (territory is drawn in full underneath). The
 // server only sends enemy troops in explored ground. Spectators see everything.
 const Vision = window.TD_VISION;
+// the hex grid land, buildings and borders work in (same as the server's)
+const HEX = window.TD_HEX.build(C.MAP_W, C.MAP_H, C.HEX_R);
 
 const NTILES = C.MAP_W * C.MAP_H;
 const vis = new Uint8Array(NTILES);
@@ -151,4 +153,4 @@ const hueOf = (pid) => (players.get(pid) || { hue: 0 }).hue;
 
 const colorOf = (pid, l = 55, a = 1) => (pid ? `hsla(${hueOf(pid)}, 75%, ${l}%, ${a})` : `rgba(140, 120, 90, ${a})`);
 
-export { FOG_PAD, FOG_RES, fogSoft, fogSoftCtx, $, C, CAMP_KEYS, CREEP_KEYS, KIND_KEYS, NTILES, TPX, UNIT_KEYS, Vision, cam, canvas, colorOf, ctx, explored, feed, fogCanvas, fogCtx, fogImg, grid, keys, mctx, mini, mouse, players, scale, selUnits, tctx, terr, terrCanvas, toScreen, toWorld, vis, withContext };
+export { HEX, FOG_PAD, FOG_RES, fogSoft, fogSoftCtx, $, C, CAMP_KEYS, CREEP_KEYS, KIND_KEYS, NTILES, TPX, UNIT_KEYS, Vision, cam, canvas, colorOf, ctx, explored, feed, fogCanvas, fogCtx, fogImg, grid, keys, mctx, mini, mouse, players, scale, selUnits, tctx, terr, terrCanvas, toScreen, toWorld, vis, withContext };

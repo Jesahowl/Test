@@ -1,131 +1,50 @@
-// Territory layer: tracing, smoothing and drawing land borders.
+// Territory layer: hex land outlines, fills and owner names.
 
-import { S, C, colorOf, ctx, players, tctx, terrCanvas, TPX } from './state.js';
+import { S, C, colorOf, ctx, HEX, players, tctx, terrCanvas, TPX } from './state.js';
 
 // ------------------------------------------------------------------ territory layer
-// Territory is a tile grid, but drawing it tile by tile looks like a staircase. Instead we trace
-// each region's outline along tile edges, smooth it (moving average, then Chaikin corner
-// cutting), and keep the result as a vector Path2D (in tile units) so borders stay crisp.
+// Land is owned hex by hex. Each player's land is outlined along the hex edges where it meets
+// someone else's land (or empty ground): those edges are chained into closed loops and kept as a
+// vector Path2D (in tile units), so borders stay crisp at any zoom.
 
-// Trace closed outlines of every owned region. Edges run clockwise (interior on the right).
+// Who owns hex i (every tile in a hex has the same owner; read its first tile).
+const hexOwnerOf = (i) => S.terrView[HEX.hexes[i].tiles[0]];
+
+// Closed outlines of every owner's land, as loops of hex corners.
 function traceOutlines() {
-  const W = C.MAP_W;
-  const H = C.MAP_H;
-  const VW = W + 1;
-  const x0 = [];
-  const y0 = [];
-  const x1 = [];
-  const y1 = [];
-  const own = [];
-  const out = new Map(); // vertex key -> outgoing edge indices
-  const add = (ax, ay, bx, by, o) => {
-    const i = own.length;
-    x0.push(ax); y0.push(ay); x1.push(bx); y1.push(by); own.push(o);
-    const k = ay * VW + ax;
-    const list = out.get(k);
-    if (list) list.push(i);
-    else out.set(k, [i]);
-  };
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      const o = S.terrView[y * W + x];
-      if (!o) continue;
-      if (y === 0 || S.terrView[(y - 1) * W + x] !== o) add(x, y, x + 1, y, o);
-      if (x === W - 1 || S.terrView[y * W + x + 1] !== o) add(x + 1, y, x + 1, y + 1, o);
-      if (y === H - 1 || S.terrView[(y + 1) * W + x] !== o) add(x + 1, y + 1, x, y + 1, o);
-      if (x === 0 || S.terrView[y * W + x - 1] !== o) add(x, y + 1, x, y, o);
+  const key = (x, y) => `${Math.round(x * 100)},${Math.round(y * 100)}`;
+  const edges = []; // { owner, a: [x, y], b: [x, y] } running round each region
+  const from = new Map(); // owner|corner key -> edge indices starting there
+  for (const h of HEX.hexes) {
+    const o = hexOwnerOf(h.i);
+    if (!o) continue;
+    const cs = HEX.corners(h);
+    for (let k = 0; k < 6; k++) {
+      const j = HEX.across(h, k);
+      if (j >= 0 && hexOwnerOf(j) === o) continue;
+      const e = edges.length;
+      edges.push({ owner: o, a: cs[k], b: cs[(k + 1) % 6] });
+      const fk = `${o}|${key(...cs[k])}`;
+      if (!from.has(fk)) from.set(fk, []);
+      from.get(fk).push(e);
     }
   }
-  const used = new Uint8Array(own.length);
+  const used = new Uint8Array(edges.length);
   const loops = [];
-  for (let start = 0; start < own.length; start++) {
-    if (used[start]) continue;
-    const o = own[start];
+  for (let s0 = 0; s0 < edges.length; s0++) {
+    if (used[s0]) continue;
+    const o = edges[s0].owner;
     const pts = [];
-    let e = start;
-    for (;;) {
+    let e = s0;
+    while (e !== undefined && !used[e]) {
       used[e] = 1;
-      pts.push([x0[e], y0[e]]);
-      const cands = (out.get(y1[e] * VW + x1[e]) || []).filter((j) => !used[j] && own[j] === o);
-      if (!cands.length) break;
-      let next = cands[0];
-      if (cands.length > 1) {
-        // Saddle point (two tiles touching diagonally): turn right to hug the current tile.
-        const rx = -(y1[e] - y0[e]);
-        const ry = x1[e] - x0[e];
-        next = cands.find((j) => x1[j] - x0[j] === rx && y1[j] - y0[j] === ry) ?? next;
-      }
+      pts.push(edges[e].a);
+      const next = (from.get(`${o}|${key(...edges[e].b)}`) || []).find((j) => !used[j]);
       e = next;
     }
-    loops.push({ owner: o, pts });
-  }
-  // The border network: every tile corner on a border, linked to the corners next to it along any
-  // border. Smoothing works on this network rather than on each outline separately, so a corner
-  // two territories share moves the same way for both: they always meet with no gap or overlap,
-  // and an outline barely changes when a neighbour's land arrives next to it.
-  const nbrs = new Map();
-  const link = (a, b) => {
-    let s1 = nbrs.get(a);
-    if (!s1) nbrs.set(a, (s1 = new Set()));
-    s1.add(b);
-  };
-  for (let i = 0; i < own.length; i++) {
-    const a = y0[i] * VW + x0[i];
-    const b = y1[i] * VW + x1[i];
-    link(a, b);
-    link(b, a);
-  }
-  // One averaging pass: each corner moves to the mean of itself and its neighbours along borders
-  // (corners on the map's edge stay put). Junctions (3+ borders) are kept as corners afterwards.
-  const pos = new Map();
-  const deg = new Map();
-  for (const [k, set] of nbrs) {
-    const x = k % VW;
-    const y = (k - x) / VW;
-    deg.set(k, set.size);
-    if (x === 0 || y === 0 || x === W || y === H) {
-      pos.set(k, [x, y]);
-      continue;
-    }
-    let sx = x;
-    let sy = y;
-    for (const n of set) {
-      const nx = n % VW;
-      sx += nx;
-      sy += (n - nx) / VW;
-    }
-    pos.set(k, [sx / (set.size + 1), sy / (set.size + 1)]);
-  }
-  for (const loop of loops) {
-    const keys = loop.pts.map(([x, y]) => y * VW + x);
-    loop.pts = keys.map((k) => pos.get(k));
-    loop.pins = keys.map((k) => deg.get(k) > 2);
+    if (pts.length > 2) loops.push({ owner: o, pts });
   }
   return loops;
-}
-
-// Chaikin corner cutting. Pinned corners (junctions) are kept as-is (the curve passes through them),
-// so where three territories meet their borders still touch exactly.
-function chaikin(pts, iters, pins) {
-  for (let k = 0; k < iters; k++) {
-    const n = pts.length;
-    const next = [];
-    const nextPins = [];
-    for (let i = 0; i < n; i++) {
-      const p = pts[i];
-      const q = pts[(i + 1) % n];
-      if (pins && pins[i]) {
-        next.push(p);
-        nextPins.push(true);
-      }
-      next.push([p[0] * 0.75 + q[0] * 0.25, p[1] * 0.75 + q[1] * 0.25]);
-      next.push([p[0] * 0.25 + q[0] * 0.75, p[1] * 0.25 + q[1] * 0.75]);
-      nextPins.push(false, false);
-    }
-    pts = next;
-    pins = nextPins;
-  }
-  return pts;
 }
 
 function drawTerritory() {
@@ -134,7 +53,7 @@ function drawTerritory() {
   for (const loop of traceOutlines()) {
     let path = byOwner.get(loop.owner);
     if (!path) byOwner.set(loop.owner, (path = new Path2D()));
-    const pts = chaikin(loop.pts, 1, loop.pins);
+    const pts = loop.pts;
     path.moveTo(pts[0][0], pts[0][1]);
     for (let i = 1; i < pts.length; i++) path.lineTo(pts[i][0], pts[i][1]);
     path.closePath();
