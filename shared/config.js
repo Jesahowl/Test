@@ -51,11 +51,11 @@
     BARRACKS_COST_STEP: 150, // each extra barracks costs this much more than the last
     // Squads stay together: on the march a squad moves at its slowest troop's pace, and troops
     // more than SQUAD_SPREAD (+ a little per troop) from the squad's centre wait for it or catch up.
-    SQUAD_SPREAD: 1.3,
+    SQUAD_SPREAD: 1.4,
     SQUAD_WAIT_MAX: 5, // seconds a troop waits for a straggling squad before carrying on
     // Personal space: troops keep at least UNIT_SPACING apart (friend or foe) and stay this far from
     // the middle of buildings and barbarians, so they never sit on top of each other.
-    UNIT_SPACING: 0.62,
+    UNIT_SPACING: 0.95, // a little more than the widest troop icon, so icons never overlap
     STRUCT_BODY: 0.6,
     CORE_BODY: 0.85,
     CREEP_BODY: 0.55,

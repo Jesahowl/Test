@@ -241,6 +241,7 @@ module.exports = {
     const exact = Math.floor(gx) === bx && Math.floor(gy) === by;
     u.path = path;
     u.dest = exact ? { x: gx, y: gy } : { x: bx + 0.5, y: by + 0.5 };
+    u.wpKey = undefined; // a fresh plan: start tracking progress again
   },
 
   // Advance u along its planned path. Returns true when it arrives at its destination.
@@ -261,10 +262,19 @@ module.exports = {
       const dx = tx - u.x;
       const dy = ty - u.y;
       const d = Math.hypot(dx, dy);
-      // Close enough counts as there: troops keep UNIT_SPACING apart, so two heading for the same
-      // spot would otherwise never both reach it.
-      const near = u.path.length ? 0.45 : 0.35;
-      if (d <= budget || d < near) {
+      // Close enough counts as there: troops keep UNIT_SPACING apart, so several heading for the
+      // same spot can't all reach it. And a troop that stops getting closer (jostled by the crowd)
+      // for a second moves on rather than pushing forever.
+      const near = C.UNIT_SPACING * (u.path.length ? 0.65 : 0.55);
+      const wp = u.path.length ? u.path[0] : -1;
+      if (u.wpKey !== wp || d < u.wpBest - 0.05) {
+        u.wpKey = wp;
+        u.wpBest = d;
+        u.wpAt = this.time;
+      }
+      const stuck = this.time - u.wpAt > 1;
+      if (d <= budget || d < near || stuck) {
+        u.wpKey = undefined;
         if (d <= budget) {
           u.x = tx;
           u.y = ty;
@@ -333,7 +343,7 @@ module.exports = {
     for (const g of groups.values()) {
       g.x /= g.n;
       g.y /= g.n;
-      g.r = C.SQUAD_SPREAD + 0.3 * Math.sqrt(g.n);
+      g.r = C.SQUAD_SPREAD + 0.5 * C.UNIT_SPACING * Math.sqrt(g.n); // room for every troop at its spacing
     }
     return groups;
   },
@@ -387,7 +397,7 @@ module.exports = {
           dx /= d;
           dy /= d;
         }
-        const push = (R - Math.min(d, R)) * 0.3;
+        const push = (R - Math.min(d, R)) * 0.45;
         u.x -= dx * push;
         u.y -= dy * push;
         v.x += dx * push;
@@ -562,7 +572,7 @@ module.exports = {
       // Stand guard with the squad, milling about its post.
       const post = this.squadPost(u, a);
       const g = this.groups.get(u.sq);
-      const spread = 0.8 + 0.18 * Math.sqrt(g ? g.n : 1);
+      const spread = 0.5 + 0.55 * C.UNIT_SPACING * Math.sqrt(g ? g.n : 1); // room for the squad without crowding
       if (dist(u.x, u.y, post.x, post.y) > spread + 0.75 || this.terr[this.idx(tx, ty)] !== u.owner) {
         this.planUnit(u, post.x, post.y);
         continue;
