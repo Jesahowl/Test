@@ -29,7 +29,7 @@
 <div id="toast"></div>
 <script>
 // ---------------------------------------------------------------- hex grid (pointy-top, axial q/r)
-const R = 13;              // map radius in hexes
+const R = 9;               // map radius in hexes
 const SQ3 = Math.sqrt(3);
 const cv = document.getElementById('c');
 const g = cv.getContext('2d');
@@ -42,7 +42,7 @@ const key = (q, r) => `${q},${r}`;
 const DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
 const hexes = new Map(); // key -> { q, r, owner }
 for (let q = -R; q <= R; q++) for (let r = Math.max(-R, -q - R); r <= Math.min(R, -q + R); r++) hexes.set(key(q, r), { q, r, owner: 0 });
-const HS = 1.5;            // hex radius in world units: hexes are this much bigger than the buildings and troops on them
+const HS = 2.25;           // hex radius in world units: hexes are this much bigger than the buildings and troops on them
 const toPix = (q, r) => [HS * SQ3 * (q + r / 2), HS * 1.5 * r];
 const hexDist = (a, b) => (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs(a.q + a.r - b.q - b.r)) / 2;
 function pixToHex(x, y) {
@@ -57,19 +57,19 @@ const neighbours = (h) => DIRS.map(([dq, dr]) => hexes.get(key(h.q + dq, h.r + d
 
 // ---------------------------------------------------------------- players, buildings, camps
 const PLAYERS = {
-  1: { name: 'Jesse', hue: 45, core: { q: -3, r: 2 } },
-  2: { name: 'Barbican', hue: 15, core: { q: 6, r: -6 } },
-  3: { name: 'Warden', hue: 315, core: { q: 7, r: 4 } },
-  4: { name: 'Citadel', hue: 120, core: { q: -8, r: -2 } },
+  1: { name: 'Jesse', hue: 45, core: { q: -2, r: 1 } },
+  2: { name: 'Barbican', hue: 15, core: { q: 4, r: -4 } },
+  3: { name: 'Warden', hue: 315, core: { q: 5, r: 2 } },
+  4: { name: 'Citadel', hue: 120, core: { q: -5, r: -1 } },
 };
 const ME = 1;
 const col = (pid, l = 55, a = 1) => `hsla(${PLAYERS[pid].hue}, 75%, ${l}%, ${a})`;
 const towers = [];
-const camps = [{ q: 1, r: -4, big: true }, { q: -2, r: 8 }, { q: 9, r: -1 }, { q: -9, r: 7 }];
+const camps = [{ q: 1, r: -3, big: true }, { q: -2, r: 6 }, { q: 6, r: -1 }, { q: -6, r: 5 }];
 // starting land: a hex "circle" round each core, then a few rings bought for the bots
 for (const [id, p] of Object.entries(PLAYERS)) {
   const c = hexes.get(key(p.core.q, p.core.r));
-  for (const h of hexes.values()) if (hexDist(h, c) <= 2) h.owner = +id;
+  for (const h of hexes.values()) if (hexDist(h, c) <= 1) h.owner = +id;
 }
 let rngS = 7; const rnd = () => ((rngS = (rngS * 16807) % 2147483647) / 2147483647);
 function grow(pid, n) {
@@ -83,17 +83,17 @@ function grow(pid, n) {
 }
 function buyable(pid) { const out = []; for (const h of hexes.values()) if (!h.owner && !campAt(h) && neighbours(h).some((n) => n.owner === pid)) out.push(h); return out; }
 const campAt = (h) => camps.find((c) => hexDist(c, h) <= 1);
-grow(2, 30); grow(3, 24); grow(4, 36); grow(1, 8);
-towers.push({ q: 5, r: -3, o: 2, lvl: 3 }, { q: 8, r: -8, o: 2, lvl: 1 }, { q: 5, r: 3, o: 3, lvl: 2 }, { q: -8, r: 1, o: 4, lvl: 2 }, { q: -1, r: 1, o: 1, lvl: 2 }, { q: -5, r: 4, o: 1, lvl: 1 });
+grow(2, 9); grow(3, 7); grow(4, 11); grow(1, 3);
+towers.push({ q: 3, r: -3, o: 2, lvl: 3 }, { q: 5, r: -5, o: 2, lvl: 1 }, { q: 4, r: 2, o: 3, lvl: 2 }, { q: -5, r: 0, o: 4, lvl: 2 }, { q: -1, r: 0, o: 1, lvl: 2 }, { q: -3, r: 2, o: 1, lvl: 1 });
 const troops = [];
-for (let i = 0; i < 7; i++) troops.push({ x: toPix(-1, -0.5)[0] + (i % 4) * 0.62, y: toPix(-1, -0.5)[1] + Math.floor(i / 4) * 0.6, o: 1, k: ['soldier', 'soldier', 'archer', 'soldier', 'medic', 'archer', 'soldier'][i] });
-for (let i = 0; i < 5; i++) troops.push({ x: toPix(3, -2)[0] + (i % 3) * 0.62, y: toPix(3, -2)[1] + Math.floor(i / 3) * 0.6, o: 2, k: ['soldier', 'archer', 'soldier', 'medic', 'soldier'][i] });
+for (let i = 0; i < 7; i++) troops.push({ x: toPix(-1.6, -0.3)[0] + (i % 4) * 0.62, y: toPix(-1.6, -0.3)[1] + Math.floor(i / 4) * 0.6, o: 1, k: ['soldier', 'soldier', 'archer', 'soldier', 'medic', 'archer', 'soldier'][i] });
+for (let i = 0; i < 5; i++) troops.push({ x: toPix(2, -1.5)[0] + (i % 3) * 0.62, y: toPix(2, -1.5)[1] + Math.floor(i / 3) * 0.6, o: 2, k: ['soldier', 'archer', 'soldier', 'medic', 'soldier'][i] });
 
 // ---------------------------------------------------------------- economy (same formula as the game)
 let gold = 420;
 const myLand = () => [...hexes.values()].filter((h) => h.owner === ME).length;
-const cost = (land) => Math.ceil(5 + land * 0.35); // a hex is ~5 square tiles' worth of land
-const income = (land) => 1.5 + land * 0.075;
+const cost = (land) => Math.ceil(11 + land * 1.7); // a hex is ~11 square tiles' worth of land
+const income = (land) => 1.5 + land * 0.17;
 setInterval(() => { gold += income(myLand()) / 4; ui(); }, 250);
 function ui() {
   const n = myLand();
@@ -248,7 +248,7 @@ function frame(t) {
   // 4. names across land, camps, buildings, troops
   for (const [id, p] of Object.entries(PLAYERS)) {
     if (+id === ME) continue;
-    const [x, y] = toScreen(...toPix(p.core.q, p.core.r + 2.4));
+    const [x, y] = toScreen(...toPix(p.core.q, p.core.r + 1.1));
     g.font = `800 ${Math.round(s * .75)}px system-ui`; g.textAlign = 'center'; g.letterSpacing = `${s * .1}px`;
     g.fillStyle = col(+id, 72, .4); g.fillText(p.name.toUpperCase(), x, y); g.letterSpacing = '0px';
   }
@@ -264,7 +264,7 @@ function frame(t) {
   requestAnimationFrame(frame);
 }
 // start centred between my base and the rivals
-cam.x = toPix(1, -1)[0]; cam.y = toPix(1, -1)[1];
+cam.x = toPix(0, 0)[0]; cam.y = toPix(0, 0)[1];
 ui();
 requestAnimationFrame(frame);
 window.HEX = { hexes, toScreen, toPix, key, cam, buyable, commit, ME, get gold() { return gold; }, set gold(v) { gold = v; } };
