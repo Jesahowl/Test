@@ -1,6 +1,6 @@
 // Territory layer: tracing, smoothing and drawing land borders.
 
-import { S, C, colorOf, ctx, players, SMOOTH_PASSES, SMOOTH_WINDOW, tctx, terrCanvas, TPX } from './state.js';
+import { S, C, colorOf, ctx, players, tctx, terrCanvas, TPX } from './state.js';
 
 // ------------------------------------------------------------------ territory layer
 // Territory is a tile grid, but drawing it tile by tile looks like a staircase. Instead we trace
@@ -57,55 +57,55 @@ function traceOutlines() {
       }
       e = next;
     }
-    loops.push({ owner: o, pts, pins: pts.map(([x, y]) => isJunction(x, y)) });
+    loops.push({ owner: o, pts });
+  }
+  // The border network: every tile corner on a border, linked to the corners next to it along any
+  // border. Smoothing works on this network rather than on each outline separately, so a corner
+  // two territories share moves the same way for both: they always meet with no gap or overlap,
+  // and an outline barely changes when a neighbour's land arrives next to it.
+  const nbrs = new Map();
+  const link = (a, b) => {
+    let s1 = nbrs.get(a);
+    if (!s1) nbrs.set(a, (s1 = new Set()));
+    s1.add(b);
+  };
+  for (let i = 0; i < own.length; i++) {
+    const a = y0[i] * VW + x0[i];
+    const b = y1[i] * VW + x1[i];
+    link(a, b);
+    link(b, a);
+  }
+  // One averaging pass: each corner moves to the mean of itself and its neighbours along borders
+  // (corners on the map's edge stay put). Junctions (3+ borders) are kept as corners afterwards.
+  const pos = new Map();
+  const deg = new Map();
+  for (const [k, set] of nbrs) {
+    const x = k % VW;
+    const y = (k - x) / VW;
+    deg.set(k, set.size);
+    if (x === 0 || y === 0 || x === W || y === H) {
+      pos.set(k, [x, y]);
+      continue;
+    }
+    let sx = x;
+    let sy = y;
+    for (const n of set) {
+      const nx = n % VW;
+      sx += nx;
+      sy += (n - nx) / VW;
+    }
+    pos.set(k, [sx / (set.size + 1), sy / (set.size + 1)]);
+  }
+  for (const loop of loops) {
+    const keys = loop.pts.map(([x, y]) => y * VW + x);
+    loop.pts = keys.map((k) => pos.get(k));
+    loop.pins = keys.map((k) => deg.get(k) > 2);
   }
   return loops;
 }
 
-// A tile corner where three or more areas meet (or two meet diagonally). These corners stay put
-// while outlines are smoothed, so neighbouring territories always share exactly the same border
-// line - no gaps or overlaps between them.
-function isJunction(x, y) {
-  const W = C.MAP_W;
-  const at = (tx, ty) => (tx < 0 || ty < 0 || tx >= W || ty >= C.MAP_H ? -1 : S.terrView[ty * W + tx]);
-  const a = at(x - 1, y - 1);
-  const b = at(x, y - 1);
-  const c = at(x - 1, y);
-  const d = at(x, y);
-  const distinct = new Set([a, b, c, d]).size;
-  if (distinct >= 3) return true;
-  return distinct === 2 && a === d && b === c; // diagonal (checkerboard) corner
-}
-
-// Moving average along the loop: turns tile staircases into straight diagonals and curves.
-// Pinned corners don't move. Because each point only depends on its neighbours along the border,
-// two territories sharing a border smooth it to exactly the same line.
-function relax(pts, window, passes, pins) {
-  const n = pts.length;
-  if (n < 4) return pts;
-  for (let k = 0; k < passes; k++) {
-    const next = new Array(n);
-    for (let i = 0; i < n; i++) {
-      if (pins && pins[i]) {
-        next[i] = pts[i];
-        continue;
-      }
-      let sx = 0;
-      let sy = 0;
-      for (let j = -window; j <= window; j++) {
-        const p = pts[(i + j + n) % n];
-        sx += p[0];
-        sy += p[1];
-      }
-      next[i] = [sx / (2 * window + 1), sy / (2 * window + 1)];
-    }
-    pts = next;
-  }
-  return pts;
-}
-
-// Chaikin corner cutting. Pinned corners are kept as-is (the curve passes through them), so
-// where three territories meet their borders still touch exactly.
+// Chaikin corner cutting. Pinned corners (junctions) are kept as-is (the curve passes through them),
+// so where three territories meet their borders still touch exactly.
 function chaikin(pts, iters, pins) {
   for (let k = 0; k < iters; k++) {
     const n = pts.length;
@@ -134,7 +134,7 @@ function drawTerritory() {
   for (const loop of traceOutlines()) {
     let path = byOwner.get(loop.owner);
     if (!path) byOwner.set(loop.owner, (path = new Path2D()));
-    const pts = chaikin(relax(loop.pts, SMOOTH_WINDOW, SMOOTH_PASSES, loop.pins), 1, loop.pins);
+    const pts = chaikin(loop.pts, 1, loop.pins);
     path.moveTo(pts[0][0], pts[0][1]);
     for (let i = 1; i < pts.length; i++) path.lineTo(pts[i][0], pts[i][1]);
     path.closePath();
@@ -156,7 +156,8 @@ function drawTerritory() {
 }
 
 // Territory fills and borders in world space: a see-through fill in the owner's colour inside a
-// solid border. Neighbours share exactly the same border line (see the smoothing above).
+// solid border drawn on the inside of its own edge. Neighbours share exactly the same edge (see the
+// smoothing above), so their two border bands sit side by side.
 function drawTerritoryShapes(ox, oy, s) {
   ctx.save();
   ctx.translate(ox, oy);
@@ -166,13 +167,16 @@ function drawTerritoryShapes(ox, oy, s) {
     ctx.fillStyle = colorOf(owner, 50, owner === S.myId ? 0.16 : 0.12);
     ctx.fill(path);
   }
-  // my border last, so it stays on top where it meets someone else's
-  const order = [...S.terrShapes].sort((a, b) => (a.owner === S.myId) - (b.owner === S.myId));
-  for (const { owner, path } of order) {
+  // Each border is drawn just inside its own land (clipped to it, at double width), so where two
+  // players meet you see both colours side by side and neither paints over the other's land.
+  for (const { owner, path } of S.terrShapes) {
     const mine = owner === S.myId;
-    ctx.strokeStyle = colorOf(owner, 65, mine ? 1 : 0.85);
-    ctx.lineWidth = (mine ? 3 : 2.5) / s;
+    ctx.save();
+    ctx.clip(path);
+    ctx.strokeStyle = colorOf(owner, 65, mine ? 1 : 0.9);
+    ctx.lineWidth = (mine ? 5 : 4.5) / s;
     ctx.stroke(path);
+    ctx.restore();
   }
   ctx.restore();
   drawTerritoryLabels(ox, oy, s);

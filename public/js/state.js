@@ -17,8 +17,6 @@ const CREEP_KEYS = Object.keys(C.CREEPS);
 const CAMP_KEYS = Object.keys(C.CAMP_TYPES);
 
 const TPX = 2; // minimap territory canvas pixels per tile
-const SMOOTH_WINDOW = 1; // outline points averaged on each side when smoothing territory
-const SMOOTH_PASSES = 1;
 
 // ------------------------------------------------------------------ DOM
 const $ = (id) => document.getElementById(id);
@@ -153,4 +151,4 @@ const hueOf = (pid) => (players.get(pid) || { hue: 0 }).hue;
 
 const colorOf = (pid, l = 55, a = 1) => (pid ? `hsla(${hueOf(pid)}, 75%, ${l}%, ${a})` : `rgba(140, 120, 90, ${a})`);
 
-export { FOG_PAD, FOG_RES, fogSoft, fogSoftCtx, $, C, CAMP_KEYS, CREEP_KEYS, KIND_KEYS, NTILES, SMOOTH_PASSES, SMOOTH_WINDOW, TPX, UNIT_KEYS, Vision, cam, canvas, colorOf, ctx, explored, feed, fogCanvas, fogCtx, fogImg, grid, keys, mctx, mini, mouse, players, scale, selUnits, tctx, terr, terrCanvas, toScreen, toWorld, vis, withContext };
+export { FOG_PAD, FOG_RES, fogSoft, fogSoftCtx, $, C, CAMP_KEYS, CREEP_KEYS, KIND_KEYS, NTILES, TPX, UNIT_KEYS, Vision, cam, canvas, colorOf, ctx, explored, feed, fogCanvas, fogCtx, fogImg, grid, keys, mctx, mini, mouse, players, scale, selUnits, tctx, terr, terrCanvas, toScreen, toWorld, vis, withContext };
