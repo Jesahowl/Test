@@ -156,9 +156,9 @@ function runeEllipse(x, y, rx, ry, owner, rot, alpha = 0.7) {
   ctx.restore();
 }
 
-// Tower: a stone pillar on a rune circle with a crystal floating above it, which zaps enemy
-// troops with lightning. Higher levels: bigger crystal, orbiting shards (2+), a spinning ring (3+),
-// gold runes (4+) and a radiant aura (5).
+// Tower: a wizard tower whose top floats in pieces above its broken stump, held up by magic around
+// a crystal that zaps enemy troops with lightning. Higher levels: taller stump with a band and an
+// extra fragment (2+), a spinning rune ring (3+), gold runes on the ground (4+), a radiant aura (5).
 function drawTowerSprite(t, x, y, s, now) {
   const lvl = t.level;
   const r = s * 0.62 * (1 + 0.07 * (lvl - 1));
@@ -179,12 +179,12 @@ function drawTowerSprite(t, x, y, s, now) {
   // level 5: radiant aura in the owner's colour, around the crystal
   if (lvl >= 5) {
     const pulse = 0.5 + 0.5 * Math.sin(now / 400 + t.id);
-    const ag = ctx.createRadialGradient(0, -r * 0.6, r * 0.4, 0, -r * 0.6, r * 2);
+    const ag = ctx.createRadialGradient(0, -r * 0.9, r * 0.4, 0, -r * 0.9, r * 2);
     ag.addColorStop(0, colorOf(owner, 65, 0.4 + 0.2 * pulse));
     ag.addColorStop(1, colorOf(owner, 65, 0));
     ctx.fillStyle = ag;
     ctx.beginPath();
-    ctx.arc(0, -r * 0.6, r * 2, 0, Math.PI * 2);
+    ctx.arc(0, -r * 0.9, r * 2, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -210,77 +210,151 @@ function drawTowerSprite(t, x, y, s, now) {
     ctx.restore();
   }
 
-  // plinth and pillar
-  const pTop = -r * 0.5;
-  const stone = '#4c535c';
+  // plinth
   ctx.lineWidth = Math.max(1, s * 0.03);
   ctx.strokeStyle = '#22272d';
   ctx.fillStyle = '#3a4048';
   ctx.beginPath();
   ctx.moveTo(-r * 0.58, by);
-  ctx.lineTo(-r * 0.44, by - r * 0.26);
-  ctx.lineTo(r * 0.44, by - r * 0.26);
+  ctx.lineTo(-r * 0.46, by - r * 0.2);
+  ctx.lineTo(r * 0.46, by - r * 0.2);
   ctx.lineTo(r * 0.58, by);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
-  ctx.fillStyle = stone;
-  ctx.beginPath();
-  ctx.moveTo(-r * 0.3, by - r * 0.26);
-  ctx.lineTo(-r * 0.18, pTop);
-  ctx.lineTo(r * 0.18, pTop);
-  ctx.lineTo(r * 0.3, by - r * 0.26);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = 'rgba(0,0,0,0.22)'; // shaded side
-  ctx.beginPath();
-  ctx.moveTo(r * 0.06, by - r * 0.26);
-  ctx.lineTo(r * 0.04, pTop);
-  ctx.lineTo(r * 0.18, pTop);
-  ctx.lineTo(r * 0.3, by - r * 0.26);
-  ctx.closePath();
-  ctx.fill();
-  // cap stone
-  ctx.fillStyle = '#5c646e';
-  ctx.fillRect(-r * 0.26, pTop - r * 0.1, r * 0.52, r * 0.12);
-  ctx.strokeRect(-r * 0.26, pTop - r * 0.1, r * 0.52, r * 0.12);
-  // glowing rune channel up the pillar; brightens when it fires
+  // the broken stump of the tower, its top jagged where it split
   const flare = t.shotAt && now >= t.shotAt ? Math.max(0, 1 - (now - t.shotAt) / 220) : 0;
-  ctx.strokeStyle = colorOf(owner, 70 + 20 * flare, 0.75 + 0.25 * flare);
-  ctx.lineWidth = Math.max(1.5, s * 0.05);
+  const sBot = by - r * 0.2;
+  const sTop = -r * (lvl >= 2 ? 0.3 : 0.15);
+  ctx.fillStyle = '#4c535c';
   ctx.beginPath();
-  ctx.moveTo(-r * 0.04, by - r * 0.3);
-  ctx.lineTo(-r * 0.02, pTop + r * 0.04);
+  ctx.moveTo(-r * 0.38, sBot);
+  ctx.lineTo(-r * 0.34, sTop);
+  ctx.lineTo(-r * 0.18, sTop - r * 0.1);
+  ctx.lineTo(-r * 0.02, sTop - r * 0.01);
+  ctx.lineTo(r * 0.14, sTop - r * 0.13);
+  ctx.lineTo(r * 0.34, sTop);
+  ctx.lineTo(r * 0.38, sBot);
+  ctx.closePath();
+  ctx.fill();
   ctx.stroke();
-  drawCracks(0, (by + pTop) / 2, r * 0.3, 1 - t.hp / t.maxHp, t.id);
+  ctx.fillStyle = 'rgba(0,0,0,0.2)'; // shaded side
+  ctx.beginPath();
+  ctx.moveTo(r * 0.12, sBot);
+  ctx.lineTo(r * 0.12, sTop - r * 0.1);
+  ctx.lineTo(r * 0.14, sTop - r * 0.13);
+  ctx.lineTo(r * 0.34, sTop);
+  ctx.lineTo(r * 0.38, sBot);
+  ctx.closePath();
+  ctx.fill();
+  // mortar lines
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let yy = sBot - r * 0.18; yy > sTop + r * 0.04; yy -= r * 0.18) {
+    ctx.moveTo(-r * 0.37, yy);
+    ctx.lineTo(r * 0.37, yy);
+  }
+  ctx.stroke();
+  // a band in the owner's colour (level 2+)
+  if (lvl >= 2) {
+    ctx.fillStyle = colorOf(owner, 60, 0.9);
+    ctx.fillRect(-r * 0.36, sTop + r * 0.08, r * 0.72, r * 0.06);
+  }
+  // arched window, glowing; it flares when the tower fires
+  const wy = (sBot + sTop) / 2 + r * 0.05;
+  const ww = r * 0.09;
+  ctx.fillStyle = '#1b1f24';
+  ctx.beginPath();
+  ctx.moveTo(-ww, wy + ww * 1.6);
+  ctx.lineTo(-ww, wy);
+  ctx.arc(0, wy, ww, Math.PI, 0);
+  ctx.lineTo(ww, wy + ww * 1.6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = flare > 0 ? '#ffffff' : colorOf(owner, 70, 0.9);
+  ctx.beginPath();
+  ctx.moveTo(-ww * 0.6, wy + ww * 1.45);
+  ctx.lineTo(-ww * 0.6, wy);
+  ctx.arc(0, wy, ww * 0.6, Math.PI, 0);
+  ctx.lineTo(ww * 0.6, wy + ww * 1.45);
+  ctx.closePath();
+  ctx.fill();
+  drawCracks(0, (sBot + sTop) / 2, r * 0.32, 1 - t.hp / t.maxHp, t.id);
 
-  // floating crystal (bigger with level), with orbiting shards from level 2
-  const bob = Math.sin(now / 520 + t.id) * r * 0.06;
-  const cy = -r * 1.0 + bob;
-  const cr = r * (0.3 + 0.045 * Math.min(lvl, 3));
-  const shards = lvl >= 3 ? 3 : lvl >= 2 ? 2 : 0;
-  const orbit = (front) => {
-    for (let i = 0; i < shards; i++) {
-      const a = now / 900 + (Math.PI * 2 * i) / shards + t.id;
-      if ((Math.sin(a) > 0) !== front) continue;
-      drawCrystal(Math.cos(a) * r * 0.62, cy + Math.sin(a) * r * 0.2, r * 0.09, owner, 0);
-    }
-  };
-  orbit(false);
+  // the top of the tower, floating in pieces: stone fragments around the crystal and the roof
+  // cap hovering above it, all bobbing gently
+  const lift = lvl >= 2 ? r * 0.08 : 0;
+  const bob = Math.sin(now / 520 + t.id) * r * 0.05;
+  const cy = -r * 0.95 - lift + bob;
+  const cr = r * (0.24 + 0.03 * Math.min(lvl, 3));
+  const frags = lvl >= 2
+    ? [[-0.36, 0.3, 0.13, 0], [0.38, 0.26, 0.12, 1.7], [-0.12, 0.42, 0.1, 3.1], [0.16, 0.44, 0.09, 4.4]]
+    : [[-0.34, 0.3, 0.13, 0], [0.36, 0.26, 0.12, 1.7], [-0.08, 0.42, 0.1, 3.1]];
+  for (const [fx, fy, fw, ph] of frags) {
+    const px = r * fx;
+    const py = cy + r * fy + Math.sin(now / 600 + ph + t.id) * r * 0.04;
+    const w = r * fw;
+    ctx.fillStyle = '#5a626b';
+    ctx.strokeStyle = '#22272d';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px - w, py);
+    ctx.lineTo(px - w * 0.2, py - w * 0.75);
+    ctx.lineTo(px + w, py - w * 0.1);
+    ctx.lineTo(px + w * 0.3, py + w * 0.55);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  // the magic holding it up: a faint glow between the stump and the crystal
+  const mg = ctx.createLinearGradient(0, sTop, 0, cy);
+  mg.addColorStop(0, colorOf(owner, 65, 0));
+  mg.addColorStop(1, colorOf(owner, 65, 0.25 + 0.3 * flare));
+  ctx.fillStyle = mg;
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.3, sTop);
+  ctx.lineTo(-r * 0.12, cy);
+  ctx.lineTo(r * 0.12, cy);
+  ctx.lineTo(r * 0.3, sTop);
+  ctx.closePath();
+  ctx.fill();
+  // level 3+: a spinning ring of runes around the crystal
   if (lvl >= 3) {
     ctx.save();
-    ctx.strokeStyle = colorOf(owner, 70, 0.55);
+    ctx.strokeStyle = colorOf(owner, 70, 0.6);
     ctx.lineWidth = Math.max(1, s * 0.03);
     ctx.setLineDash([s * 0.08, s * 0.08]);
     ctx.lineDashOffset = now / 50;
     ctx.beginPath();
-    ctx.ellipse(0, cy, r * 0.62, r * 0.2, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, cy + r * 0.05, r * 0.6, r * 0.19, 0, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }
-  drawCrystal(0, cy, cr, owner, flare, s * (0.25 + (lvl >= 3 ? 0.15 * (0.5 + 0.5 * Math.sin(now / 300)) : 0)));
-  orbit(true);
+  drawCrystal(0, cy, cr, owner, flare, s * (0.22 + (lvl >= 3 ? 0.15 * (0.5 + 0.5 * Math.sin(now / 300)) : 0)));
+  // the floating roof cap
+  const rb = cy - cr * 1.6;
+  const rw = r * 0.44;
+  const rh = r * 0.58;
+  ctx.fillStyle = '#353b42';
+  ctx.strokeStyle = '#22272d';
+  ctx.lineWidth = Math.max(1, s * 0.03);
+  ctx.beginPath();
+  ctx.moveTo(-rw, rb);
+  ctx.quadraticCurveTo(-rw * 0.3, rb - rh * 0.45, 0, rb - rh);
+  ctx.quadraticCurveTo(rw * 0.3, rb - rh * 0.45, rw, rb);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath();
+  ctx.moveTo(rw * 0.1, rb);
+  ctx.quadraticCurveTo(rw * 0.3, rb - rh * 0.45, 0, rb - rh);
+  ctx.quadraticCurveTo(rw * 0.3, rb - rh * 0.45, rw, rb);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = colorOf(owner, 60, 0.9);
+  ctx.fillRect(-rw, rb - r * 0.02, rw * 2, r * 0.05);
 
   // capture / claim flash
   if (flip < 1) {
@@ -488,7 +562,7 @@ function drawTowers(dt) {
     }
     if (t.kind === 'barracks') drawBarracksSprite(t, x, y, s, now);
     else drawTowerSprite(t, x, y, s, now);
-    structBar(t, x, y - r * 1.75, s * 1.0, now, t.id === S.selectedId || t.id === hover, dt);
+    structBar(t, x, y - r * (t.kind === 'barracks' ? 1.4 : 2.1), s * 1.0, now, t.id === S.selectedId || t.id === hover, dt);
   }
 }
 

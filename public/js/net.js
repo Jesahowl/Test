@@ -231,7 +231,7 @@ function applyState(msg) {
         o.shotAt = now + INTERP_DELAY; // the crystal flares as the bolt leaves
       }
       // the bolt leaves from the tip of the crystal, which floats above the building
-      fx.lift = t ? 0.62 + 0.04 * (t.level - 1) : p ? 0.55 : 0;
+      fx.lift = t ? 0.62 * (1 + 0.07 * (t.level - 1)) * (0.95 + (t.level >= 2 ? 0.08 : 0)) : p ? 0.55 : 0;
     }
   }
   for (const text of msg.feed) feed.push({ text, born: now });

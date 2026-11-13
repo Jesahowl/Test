@@ -188,25 +188,32 @@ function drawShape(kind, x, y, r, fill) {
       break;
     }
     case 'tower':
-      // crystal tower: a pillar with a crystal floating above it
+      // wizard tower with a floating top: broken stump, crystal, hovering roof
       ctx.beginPath();
-      ctx.moveTo(x - r * 0.5, y + r * 0.85);
-      ctx.lineTo(x - r * 0.38, y + r * 0.6);
-      ctx.lineTo(x - r * 0.22, y + r * 0.6);
-      ctx.lineTo(x - r * 0.14, y - r * 0.1);
-      ctx.lineTo(x + r * 0.14, y - r * 0.1);
-      ctx.lineTo(x + r * 0.22, y + r * 0.6);
-      ctx.lineTo(x + r * 0.38, y + r * 0.6);
-      ctx.lineTo(x + r * 0.5, y + r * 0.85);
+      ctx.moveTo(x - r * 0.42, y + r * 0.9);
+      ctx.lineTo(x - r * 0.38, y + r * 0.25);
+      ctx.lineTo(x - r * 0.15, y + r * 0.12);
+      ctx.lineTo(x + r * 0.05, y + r * 0.24);
+      ctx.lineTo(x + r * 0.2, y + r * 0.1);
+      ctx.lineTo(x + r * 0.38, y + r * 0.25);
+      ctx.lineTo(x + r * 0.42, y + r * 0.9);
       ctx.closePath();
       ctx.fill();
       ctx.beginPath();
-      ctx.moveTo(x, y - r * 0.95);
-      ctx.lineTo(x + r * 0.3, y - r * 0.55);
-      ctx.lineTo(x, y - r * 0.22);
-      ctx.lineTo(x - r * 0.3, y - r * 0.55);
+      ctx.moveTo(x, y - r * 0.5);
+      ctx.lineTo(x + r * 0.22, y - r * 0.2);
+      ctx.lineTo(x, y + r * 0.02);
+      ctx.lineTo(x - r * 0.22, y - r * 0.2);
       ctx.closePath();
       ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(x - r * 0.4, y - r * 0.6);
+      ctx.lineTo(x, y - r * 1.0);
+      ctx.lineTo(x + r * 0.4, y - r * 0.6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(x - r * 0.08, y + r * 0.42, r * 0.16, r * 0.26);
       break;
     default:
       ctx.arc(x, y, r * 0.8, 0, Math.PI * 2);
