@@ -110,7 +110,10 @@ module.exports = {
     const loserId = t.owner;
     t.owner = newOwner;
     this.structVersion++;
-    this.terrDirty = true;
+    // Taking a tower breaks the old owner's hold on the land around it: it opens up (anyone may buy
+    // it), and the new owner gets the ground the tower stands on.
+    if (loserId) this.releaseLand(loserId, t.x, t.y, C.LAND_BREACH);
+    this.grantBlock(newOwner, t.x, t.y);
     this.fx.push({ k: 'capture', x: t.x + 0.5, y: t.y + 0.5, o: newOwner });
     // Troops that were attacking it stay on as its garrison.
     for (const u of this.units.values()) {

@@ -187,6 +187,34 @@ function drawShape(kind, x, y, r, fill) {
       ctx.fill();
       break;
     }
+    case 'land': {
+      // a plot of land with a flag: a tilted square and a pennant on a pole
+      ctx.beginPath();
+      ctx.moveTo(x, y + r * 0.1);
+      ctx.lineTo(x + r * 0.95, y + r * 0.5);
+      ctx.lineTo(x, y + r * 0.9);
+      ctx.lineTo(x - r * 0.95, y + r * 0.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.beginPath();
+      ctx.moveTo(x, y + r * 0.28);
+      ctx.lineTo(x + r * 0.6, y + r * 0.5);
+      ctx.lineTo(x, y + r * 0.72);
+      ctx.lineTo(x - r * 0.6, y + r * 0.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#e6edf3';
+      ctx.fillRect(x - r * 0.05, y - r * 0.9, r * 0.1, r * 1.4);
+      ctx.fillStyle = '#ffd54f';
+      ctx.beginPath();
+      ctx.moveTo(x + r * 0.05, y - r * 0.9);
+      ctx.lineTo(x + r * 0.7, y - r * 0.68);
+      ctx.lineTo(x + r * 0.05, y - r * 0.45);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
     case 'tower': {
       // wizard tower with a floating top: a broken stump, the crystal, and the roof hovering above
       const w = r * 1.35; // drawn wide and bold so it reads at icon size

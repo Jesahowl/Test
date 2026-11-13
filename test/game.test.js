@@ -25,37 +25,64 @@ test('names are sanitised', () => {
   assert.strictEqual(g.addPlayer('').name, 'Player');
 });
 
-test('towers go on your land or leap just past it, never on enemy land', () => {
+test('buildings go on your own land, a tile in from the border; towers claim no land', () => {
   const { g, a, b } = duel(3);
   const inside = edgeTile(g, a, 0, 1, -2);
-  const leap = edgeTile(g, a, 1, 0, C.TOWER_LEAP - 1);
-  const tooFar = edgeTile(g, a, -1, 0, C.TOWER_LEAP + 1);
+  const border = edgeTile(g, a, 1, 0, -1); // on my land but touching the edge
+  const outside = edgeTile(g, a, -1, 0, 1);
+  const before = a.territory;
   assert.strictEqual(g.build(a.id, inside.x, inside.y, 'tower'), null);
+  g.update(0.05);
+  assert.strictEqual(a.territory, before, 'a tower claims no land');
   assert.match(g.build(a.id, inside.x, inside.y, 'tower'), /occupied/);
   assert.match(g.build(a.id, a.core.x, a.core.y, 'tower'), /occupied/);
-  assert.match(g.build(a.id, tooFar.x, tooFar.y, 'tower'), /leap at most/);
-  assert.match(g.build(a.id, b.core.x + 2, b.core.y, 'tower'), /enemy land/);
+  assert.match(g.build(a.id, border.x, border.y, 'tower'), /own land/);
+  assert.match(g.build(a.id, outside.x, outside.y, 'barracks'), /own land/);
+  assert.match(g.build(a.id, b.core.x + 2, b.core.y, 'tower'), /own land|enemy/);
   assert.match(g.build(a.id, -1, 0, 'tower'), /bounds/);
   assert.match(g.build(a.id, 1.5, 0, 'tower'), /bounds/);
-  assert.match(g.build(a.id, leap.x, leap.y, 'wall'), /Invalid/);
-  const before = a.territory;
-  assert.strictEqual(g.build(a.id, leap.x, leap.y, 'tower'), null);
-  g.update(0.05);
-  assert.ok(a.territory > before + 40, `a leap claims new land (${before} -> ${a.territory})`);
-});
-
-test('upgrading a tower widens its land, selling it gives the land back', () => {
-  const { g, a } = duel(4);
-  const before = a.territory;
-  const t = outpost(g, a);
-  const withTower = a.territory;
+  assert.match(g.build(a.id, inside.x, inside.y, 'wall'), /Invalid/);
+  const t = [...g.towers.values()].find((o) => o.owner === a.id);
   assert.strictEqual(g.upgrade(a.id, t.id), null);
-  g.update(0.05);
-  assert.ok(a.territory > withTower);
   assert.strictEqual(t.maxHp, C.towerStats('tower', 2).hp);
   assert.strictEqual(g.sell(a.id, t.id), null);
   g.update(0.05);
-  assert.strictEqual(a.territory, before);
+  assert.strictEqual(a.territory, before, 'selling keeps the land');
+});
+
+test('land is bought tile by tile at the border, pricier as you grow', () => {
+  const { g, a, b } = duel(4);
+  a.gold = 1000;
+  const start = a.territory;
+  assert.ok(start > 100, 'a core starts with a circle of land');
+  const edge = edgeTile(g, a, 1, 0); // first empty tile east of the core
+  const k = g.idx(edge.x, edge.y);
+  const far = g.idx(edge.x + 3, edge.y);
+  assert.match(g.buyLand(a.id, [far]), /touch your land/);
+  const cost1 = C.landCost(start);
+  assert.strictEqual(g.buyLand(a.id, [k, g.idx(edge.x + 1, edge.y), g.idx(edge.x + 2, edge.y)]), null, 'a drag grows outward tile by tile');
+  assert.strictEqual(g.lastBuy.n, 3);
+  assert.strictEqual(a.gold, 1000 - cost1 - C.landCost(start + 1) - C.landCost(start + 2));
+  g.update(0.05);
+  assert.strictEqual(a.territory, start + 3);
+  assert.ok(C.landCost(400) > C.landCost(100), 'bigger realms pay more per tile');
+  // enemy land can't be bought, and gold runs out
+  const enemyTile = g.idx(b.core.x, b.core.y + 1);
+  assert.match(g.buyLand(a.id, [enemyTile]), /someone else|touch/);
+  a.gold = 0;
+  assert.match(g.buyLand(a.id, [g.idx(edge.x + 3, edge.y)]), /gold/);
+});
+
+test('taking a tower opens up the land around it', () => {
+  const { g, a, b } = duel(5);
+  const t = outpost(g, b);
+  const near = g.idx(t.x - 2, t.y);
+  assert.strictEqual(g.terr[near], b.id);
+  g.transferTower(t, a.id);
+  assert.strictEqual(g.terr[g.idx(t.x, t.y)], a.id, 'the new owner gets the ground the tower stands on');
+  assert.strictEqual(g.terr[g.idx(t.x + 1, t.y + 1)], a.id);
+  assert.strictEqual(g.terr[near], 0, "the old owner's land nearby opens up");
+  assert.strictEqual(g.buyLand(a.id, [near]), null, 'and the taker can buy it');
 });
 
 test('spawn protection keeps a new core and its towers from taking damage', () => {

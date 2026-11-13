@@ -50,7 +50,7 @@ module.exports = {
     this.roster.set(id, { id, name: p.name, hue: p.hue, isBot, place: 0, left: false, survived: 0, peakTerritory: 0,
       kills: 0, towersDestroyed: 0, coresDestroyed: 0, gold: 0 });
     this.grid[this.idx(pos.x, pos.y)] = -id;
-    this.terrDirty = true;
+    this.claimStart(p);
     this.structVersion++;
     this.pushFeed(`${p.name} joined the siege`);
     return p;
@@ -187,6 +187,8 @@ module.exports = {
     for (const t of this.towers.values()) {
       if (t.owner === p.id) this.ruinTower(t, p.name);
     }
+    // Their land opens up: empty, for anyone to buy.
+    this.releaseLand(p.id);
 
     // The core site becomes a tower for the conqueror.
     let site = null;
@@ -200,6 +202,7 @@ module.exports = {
       this.towers.set(id, site);
       this.grid[coreIdx] = id;
       this.fx.push({ k: 'capture', x: p.core.x + 0.5, y: p.core.y + 0.5, o: killer.id });
+      this.grantBlock(killer.id, p.core.x, p.core.y); // the ground the new tower stands on
     }
 
     // Surviving troops defect to the conqueror and garrison the new tower; otherwise they vanish.

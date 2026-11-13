@@ -1,5 +1,6 @@
 // Input: mouse, keyboard, minimap and help window.
 
+import { landDown, landMove, landUp } from './land.js';
 import { newSquadFromPicked, orderAt, pickSquadOf, selectAllSquads, squadKey, toggleBuild, toggleNewWaves } from './bar.js';
 import { sendMsg } from './net.js';
 import { clearSelection } from './overlay.js';
@@ -29,6 +30,7 @@ canvas.addEventListener('mousemove', (e) => {
     mouse.lastY = e.clientY;
   }
   updateMouseWorld();
+  landMove();
 });
 
 canvas.addEventListener('mousedown', (e) => {
@@ -44,6 +46,10 @@ canvas.addEventListener('mousedown', (e) => {
   const tx = Math.floor(mouse.wx);
   const ty = Math.floor(mouse.wy);
 
+  if (S.buildKind === 'land') {
+    landDown();
+    return;
+  }
   if (S.buildKind) {
     sendMsg({ t: 'build', kind: S.buildKind, x: tx, y: ty });
     return;
@@ -79,6 +85,7 @@ canvas.addEventListener('mousedown', (e) => {
 });
 
 window.addEventListener('mouseup', (e) => {
+  if (e.button === 0 && S.landDrag) landUp();
   if ((e.button === 2 || e.button === 1) && mouse.rightDown) {
     mouse.rightDown = false;
     if (mouse.dragged || !S.myId) return;
@@ -144,6 +151,7 @@ window.addEventListener('keydown', (e) => {
   if (!S.myId) return;
   if (k === 'b') toggleBuild('tower');
   if (k === 'r') toggleBuild('barracks');
+  if (k === 'l') toggleBuild('land');
   if (k === 'escape') {
     S.buildKind = null;
     clearSelection();

@@ -1,47 +1,32 @@
-// Overlays: build preview, leap zone, order lines and markers, and the minimap.
+// Overlays: build and land previews, order lines and markers, and the minimap.
 
 import { squadsLabel } from './bar.js';
 import { mySquads, squadPicked } from './squads.js';
 import { drawShape, label } from './render.js';
 import { S, C, canvas, colorOf, ctx, FOG_PAD, fogSoft, grid, mctx, mini, mouse, players, scale, selUnits, terr, terrCanvas, toScreen, toWorld } from './state.js';
 import { campVerb, isMineTarget, orderTargetAt, targetName, targetPos } from './targets.js';
+import { drawLandMode } from './land.js';
 
-// ---- leapfrogging: unclaimed tiles within TOWER_LEAP of my land accept towers
-let leapZone = new Uint8Array(C.MAP_W * C.MAP_H);
-
-let leapKey = '';
-
-function getLeapZone() {
-  const key = `${S.myId}:${S.terrStamp}`;
-  if (key === leapKey) return leapZone;
-  leapKey = key;
-  leapZone = new Uint8Array(C.MAP_W * C.MAP_H);
-  if (!S.myId) return leapZone;
-  const R = C.TOWER_LEAP;
-  for (let y = 0; y < C.MAP_H; y++) {
-    for (let x = 0; x < C.MAP_W; x++) {
-      if (terr[y * C.MAP_W + x] !== S.myId) continue;
-      for (let dy = -R; dy <= R; dy++) {
-        for (let dx = -R; dx <= R; dx++) {
-          const nx = x + dx;
-          const ny = y + dy;
-          if (nx < 0 || ny < 0 || nx >= C.MAP_W || ny >= C.MAP_H || Math.hypot(dx, dy) > R + 0.01) continue;
-          const k = ny * C.MAP_W + nx;
-          if (terr[k] === 0) leapZone[k] = 1;
-        }
-      }
+// ---- building preview. Buildings go on my own land with a ring of my land around them (3x3).
+function ownsBlock(x, y) {
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= C.MAP_W || ny >= C.MAP_H || terr[ny * C.MAP_W + nx] !== S.myId) return false;
     }
   }
-  return leapZone;
+  return true;
 }
 
-function canBuildAt(x, y) {
-  if (!S.me || x < 0 || y < 0 || x >= C.MAP_W || y >= C.MAP_H) return false;
-  const k = y * C.MAP_W + x;
-  if (terr[k] !== S.myId && (C.TOWERS[S.buildKind]?.ownLandOnly || !getLeapZone()[k])) return false;
-  if (grid.has(`${x},${y}`)) return false;
-  for (const p of players.values()) if (p.x === x && p.y === y) return false;
-  return !nearEnemyBuilding(x, y);
+// Why a building can't go at (x, y), or null if it can.
+function buildProblem(x, y) {
+  if (!S.me || x < 0 || y < 0 || x >= C.MAP_W || y >= C.MAP_H) return 'Out of bounds';
+  if (grid.has(`${x},${y}`)) return 'Something is already here';
+  for (const p of players.values()) if (p.x === x && p.y === y) return 'Something is already here';
+  if (!ownsBlock(x, y)) return terr[y * C.MAP_W + x] === S.myId ? 'Too close to your border: build a tile further in' : 'Build on your own land (press L to buy more)';
+  if (nearEnemyBuilding(x, y)) return 'Too close to an enemy building';
+  return null;
 }
 
 // Mirrors the server: no building within ENEMY_BUILD_GAP tiles of another player's building or core.
@@ -50,38 +35,6 @@ function nearEnemyBuilding(x, y) {
   for (const t of S.towers.values()) if (t.owner && t.owner !== S.myId && Math.hypot(t.x - x, t.y - y) < gap) return true;
   for (const p of players.values()) if (p.id !== S.myId && Math.hypot(p.x - x, p.y - y) < gap) return true;
   return false;
-}
-
-// Land a new tower at (bx, by) would win: mirrors the server's nearest-claim rule
-// (cores hold land at half distance, towers at full distance).
-function claimPreview(bx, by) {
-  const r = C.towerStats(S.buildKind || 'tower', 1).claim + 0.25;
-  const R = Math.ceil(r);
-  const gained = [];
-  const stolen = new Map();
-  for (let dy = -R; dy <= R; dy++) {
-    for (let dx = -R; dx <= R; dx++) {
-      const x = bx + dx;
-      const y = by + dy;
-      const d = Math.hypot(dx, dy);
-      if (d > r || x < 0 || y < 0 || x >= C.MAP_W || y >= C.MAP_H) continue;
-      const o = terr[y * C.MAP_W + x];
-      if (o === S.myId) continue;
-      if (o) {
-        const core = players.get(o);
-        let eff = core ? Math.hypot(core.x - x, core.y - y) * 0.5 : Infinity;
-        for (const t of S.towers.values()) {
-          if (t.owner !== o) continue;
-          const td = Math.hypot(t.x - x, t.y - y);
-          if (td <= C.towerStats('tower', t.level).claim + 0.25) eff = Math.min(eff, td);
-        }
-        if (!(d < eff)) continue;
-        stolen.set(o, (stolen.get(o) || 0) + 1);
-      }
-      gained.push([x, y, o]);
-    }
-  }
-  return { gained, stolen };
 }
 
 function drawRange(wx, wy, range, color) {
@@ -297,48 +250,27 @@ function drawOverlay() {
     }
   }
 
+  if (S.buildKind === 'land' && S.myId) {
+    drawLandMode();
+    return;
+  }
   if (S.buildKind && S.myId) {
     const tx = Math.floor(mouse.wx);
     const ty = Math.floor(mouse.wy);
-    const ok = canBuildAt(tx, ty);
-    // Leap zone: unclaimed ground a tower can jump to (barracks stay on your own land).
-    const zone = C.TOWERS[S.buildKind].ownLandOnly ? new Uint8Array(0) : getLeapZone();
-    // soft dots on the tiles a tower could leap to, only around the cursor (fading with distance)
-    const DOTS = 6;
-    for (let y = Math.max(0, ty - DOTS); y <= Math.min(C.MAP_H - 1, ty + DOTS); y++) {
-      for (let x = Math.max(0, tx - DOTS); x <= Math.min(C.MAP_W - 1, tx + DOTS); x++) {
-        if (!zone[y * C.MAP_W + x]) continue;
-        const d = Math.hypot(x - tx, y - ty);
-        if (d > DOTS) continue;
-        const [sx, sy] = toScreen(x + 0.5, y + 0.5);
-        ctx.fillStyle = `rgba(255,213,79,${0.45 * (1 - d / (DOTS + 0.5))})`;
-        ctx.beginPath();
-        ctx.arc(sx, sy, s * 0.09, 0, Math.PI * 2);
-        ctx.fill();
+    const problem = buildProblem(tx, ty);
+    const ok = !problem;
+    // the 3x3 of my land the building needs
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const nx = tx + dx;
+        const ny = ty + dy;
+        if (nx < 0 || ny < 0 || nx >= C.MAP_W || ny >= C.MAP_H) continue;
+        const [sx, sy] = toScreen(nx, ny);
+        ctx.fillStyle = terr[ny * C.MAP_W + nx] === S.myId ? 'rgba(126,231,135,0.18)' : 'rgba(248,81,73,0.3)';
+        ctx.fillRect(sx + 1, sy + 1, s - 2, s - 2);
       }
     }
-    if (ok) {
-      const { gained, stolen } = claimPreview(tx, ty);
-      for (const [gx, gy, o] of gained) {
-        const [sx, sy] = toScreen(gx, gy);
-        ctx.fillStyle = o ? 'rgba(255,123,114,0.32)' : 'rgba(126,231,135,0.22)';
-        ctx.beginPath();
-        ctx.roundRect(sx + 2, sy + 2, s - 4, s - 4, s * 0.25);
-        ctx.fill();
-      }
-      const taken = [...stolen].map(([o, n]) => `${n} from ${(players.get(o) || { name: '?' }).name}`).join(', ');
-      const text = `+${gained.length} land${taken ? ` (taking ${taken})` : ''}`;
-      ctx.font = 'bold 12px system-ui, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.lineWidth = 3;
-      ctx.lineJoin = 'round';
-      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-      ctx.strokeText(text, mouse.sx + 16, mouse.sy + 24);
-      ctx.fillStyle = taken ? '#ffa198' : '#7ee787';
-      ctx.fillText(text, mouse.sx + 16, mouse.sy + 24);
-    } else if (S.me && tx >= 0 && ty >= 0 && tx < C.MAP_W && ty < C.MAP_H && nearEnemyBuilding(tx, ty)) {
-      label('Too close to an enemy building', mouse.sx + 16 + 95, mouse.sy + 26, 12, '#ffa198');
-    }
+    if (problem) label(problem, mouse.sx + 22 + problem.length * 3.2, mouse.sy + 26, 12, '#ffa198');
     const st = C.towerStats(S.buildKind, 1);
     if (st.range) drawRange(tx + 0.5, ty + 0.5, st.range, ok ? 'rgba(88,166,255,A)' : 'rgba(248,81,73,A)');
     const [x, y] = toScreen(tx + 0.5, ty + 0.5);

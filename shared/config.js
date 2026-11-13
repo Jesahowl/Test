@@ -20,11 +20,8 @@
     CORE_RANGE: 5,
     CORE_DAMAGE: 60,
     CORE_RATE: 1,
-    CORE_CLAIM: 6, // territory radius around a core
-    // Footprints: land right around a building is always its owner's, so the building never sits
-    // over (or overlaps into) someone else's land. Rival buildings must keep ENEMY_BUILD_GAP apart.
-    CORE_FOOTPRINT: 1.9,
-    STRUCT_FOOTPRINT: 1.5,
+    CORE_CLAIM: 6, // the land a new core starts with: a circle this big around it
+    // Rival buildings must keep ENEMY_BUILD_GAP tiles apart.
     ENEMY_BUILD_GAP: 3,
     CORE_KILL_BOUNTY: 250, // plus all of the victim's gold
     SPAWN_MARGIN: 10, // cores spawn at least this far from the map edge
@@ -145,17 +142,23 @@
     // Fixed structures.
     TOWERS: {
       tower: {
-        name: 'Tower', key: 'B', cost: 120, hp: 1400, claim: 5, range: 5, damage: 32, rate: 1,
-        color: '#80deea', desc: 'Claims land and zaps enemy troops',
+        name: 'Tower', key: 'B', cost: 120, hp: 1400, range: 5, damage: 32, rate: 1,
+        color: '#80deea', desc: 'Zaps enemy troops that come near. Build on your own land',
       },
       barracks: {
-        name: 'Barracks', key: 'R', cost: 250, hp: 1600, claim: 2, maxLevel: 1, ownLandOnly: true,
+        name: 'Barracks', key: 'R', cost: 250, hp: 1600, maxLevel: 1,
         color: '#9fb4c7', desc: `+4 troops in every wave, spawning here. Build on your own land`,
       },
     },
 
-    // Leapfrogging: towers may be placed on unclaimed land up to this many tiles outside your border.
-    TOWER_LEAP: 3,
+    // ---- Land: bought tile by tile with gold. A tile must be empty and touch your land; it costs
+    // LAND_BASE_COST + LAND_COST_PER_TILE for every tile you already own (bigger realms pay more).
+    // Enemy land can't be bought: taking or destroying an enemy tower opens up their land within
+    // LAND_BREACH tiles of it (it becomes empty, for anyone to buy), and a fallen core's land opens up.
+    LAND_BASE_COST: 5,
+    LAND_COST_PER_TILE: 0.07,
+    LAND_BREACH: 3,
+    LAND_BUY_MAX: 80, // tiles one buy message may ask for (a drag along the border)
 
     // ---- Jungle: neutral camps that sit still, fight back when attacked, and pay out when cleared.
     CAMP_COUNT: 12,
@@ -199,7 +202,7 @@
     return CONFIG.UNITS[kind] || CONFIG.TOWERS[kind];
   };
 
-  // Stats of a troop or structure at a given level (levels scale damage, heal, range, hp, claim).
+  // Stats of a troop or structure at a given level (levels scale damage, heal, range and hp).
   CONFIG.towerStats = function (kind, level) {
     const d = CONFIG.defOf(kind);
     const l = level - 1;
@@ -208,7 +211,6 @@
       damage: d.damage ? d.damage * (1 + 0.6 * l) : 0,
       heal: d.heal ? d.heal * (1 + 0.6 * l) : 0,
       range: d.range ? d.range + 0.5 * l : 0,
-      claim: d.claim ? d.claim + Math.min(l, 2) : 0, // land reach stops growing after level 3
       rate: d.rate || 0,
     };
   };
@@ -275,6 +277,11 @@
   // (always enough for one full wave, so barracks are never wasted).
   CONFIG.unitCap = function (territory, waveSize = 0) {
     return Math.min(CONFIG.MAX_UNITS, Math.max(CONFIG.MIN_UNITS, waveSize, Math.floor(territory / CONFIG.LAND_PER_UNIT)));
+  };
+
+  // Gold for the next tile of land, for a player who owns `territory` tiles.
+  CONFIG.landCost = function (territory) {
+    return Math.ceil(CONFIG.LAND_BASE_COST + territory * CONFIG.LAND_COST_PER_TILE);
   };
 
   CONFIG.income = function (territory) {

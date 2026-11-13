@@ -43,6 +43,20 @@ module.exports = {
     return best;
   },
 
+  // Buy up to n border tiles, nearest the core first (so the land grows round), with a little
+  // randomness so bots don't all grow the same way.
+  botBuyLand(p, n) {
+    const cands = [];
+    for (let k = 0; k < this.terr.length; k++) {
+      if (this.terr[k] || !this.canBuyTile(p.id, k)) continue;
+      const x = k % this.w;
+      const y = (k - x) / this.w;
+      cands.push([k, Math.hypot(x - p.core.x, y - p.core.y) + this.rand() * 3]);
+    }
+    cands.sort((a, b) => a[1] - b[1]);
+    if (cands.length) this.buyLand(p.id, cands.slice(0, n).map((c) => c[0]));
+  },
+
   botThink(p) {
     const age = this.time - p.spawnTime;
     const structures = [...this.towers.values()].filter((t) => t.owner === p.id);
@@ -51,13 +65,21 @@ module.exports = {
     const troops = [...this.units.values()].filter((u) => u.owner === p.id);
     const roll = this.rand();
 
-    // Expand: leapfrog towers outward from the core or an existing tower.
-    if (towers.length < Math.min(5, 1 + Math.floor(age / 45)) && p.gold >= C.TOWERS.tower.cost + 40 && roll < 0.4) {
+    // Grow: buy land at the border, keeping some gold back for buildings and troops.
+    const tileCost = C.landCost(p.territory);
+    const keep = 60 + (towers.length < 2 ? C.TOWERS.tower.cost : 0);
+    if (p.gold >= keep + tileCost * 3 && roll < 0.75) {
+      const n = Math.min(10, Math.floor((p.gold - keep) / tileCost));
+      this.botBuyLand(p, n);
+    }
+
+    // Defend: towers inside the land, towards the border.
+    if (towers.length < Math.min(5, 1 + Math.floor(age / 60)) && p.gold >= C.TOWERS.tower.cost + 40 && roll < 0.4) {
       const bases = [p.core, ...towers];
       const base = bases[Math.floor(this.rand() * bases.length)];
-      for (let i = 0; i < 25; i++) {
+      for (let i = 0; i < 30; i++) {
         const ang = this.rand() * Math.PI * 2;
-        const r = 5 + this.rand() * 3;
+        const r = 3 + this.rand() * 4;
         const x = Math.round(base.x + Math.cos(ang) * r);
         const y = Math.round(base.y + Math.sin(ang) * r);
         if (this.inBounds(x, y) && this.build(p.id, x, y, 'tower') === null) break;

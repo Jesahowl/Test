@@ -5,6 +5,7 @@ import { formError, onLeft, onRoom } from './lobby.js';
 import { clearSelection } from './overlay.js';
 import { showDeath, showMenu, showRoundOver, startSpectating, stopSpectating, toast } from './screens.js';
 import { S, $, C, cam, CAMP_KEYS, CREEP_KEYS, feed, grid, KIND_KEYS, players, selUnits, terr, UNIT_KEYS } from './state.js';
+import { tipDone } from './tips.js';
 
 // ------------------------------------------------------------------ network
 function connect() {
@@ -81,6 +82,10 @@ function handle(msg) {
     case 'err':
       if (!formError(msg.m)) toast(msg.m);
       S.pendingOrder = null;
+      break;
+    case 'bought':
+      toast(`+${msg.n} land (−${msg.gold}g)`, true);
+      tipDone('land');
       break;
     case 'ordered':
       if (S.pendingOrder) toast(S.pendingOrder(msg.n), true);

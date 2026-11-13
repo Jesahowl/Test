@@ -140,12 +140,17 @@ function waveListOf(m) {
   return list;
 }
 
-// Tower button, squads and the army panel.
+// Build buttons (tower, barracks, land), squads and the army panel.
 function updateTowerAndArmy(gold, perWave) {
   updateSquadsUi();
   const tb = $('tower-button');
   tb.classList.toggle('active', S.buildKind === 'tower');
   tb.classList.toggle('poor', gold < C.TOWERS.tower.cost);
+  const lb = $('land-button');
+  const tileCost = C.landCost((players.get(S.myId) || { territory: 0 }).territory);
+  lb.classList.toggle('active', S.buildKind === 'land');
+  lb.classList.toggle('poor', gold < tileCost);
+  lb.querySelector('.cost').textContent = `${tileCost}g/tile`;
   const bb = $('barracks-button');
   const owned = [...S.towers.values()].filter((t) => t.owner === S.myId && t.kind === 'barracks').length;
   const bCost = C.buildCost('barracks', owned);
@@ -243,7 +248,7 @@ function updateSelectionPanel(gold) {
         <div id="sel-info" class="stats"></div>
         <div class="stats">${isB
           ? `<div style="grid-column:span 2">+<b>${C.BARRACKS_TROOPS}</b> troops every wave, from here</div>`
-          : `<div>Damage <b>${st.damage.toFixed(0)}/s</b></div><div>Range <b>${st.range}</b></div>`}<div>Claims <b>${st.claim}</b></div><div>Sight <b>${C.structSight(t.kind, t.level)}</b></div></div>
+          : `<div>Damage <b>${st.damage.toFixed(0)}/s</b></div><div>Range <b>${st.range}</b></div>`}<div>Sight <b>${C.structSight(t.kind, t.level)}</b></div></div>
         <div class="btns">
           ${isB ? '' : `<button id="sel-up" class="primary" data-tip="${next ? `Level ${t.level + 1}: damage ${Math.round(next.damage)}, range ${next.range}, claims ${next.claim}, ${next.hp} HP <kbd>U</kbd>` : 'Max level'}">${maxed ? 'Max level' : `▲ Upgrade ${C.upgradeCost(t.kind, t.level)}g`}</button>`}
           <button id="sel-sell" data-tip="Sell for ${C.sellValue(t.kind, t.level)}g. Its land goes too. <kbd>Del</kbd>">Sell +${C.sellValue(t.kind, t.level)}g</button>

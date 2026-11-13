@@ -14,7 +14,7 @@ function buildBar() {
   const tb = $('tower-button');
   const d = C.TOWERS.tower;
   const st = C.towerStats('tower', 1);
-  tb.dataset.tip = `<span class="t">Tower <kbd>${d.key}</kbd></span>Claims land around it and shoots enemy troops (${st.damage} dmg/s, range ${st.range}). Build on your land or up to ${C.TOWER_LEAP} tiles past your border. <span class="m">More land = more gold and a bigger army.</span>`;
+  tb.dataset.tip = `<span class="t">Tower <kbd>${d.key}</kbd></span>Zaps enemy troops that come near (${st.damage} dmg/s, range ${st.range}). Build on your own land, a tile in from the border. <span class="m">Towers hold land: if an enemy takes one, your land around it opens up.</span>`;
   tb.innerHTML = `<kbd>${d.key}</kbd><img src="${iconURL('tower')}" alt="">${d.name}<span class="cost">${d.cost}g</span>`;
   tb.onclick = () => toggleBuild('tower');
   const bb = $('barracks-button');
@@ -22,6 +22,10 @@ function buildBar() {
   bb.dataset.tip = `<span class="t">Barracks <kbd>${bd.key}</kbd></span><b>+${C.BARRACKS_TROOPS} troops in every wave</b>, marching out from the barracks. Build on your own land. Up to ${C.MAX_BARRACKS}; each costs ${C.BARRACKS_COST_STEP}g more than the last. <span class="m">Enemies who take one get its troops.</span>`;
   bb.innerHTML = `<kbd>${bd.key}</kbd><span class="count"></span><img src="${iconURL('barracks')}" alt="">${bd.name}<span class="cost"></span>`;
   bb.onclick = () => toggleBuild('barracks');
+  const lb = $('land-button');
+  lb.dataset.tip = `<span class="t">Buy land <kbd>L</kbd></span>Click empty tiles touching your border, or <b>drag along it</b> to buy a strip. Each tile costs ${C.LAND_BASE_COST}g + ${C.LAND_COST_PER_TILE}g for every tile you own. <span class="m">Land = more gold and a bigger army. Enemy land can't be bought: take their towers to open it up.</span>`;
+  lb.innerHTML = `<kbd>L</kbd><img src="${iconURL('land')}" alt="">Land<span class="cost"></span>`;
+  lb.onclick = () => toggleBuild('land');
 
   const army = $('army');
   for (const kind of UNIT_KEYS) {

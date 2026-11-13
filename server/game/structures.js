@@ -6,18 +6,14 @@
 const { C } = require('./common');
 
 module.exports = {
-  // Place a tower on your land, or leapfrog it onto unclaimed land just past your border.
+  // Place a tower or barracks on your own land.
   build(pid, x, y, kind) {
     const p = this.players.get(pid);
     const def = C.TOWERS[kind];
     if (!p || !p.alive || !def) return 'Invalid build';
     if (!Number.isInteger(x) || !Number.isInteger(y) || !this.inBounds(x, y)) return 'Out of bounds';
     const k = this.idx(x, y);
-    if (this.terr[k] !== pid) {
-      if (def.ownLandOnly) return `${def.name} must be built on your own land`;
-      if (this.terr[k] !== 0) return 'You cannot build on enemy land';
-      if (!this.withinLeap(pid, x, y)) return `Towers can leap at most ${C.TOWER_LEAP} tiles beyond your border`;
-    }
+    if (!this.ownsBlock(pid, x, y)) return `${def.name}s go on your own land, at least a tile in from the border`;
     if (this.grid[k] !== 0) return 'Tile is occupied';
     if (this.nearEnemyBuilding(pid, x, y)) return `Too close to an enemy building (keep ${C.ENEMY_BUILD_GAP} tiles away)`;
     const owned = this.countOwned(pid, kind);
@@ -54,16 +50,14 @@ module.exports = {
     return n;
   },
 
-  // Is unclaimed tile (x, y) within TOWER_LEAP tiles of pid's land?
-  withinLeap(pid, x, y) {
-    const r = C.TOWER_LEAP;
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
-        if (Math.hypot(dx, dy) > r + 0.01 || !this.inBounds(x + dx, y + dy)) continue;
-        if (this.terr[this.idx(x + dx, y + dy)] === pid) return true;
+  // Does pid own the 3x3 block around (x, y)? Buildings need it, so they sit well inside their land.
+  ownsBlock(pid, x, y) {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (!this.inBounds(x + dx, y + dy) || this.terr[this.idx(x + dx, y + dy)] !== pid) return false;
       }
     }
-    return false;
+    return true;
   },
 
   upgrade(pid, id) {

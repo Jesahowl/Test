@@ -39,7 +39,6 @@ class Game {
     this.grid = new Int32Array(this.w * this.h);
     // terr: owner player id per tile, 0 = unclaimed
     this.terr = new Int32Array(this.w * this.h);
-    this.terrDist = new Float32Array(this.w * this.h);
     this.terrDirty = true;
     this.terrVersion = 0;
 

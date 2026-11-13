@@ -2,7 +2,7 @@
 
 A multiplayer **.io strategy game with a League-of-Legends feel**. Every player has a core on one shared map
 that sends out **waves of troops** every 20 seconds. Point your waves at a rival's towers to push, or pull
-them home to defend. Towers claim land and shoot; more land means more gold and a bigger army.
+them home to defend. **Buy land** with gold along your border; more land means more gold and a bigger army. Towers defend it.
 
 ![concept](https://img.shields.io/badge/status-prototype-yellow)
 
@@ -40,7 +40,8 @@ closes after a minute. **Play** still drops you into the always-running public g
 | **Moving** | **Right-click empty ground** to send the picked squads there. They hold the spot, fight enemies that come within 6 tiles of it, and come back to it afterwards. |
 | **Hunting** | **Right-click an enemy troop** to send your troops after it. They chase it down and focus it, ignoring other enemies on the way. When it dies they go after its squadmates within 6 tiles, then head home once the squad is gone. A red crosshair marks troops you're hunting. Hunts use the picked squads (or picked troops) like other orders, but are a one-off: the squads keep their standing orders. |
 | **The push** | Troops march across the map (pathfinding around structures), fight whatever they meet, then hit the target. When a tower falls, the push rolls on to that player's next tower, then their core. |
-| **Towers** | Claim land and zap enemy troops with lightning. Each is a wizard tower whose top floats in pieces above its broken stump, held up by magic around a crystal. Your core (a great crystal over a rune circle) zaps too. Barracks are crystal halls: stone halls with crystals on the roof ridge and a doorway that flares as each wave marches out. Higher levels: a taller stump with a band, a spinning rune ring, gold runes and a glowing aura. Place them on your land, or **leapfrog** up to 3 tiles past your border onto unclaimed ground. The land right around every building (and core) is always its owner's, so buildings never stick out into enemy land, and you can't build within 3 tiles of an enemy building or core. |
+| **Land** | You start with a circle of land around your core. **Buy more with gold**: press `L` (or the **Land** button), then click empty tiles touching your border, or **drag along it** to buy a strip. Each tile costs 5g + 0.07g for every tile you already own, so bigger realms pay more (about 14g a tile at the start). **Enemy land can't be bought**: take or destroy one of their towers and their land within 3 tiles of it opens up (the taker gets the ground the tower stands on), and when a core falls all of its land opens up. Open land can be bought by anyone whose land touches it. |
+| **Towers** | Zap enemy troops with lightning and **hold your land** (they claim none themselves). Each is a wizard tower whose top floats in pieces above its broken stump, held up by magic around a crystal. Your core (a great crystal over a rune circle) zaps too. Barracks are crystal halls: stone halls with crystals on the roof ridge and a doorway that flares as each wave marches out. Higher levels: a taller stump with a band, a spinning rune ring, gold runes and a glowing aura. Towers and barracks go on your own land with at least a tile of your land all round them (so they never stick out over the border), and not within 3 tiles of an enemy building or core. |
 | **Taking towers** | **Destroy** one and it becomes yours (+250g): it keeps its level, comes back at 70% health, and its land switches to you. The attackers stay on as its garrison and your waves push on to that player's next tower. Towers only become ruins when their owner's core falls. |
 | **Gold** | Land only pays a trickle (1.5g/s + a little per tile). **Most gold comes from fighting**: 14g per enemy troop killed (+6 per troop level), 40–250g per barbarian (a whole camp pays 120–370g), 250g for a tower, and 250g plus all of their gold for a core. Each bounty pops up where you earned it, and the death screen breaks down where your gold came from. |
 | **Barbarian camps** | 12 neutral barbarian camps, spread out (each is placed as far as possible from the others, at least 18 tiles apart), in three sizes: **Raider Camp** (3 axe raiders, 120g), **Barbarian Outpost** (a club-wielding brute + 2 raiders, 190g) and **Warlord's Fort** (a crowned warlord + 2 spearmen, 370g + buff). Each camp is a **tent village** on trampled earth: 3 tents for a Raider Camp, 4 plus war banners for an Outpost, and 5 with a watchtower for the Warlord's Fort (its beacon fire marks the buff). Barbarians are red-rimmed tokens with horned helmets; the weapon tells you the type. They're passive until attacked, then the whole camp fights back. Hover a camp to see what it pays; right-click it to send troops. They come back after 45s (the Warlord's Fort after 90s) **in a new random spot**, shown on the map and minimap with a countdown ring. |
@@ -83,7 +84,8 @@ and get a turning gold rune ring at level 4 and a radiant aura at level 5.
 | `Esc` | Clear picked troops / selected building |
 | `H` | Every squad defends your core |
 | `R` | Place a barracks (your own land only): +4 troops per wave |
-| `B` | Place a tower (shows where you can leap, and the land you'd gain or take) |
+| `L` | Buy land: click empty tiles at your border, or drag along it (shows the price) |
+| `B` | Place a tower (shows the 3x3 of your land it needs) |
 | `U` / `Del` | Upgrade / sell the selected tower |
 | `WASD` / arrows / right-drag | Pan. Wheel zooms. `Space` jumps home. Click the minimap to jump. `?` opens the controls & how-to-play window. |
 
@@ -131,15 +133,15 @@ test/                   node:test suite (game rules, waves & orders, jungle, rou
   gold, army plan, standing order and wave timer. Territory is sent run-length encoded, only when it changes.
 - **Spatial grid.** Troops are bucketed into 4x4-tile cells each tick, so targeting, tower fire, splash, healing and
   healing only look at nearby troops (24 players: about 4 ms per tick).
-- **Territory.** Each tile belongs to whichever core/tower claims it most strongly; cores hold nearby land twice as strongly.
-  Borders are traced, lightly smoothed and drawn as vector paths on the client: each player's land is
+- **Territory.** Land is kept tile by tile: a core starts with a circle, players buy empty tiles touching their land,
+  and land opens up when a tower is taken (within 3 tiles) or a core falls. Borders are traced, lightly smoothed and drawn as vector paths on the client: each player's land is
   a see-through fill in their colour inside a solid border, with the owner's name written across it.
 - **Troop movement.** Attacking troops follow a flow field toward their target (Dijkstra from the goal tile, one per
   active goal, rebuilt lazily when structures change). Defending troops plan short BFS paths within their own land and
   patrol around the structure they guard.
 - **Smooth movement.** Each snapshot carries the server tick number; the client draws troops and monsters 100 ms in the
   past, interpolating between snapshots on that steady clock, so movement stays smooth despite network jitter.
-- **Bots** leapfrog towers outward, grow and level their army plan, defend when invaded, keep a squad farming jungle camps, and launch
+- **Bots** buy land at their border (growing round their core), build towers inside it, grow and level their army plan, defend when invaded, keep a squad farming jungle camps, and launch
   strike forces (60% of their home troops) at the nearest rival's towers while new waves stay home.
 
 ## Ideas for next steps

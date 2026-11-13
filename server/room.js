@@ -198,6 +198,12 @@ class Room {
         return game.sell(client.pid, msg.id);
       case 'capture':
         return game.capture(client.pid, msg.id);
+      case 'land': {
+        const tiles = Array.isArray(msg.tiles) ? msg.tiles.slice(0, C.LAND_BUY_MAX).map(Number) : null;
+        const err = game.buyLand(client.pid, tiles);
+        if (game.lastBuy && game.lastBuy.n) send(client, { t: 'bought', n: game.lastBuy.n, gold: game.lastBuy.gold });
+        return game.lastBuy && game.lastBuy.n ? null : err;
+      }
       case 'army':
         if (msg.op === 'add') return game.armyAdd(client.pid, msg.kind);
         if (msg.op === 'remove') return game.armyRemove(client.pid, msg.kind);

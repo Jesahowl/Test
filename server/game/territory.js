@@ -1,43 +1,15 @@
 'use strict';
 
 // Territory: which player owns each tile, and its run-length encoding for clients.
+// Land is kept tile by tile: a new core starts with a circle of it, players buy more with gold
+// (empty tiles touching their land), and it opens up again when a tower or core falls.
 // These methods are mixed into Game (see ../game.js), so `this` is the game.
 
 const { C } = require('./common');
 
 module.exports = {
+  // Recount everyone's land after it changed.
   recomputeTerritory() {
-    this.terr.fill(0);
-    this.terrDist.fill(Infinity);
-    const sources = [];
-    for (const p of this.players.values()) {
-      if (p.alive) sources.push({ x: p.core.x, y: p.core.y, r: C.CORE_CLAIM, owner: p.id, weight: 0.5, foot: C.CORE_FOOTPRINT });
-    }
-    for (const t of this.towers.values()) {
-      if (t.owner) sources.push({ x: t.x, y: t.y, r: C.towerStats(t.kind, t.level).claim, owner: t.owner, weight: 1, foot: C.STRUCT_FOOTPRINT });
-    }
-    for (const s of sources) {
-      const r = Math.ceil(Math.max(s.r, s.foot));
-      for (let dy = -r; dy <= r; dy++) {
-        for (let dx = -r; dx <= r; dx++) {
-          const x = s.x + dx;
-          const y = s.y + dy;
-          if (!this.inBounds(x, y)) continue;
-          const d = Math.hypot(dx, dy);
-          // +0.25 rounds the claim off (no lone one-tile spikes at the four compass points).
-          if (d > Math.max(s.r + 0.25, s.foot)) continue;
-          // Cores hold their nearby land more strongly than towers, and a building's footprint
-          // beats any ordinary claim (between two footprints, the nearer building wins).
-          const eff = d <= s.foot ? d - 1000 : d * s.weight;
-          const k = this.idx(x, y);
-          if (eff < this.terrDist[k]) {
-            this.terrDist[k] = eff;
-            this.terr[k] = s.owner;
-          }
-        }
-      }
-    }
-    this.tidyTerritory(sources);
     const counts = new Map();
     for (let i = 0; i < this.terr.length; i++) {
       const o = this.terr[i];
@@ -51,61 +23,95 @@ module.exports = {
     this.terrVersion++;
   },
 
-  // Land is either one player's or another's, with clean borders between them: no one-tile
-  // strands poking into a neighbour, and no two patches of the same land touching only at a
-  // corner with someone else's land squeezed between (drawn smoothly, those look like two
-  // borders crossing). Building footprints always stay their owner's.
-  tidyTerritory(sources) {
-    const W = this.w;
-    const H = this.h;
-    const terr = this.terr;
-    const keep = new Set();
-    for (let k = 0; k < terr.length; k++) if (this.terrDist[k] < -500) keep.add(k); // footprints
-    const at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? -1 : terr[y * W + x]);
-    for (let pass = 0; pass < 3; pass++) {
-      let changed = 0;
-      // Corner-only contacts: a 2x2 block like  A B / B A  goes to whichever owner holds it more
-      // strongly (closer to its claim), so one side's patches join and the other's separate.
-      for (let y = 0; y < H - 1; y++) {
-        for (let x = 0; x < W - 1; x++) {
-          const a = at(x, y);
-          const b = at(x + 1, y);
-          if (a === b || a !== at(x + 1, y + 1) || b !== at(x, y + 1)) continue;
-          const ka = this.idx(x, y);
-          const kb = this.idx(x + 1, y);
-          // empty land never wins a corner; otherwise the stronger claim does
-          let winner = a;
-          if (!a) winner = b;
-          else if (b && this.terrDist[kb] + this.terrDist[this.idx(x, y + 1)] < this.terrDist[ka] + this.terrDist[this.idx(x + 1, y + 1)]) winner = b;
-          const loserTiles = winner === a ? [kb, this.idx(x, y + 1)] : [ka, this.idx(x + 1, y + 1)];
-          for (const k of loserTiles) {
-            if (keep.has(k)) continue;
-            terr[k] = winner;
-            changed++;
-          }
-        }
+  // The land a new core starts with: the empty tiles in a circle around it.
+  claimStart(p) {
+    const r = C.CORE_CLAIM + 0.25;
+    const R = Math.ceil(r);
+    for (let dy = -R; dy <= R; dy++) {
+      for (let dx = -R; dx <= R; dx++) {
+        const x = p.core.x + dx;
+        const y = p.core.y + dy;
+        if (!this.inBounds(x, y) || Math.hypot(dx, dy) > r) continue;
+        const k = this.idx(x, y);
+        if (!this.terr[k]) this.terr[k] = p.id;
       }
-      // Strands: an owned tile with at most one side touching its own land, but with land of a
-      // single other owner on at least two sides, belongs to that neighbour.
-      for (let y = 0; y < H; y++) {
-        for (let x = 0; x < W; x++) {
-          const k = y * W + x;
-          const o = terr[k];
-          if (!o || keep.has(k)) continue;
-          const n = [at(x - 1, y), at(x + 1, y), at(x, y - 1), at(x, y + 1)];
-          if (n.filter((v) => v === o).length > 1) continue;
-          const tally = new Map();
-          for (const v of n) if (v !== o && v !== -1) tally.set(v, (tally.get(v) || 0) + 1);
-          let best = 0;
-          let bestN = 0;
-          for (const [v, c] of tally) if (c > bestN) { best = v; bestN = c; }
-          if (bestN < 2 || (best === 0 && n.includes(o))) continue; // keep edges facing open land
-          terr[k] = best;
-          changed++;
-        }
-      }
-      if (!changed) break;
     }
+    this.terrDirty = true;
+  },
+
+  // pid's tiles within r of (cx, cy) become empty (r = Infinity: all of them).
+  releaseLand(pid, cx = 0, cy = 0, r = Infinity) {
+    for (let k = 0; k < this.terr.length; k++) {
+      if (this.terr[k] !== pid) continue;
+      if (r !== Infinity) {
+        const x = k % this.w;
+        const y = (k - x) / this.w;
+        if (Math.hypot(x - cx, y - cy) > r + 0.25) continue;
+      }
+      this.terr[k] = 0;
+    }
+    this.terrDirty = true;
+  },
+
+  // The 3x3 block around (cx, cy) becomes pid's (the ground a captured building stands on).
+  grantBlock(pid, cx, cy) {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (this.inBounds(cx + dx, cy + dy)) this.terr[this.idx(cx + dx, cy + dy)] = pid;
+      }
+    }
+    this.terrDirty = true;
+  },
+
+  // Can pid buy tile k: empty, touching their land, and not leaving two players' land touching
+  // only at a corner (which can't be drawn cleanly)?
+  canBuyTile(pid, k) {
+    if (k < 0 || k >= this.terr.length || this.terr[k]) return false;
+    const x = k % this.w;
+    const y = (k - x) / this.w;
+    const at = (tx, ty) => (this.inBounds(tx, ty) ? this.terr[this.idx(tx, ty)] : -1);
+    if (at(x - 1, y) !== pid && at(x + 1, y) !== pid && at(x, y - 1) !== pid && at(x, y + 1) !== pid) return false;
+    for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      // a 2x2 block where my land would touch my land only diagonally, across another player's
+      const h = at(x + dx, y);
+      if (at(x + dx, y + dy) === pid && h > 0 && h !== pid && at(x, y + dy) === h) return false;
+    }
+    return true;
+  },
+
+  // Buy tiles (in order, so a drag along the border can grow outward). Each costs
+  // C.landCost(land owned so far). Stops when gold runs out. Returns null or an error string;
+  // this.lastBuy says how many tiles were bought and for how much.
+  buyLand(pid, tiles) {
+    this.lastBuy = { n: 0, gold: 0 };
+    const p = this.players.get(pid);
+    if (!p || !p.alive) return 'Invalid purchase';
+    if (!Array.isArray(tiles) || !tiles.length) return 'No land picked';
+    let land = p.territory;
+    let reason = null;
+    for (const k of tiles.slice(0, C.LAND_BUY_MAX)) {
+      if (!Number.isInteger(k)) continue;
+      if (!this.canBuyTile(pid, k)) {
+        if (!reason) reason = this.terr[k] > 0 && this.terr[k] !== pid ? "You can't buy someone else's land: take their towers" : 'Land must be empty and touch your land';
+        continue;
+      }
+      const cost = C.landCost(land);
+      if (p.gold < cost) {
+        reason = 'Not enough gold';
+        break;
+      }
+      p.gold -= cost;
+      this.terr[k] = pid;
+      land++;
+      this.lastBuy.n++;
+      this.lastBuy.gold += cost;
+    }
+    if (this.lastBuy.n) {
+      p.territory = land;
+      this.terrDirty = true;
+      return null;
+    }
+    return reason || 'No land bought';
   },
 
   // Run-length encoded territory: [owner, count, owner, count, ...]

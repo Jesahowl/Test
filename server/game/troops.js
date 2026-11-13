@@ -378,9 +378,11 @@ module.exports = {
   },
 
   // Push troops apart so none sit on top of each other (friend or foe), and out of buildings and
-  // barbarians. Each overlap is resolved part of the way per tick, so crowds settle smoothly.
+  // barbarians (but never push a defender off its own land). Each overlap is resolved part of the way per tick, so crowds settle smoothly.
   separateUnits() {
     const R = C.UNIT_SPACING;
+    const before = new Map();
+    for (const u of this.units.values()) if (!u.attack) before.set(u, [u.x, u.y]);
     for (const u of this.units.values()) {
       for (const v of this.nearUnits(u.x, u.y, R)) {
         if (v.id <= u.id) continue;
@@ -422,6 +424,15 @@ module.exports = {
     for (const u of this.units.values()) {
       u.x = Math.max(0.3, Math.min(this.w - 0.3, u.x));
       u.y = Math.max(0.3, Math.min(this.h - 0.3, u.y));
+      // Defenders aren't shoved off their own land: if a push would take one over the border, it stays.
+      const was = before.get(u);
+      if (was) {
+        const own = (x, y) => this.terr[this.idx(Math.floor(x), Math.floor(y))] === u.owner;
+        if (own(was[0], was[1]) && !own(u.x, u.y)) {
+          u.x = was[0];
+          u.y = was[1];
+        }
+      }
     }
   },
 
