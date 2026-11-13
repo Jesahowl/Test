@@ -21,6 +21,11 @@
     CORE_DAMAGE: 60,
     CORE_RATE: 1,
     CORE_CLAIM: 6, // territory radius around a core
+    // Footprints: land right around a building is always its owner's, so the building never sits
+    // over (or overlaps into) someone else's land. Rival buildings must keep ENEMY_BUILD_GAP apart.
+    CORE_FOOTPRINT: 1.9,
+    STRUCT_FOOTPRINT: 1.5,
+    ENEMY_BUILD_GAP: 3,
     CORE_KILL_BOUNTY: 250, // plus all of the victim's gold
     SPAWN_MARGIN: 10, // cores spawn at least this far from the map edge
     SPAWN_CANDIDATES: 300, // random spots tried per spawn; the one furthest from other bases wins

@@ -40,7 +40,15 @@ function canBuildAt(x, y) {
   if (terr[k] !== S.myId && (C.TOWERS[S.buildKind]?.ownLandOnly || !getLeapZone()[k])) return false;
   if (grid.has(`${x},${y}`)) return false;
   for (const p of players.values()) if (p.x === x && p.y === y) return false;
-  return true;
+  return !nearEnemyBuilding(x, y);
+}
+
+// Mirrors the server: no building within ENEMY_BUILD_GAP tiles of another player's building or core.
+function nearEnemyBuilding(x, y) {
+  const gap = C.ENEMY_BUILD_GAP;
+  for (const t of S.towers.values()) if (t.owner && t.owner !== S.myId && Math.hypot(t.x - x, t.y - y) < gap) return true;
+  for (const p of players.values()) if (p.id !== S.myId && Math.hypot(p.x - x, p.y - y) < gap) return true;
+  return false;
 }
 
 // Land a new tower at (bx, by) would win: mirrors the server's nearest-claim rule
@@ -233,6 +241,8 @@ function drawOverlay() {
       ctx.strokeText(text, mouse.sx + 16, mouse.sy + 24);
       ctx.fillStyle = taken ? '#ffa198' : '#7ee787';
       ctx.fillText(text, mouse.sx + 16, mouse.sy + 24);
+    } else if (S.me && tx >= 0 && ty >= 0 && tx < C.MAP_W && ty < C.MAP_H && nearEnemyBuilding(tx, ty)) {
+      label('Too close to an enemy building', mouse.sx + 16 + 95, mouse.sy + 26, 12, '#ffa198');
     }
     const st = C.towerStats(S.buildKind, 1);
     if (st.range) drawRange(tx + 0.5, ty + 0.5, st.range, ok ? 'rgba(88,166,255,A)' : 'rgba(248,81,73,A)');

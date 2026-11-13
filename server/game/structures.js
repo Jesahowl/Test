@@ -19,6 +19,7 @@ module.exports = {
       if (!this.withinLeap(pid, x, y)) return `Towers can leap at most ${C.TOWER_LEAP} tiles beyond your border`;
     }
     if (this.grid[k] !== 0) return 'Tile is occupied';
+    if (this.nearEnemyBuilding(pid, x, y)) return `Too close to an enemy building (keep ${C.ENEMY_BUILD_GAP} tiles away)`;
     const owned = this.countOwned(pid, kind);
     if (kind === 'barracks' && owned >= C.MAX_BARRACKS) return `You can have at most ${C.MAX_BARRACKS} barracks`;
     const cost = C.buildCost(kind, owned);
@@ -35,13 +36,25 @@ module.exports = {
     return null;
   },
 
-  // Is unclaimed tile (x, y) within TOWER_LEAP tiles of pid's land?
+  // Is there another player's tower, barracks or core within ENEMY_BUILD_GAP tiles of (x, y)?
+  nearEnemyBuilding(pid, x, y) {
+    const gap = C.ENEMY_BUILD_GAP;
+    for (const t of this.towers.values()) {
+      if (t.owner && t.owner !== pid && Math.hypot(t.x - x, t.y - y) < gap) return true;
+    }
+    for (const q of this.players.values()) {
+      if (q.alive && q.id !== pid && Math.hypot(q.core.x - x, q.core.y - y) < gap) return true;
+    }
+    return false;
+  },
+
   countOwned(pid, kind) {
     let n = 0;
     for (const t of this.towers.values()) if (t.owner === pid && t.kind === kind) n++;
     return n;
   },
 
+  // Is unclaimed tile (x, y) within TOWER_LEAP tiles of pid's land?
   withinLeap(pid, x, y) {
     const r = C.TOWER_LEAP;
     for (let dy = -r; dy <= r; dy++) {

@@ -11,13 +11,13 @@ module.exports = {
     this.terrDist.fill(Infinity);
     const sources = [];
     for (const p of this.players.values()) {
-      if (p.alive) sources.push({ x: p.core.x, y: p.core.y, r: C.CORE_CLAIM, owner: p.id, weight: 0.5 });
+      if (p.alive) sources.push({ x: p.core.x, y: p.core.y, r: C.CORE_CLAIM, owner: p.id, weight: 0.5, foot: C.CORE_FOOTPRINT });
     }
     for (const t of this.towers.values()) {
-      if (t.owner) sources.push({ x: t.x, y: t.y, r: C.towerStats(t.kind, t.level).claim, owner: t.owner, weight: 1 });
+      if (t.owner) sources.push({ x: t.x, y: t.y, r: C.towerStats(t.kind, t.level).claim, owner: t.owner, weight: 1, foot: C.STRUCT_FOOTPRINT });
     }
     for (const s of sources) {
-      const r = Math.ceil(s.r);
+      const r = Math.ceil(Math.max(s.r, s.foot));
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {
           const x = s.x + dx;
@@ -25,9 +25,10 @@ module.exports = {
           if (!this.inBounds(x, y)) continue;
           const d = Math.hypot(dx, dy);
           // +0.25 rounds the claim off (no lone one-tile spikes at the four compass points).
-          if (d > s.r + 0.25) continue;
-          // Cores hold their nearby land more strongly than towers.
-          const eff = d * s.weight;
+          if (d > Math.max(s.r + 0.25, s.foot)) continue;
+          // Cores hold their nearby land more strongly than towers, and a building's footprint
+          // beats any ordinary claim (between two footprints, the nearer building wins).
+          const eff = d <= s.foot ? d - 1000 : d * s.weight;
           const k = this.idx(x, y);
           if (eff < this.terrDist[k]) {
             this.terrDist[k] = eff;
@@ -53,12 +54,13 @@ module.exports = {
   // Land is either one player's or another's, with clean borders between them: no one-tile
   // strands poking into a neighbour, and no two patches of the same land touching only at a
   // corner with someone else's land squeezed between (drawn smoothly, those look like two
-  // borders crossing). The tile under a core, tower or barracks always stays its owner's.
+  // borders crossing). Building footprints always stay their owner's.
   tidyTerritory(sources) {
     const W = this.w;
     const H = this.h;
     const terr = this.terr;
-    const keep = new Set(sources.map((s) => this.idx(s.x, s.y)));
+    const keep = new Set();
+    for (let k = 0; k < terr.length; k++) if (this.terrDist[k] < -500) keep.add(k); // footprints
     const at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? -1 : terr[y * W + x]);
     for (let pass = 0; pass < 3; pass++) {
       let changed = 0;
