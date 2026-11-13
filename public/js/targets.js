@@ -1,6 +1,6 @@
 // Order targets: what is under the cursor and how to name it.
 
-import { S, C, grid, players } from './state.js';
+import { S, C, baseLift, hexSpot, players, towerInHex } from './state.js';
 
 // ------------------------------------------------------------------ targets
 // Targets are encoded like the server does: 't:<tower id>', 'c:<player id>', 'j:<camp id>'.
@@ -10,11 +10,11 @@ function targetPos(key) {
   const id = Number(raw);
   if (k === 't') {
     const t = S.towers.get(id);
-    return t ? { x: t.x + 0.5, y: t.y + 0.5 } : null;
+    return t ? hexSpot(t.x, t.y) : null;
   }
   if (k === 'c') {
     const p = players.get(id);
-    return p ? { x: p.x + 0.5, y: p.y + 0.5 } : null;
+    return p ? hexSpot(p.x, p.y) : null;
   }
   if (k === 'u') {
     const u = S.units.get(id);
@@ -22,7 +22,7 @@ function targetPos(key) {
   }
   if (k === 'p') return { x: (id % C.MAP_W) + 0.5, y: Math.floor(id / C.MAP_W) + 0.5, unit: true };
   const camp = S.camps[id];
-  return camp ? { x: camp.x + 0.5, y: camp.y + 0.5 } : null;
+  return camp ? hexSpot(camp.x, camp.y) : null;
 }
 
 function targetName(key) {
@@ -59,13 +59,14 @@ function orderTargetAt(wx, wy) {
   }
   if (best) return { k: 'u', id: best.id };
   for (const p of S.coresView.values()) {
-    if (Math.hypot(p.x + 0.5 - wx, p.y + 0.5 - wy) < 1.1) return { k: 'c', id: p.id };
+    const cs = hexSpot(p.x, p.y);
+    if (Math.hypot(cs.x - wx, cs.y - baseLift('core') - wy) < 1.2) return { k: 'c', id: p.id };
   }
-  const tid = grid.get(`${Math.floor(wx)},${Math.floor(wy)}`);
-  const t = tid && S.towersView.get(tid);
+  const t = towerInHex(wx, wy);
   if (t && t.owner) return { k: 't', id: t.id };
   for (const c of S.campsView) {
-    if (c.alive && Math.hypot(c.x + 0.5 - wx, c.y + 0.5 - wy) < 1.8) return { k: 'j', id: c.id };
+    const sp = hexSpot(c.x, c.y);
+    if (c.alive && Math.hypot(sp.x - wx, sp.y - wy) < 1.8) return { k: 'j', id: c.id };
   }
   return null;
 }

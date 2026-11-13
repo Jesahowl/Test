@@ -1,7 +1,7 @@
 // Player cores.
 
 import { label, onScreen } from './render.js';
-import { S, colorOf, ctx, mouse, scale, toScreen } from './state.js';
+import { S, baseLift, colorOf, ctx, hexSpot, mouse, scale, toScreen } from './state.js';
 import { drawCracks, drawCrystal, drawSmoke, polygon, runeEllipse, structBar } from './structures.js';
 
 // A core: a great crystal in the player's colour floating over a stone dais on a rune circle,
@@ -11,7 +11,8 @@ function drawCores(dt) {
   const s = scale();
   const now = performance.now();
   for (const p of S.coresView.values()) {
-    const [x, y] = toScreen(p.x + 0.5, p.y + 0.5);
+    const spot = hexSpot(p.x, p.y);
+    const [x, y] = toScreen(spot.x, spot.y - baseLift('core'));
     if (!onScreen(x, y, s * 3)) continue;
     const r = s * 0.75;
     const frac = p.hp / p.maxHp;

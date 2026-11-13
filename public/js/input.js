@@ -6,7 +6,7 @@ import { sendMsg } from './net.js';
 import { clearSelection } from './overlay.js';
 import { resize } from './render.js';
 import { join, specNext, startSpectating } from './screens.js';
-import { S, $, C, cam, canvas, grid, keys, mini, mouse, players, scale, selUnits, terr, toWorld } from './state.js';
+import { S, $, C, cam, canvas, grid, keys, towerInHex, mini, mouse, players, scale, selUnits, terr, toWorld } from './state.js';
 import { orderTargetAt } from './targets.js';
 import { hideTip } from './ui.js';
 
@@ -78,7 +78,8 @@ canvas.addEventListener('mousedown', (e) => {
     }
     return;
   }
-  const tid = grid.get(`${tx},${ty}`);
+  const ht = towerInHex(mouse.wx, mouse.wy);
+  const tid = ht ? ht.id : 0;
   selUnits.clear();
   S.buildKind = null;
   S.selectedId = tid && S.towers.has(tid) ? tid : null;

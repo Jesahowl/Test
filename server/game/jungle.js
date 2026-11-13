@@ -83,14 +83,15 @@ module.exports = {
   spawnCamp(camp) {
     const leader = Object.keys(C.CAMP_TYPES[camp.type])[0];
     if (!this.campSpotOk(camp, camp.x, camp.y, false)) this.moveCamp(camp); // someone built here meanwhile
-    this.fx.push({ k: 'campSpawn', x: camp.x + 0.5, y: camp.y + 0.5 });
+    const mid = this.hex.hexes[this.hexAt(camp.x, camp.y)]; // barbarians gather round the hex centre
+    this.fx.push({ k: 'campSpawn', x: round2(mid.cx), y: round2(mid.cy) });
     for (const [kind, n] of Object.entries(C.CAMP_TYPES[camp.type])) {
       const def = C.CREEPS[kind];
       for (let i = 0; i < n; i++) {
         const id = this.nextId++;
         const lead = kind === leader && i === 0 && camp.type !== 'small';
-        const hx = camp.x + 0.5 + (lead ? 0 : Math.cos(i * 2.1 + (kind === leader ? 0 : 1)) * 1);
-        const hy = camp.y + 0.5 + (lead ? 0 : Math.sin(i * 2.1 + (kind === leader ? 0 : 1)) * 1);
+        const hx = mid.cx + (lead ? 0 : Math.cos(i * 2.1 + (kind === leader ? 0 : 1)) * 1);
+        const hy = mid.cy + (lead ? 0 : Math.sin(i * 2.1 + (kind === leader ? 0 : 1)) * 1);
         this.creeps.set(id, {
           isCreep: true, id, kind, owner: 0, camp: camp.id, hx, hy, x: hx, y: hy,
           hp: def.hp, maxHp: def.hp, angry: 0, atkCd: 0, dead: false,

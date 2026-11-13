@@ -81,6 +81,29 @@ const Vision = window.TD_VISION;
 // the hex grid land, buildings and borders work in (same as the server's)
 const HEX = window.TD_HEX.build(C.MAP_W, C.MAP_H, C.HEX_R);
 
+// Buildings and camps stand at the centre of their hex (their tile is just the nearest one).
+function hexSpot(tx, ty) {
+  const h = HEX.hexes[HEX.tileHex[ty * C.MAP_W + tx]];
+  return { x: h.cx, y: h.cy };
+}
+
+// How far above its base (in tiles) a building's drawing is anchored: drawn this much higher, its
+// base (rune circle) sits right on the hex centre.
+function baseLift(kind, level = 1) {
+  if (kind === 'core') return 0.375;
+  if (kind === 'barracks') return 0.576;
+  if (kind === 'tower') return 0.396 * (1 + 0.07 * (level - 1));
+  return 0;
+}
+
+// The tower or barracks in the hex under world point (wx, wy), if any.
+function towerInHex(wx, wy) {
+  if (wx < 0 || wy < 0 || wx >= C.MAP_W || wy >= C.MAP_H) return null;
+  const i = HEX.at(wx, wy);
+  for (const t of S.towersView.values()) if (HEX.tileHex[t.y * C.MAP_W + t.x] === i) return t;
+  return null;
+}
+
 const NTILES = C.MAP_W * C.MAP_H;
 const vis = new Uint8Array(NTILES);
 const explored = new Uint8Array(NTILES);
@@ -154,4 +177,4 @@ const hueOf = (pid) => (players.get(pid) || { hue: 0 }).hue;
 
 const colorOf = (pid, l = 55, a = 1) => (pid ? `hsla(${hueOf(pid)}, 75%, ${l}%, ${a})` : `rgba(140, 120, 90, ${a})`);
 
-export { HEX, FOG_PAD, FOG_RES, fogSoft, fogSoftCtx, $, C, CAMP_KEYS, CREEP_KEYS, KIND_KEYS, NTILES, TPX, UNIT_KEYS, Vision, cam, canvas, colorOf, ctx, explored, feed, fogCanvas, fogCtx, fogImg, grid, keys, mctx, mini, mouse, players, scale, selUnits, tctx, terr, terrCanvas, toScreen, toWorld, vis, withContext };
+export { baseLift, hexSpot, towerInHex, HEX, FOG_PAD, FOG_RES, fogSoft, fogSoftCtx, $, C, CAMP_KEYS, CREEP_KEYS, KIND_KEYS, NTILES, TPX, UNIT_KEYS, Vision, cam, canvas, colorOf, ctx, explored, feed, fogCanvas, fogCtx, fogImg, grid, keys, mctx, mini, mouse, players, scale, selUnits, tctx, terr, terrCanvas, toScreen, toWorld, vis, withContext };

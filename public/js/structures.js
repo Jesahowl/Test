@@ -1,7 +1,7 @@
 // Towers, barracks and ruins: sprites, health bars and build effects.
 
 import { label, onScreen } from './render.js';
-import { S, C, colorOf, ctx, grid, mouse, scale, toScreen } from './state.js';
+import { S, C, baseLift, colorOf, ctx, hexSpot, mouse, scale, toScreen, towerInHex } from './state.js';
 
 // ---- structures
 // Health bars only appear once a structure has been hit, then fade out. They stay up while it is
@@ -555,9 +555,12 @@ function drawRuin(t, x, y, s) {
 function drawTowers(dt) {
   const s = scale();
   const now = performance.now();
-  const hover = grid.get(`${Math.floor(mouse.wx)},${Math.floor(mouse.wy)}`);
+  const hoverT = towerInHex(mouse.wx, mouse.wy);
+  const hover = hoverT ? hoverT.id : 0;
   for (const t of S.towersView.values()) {
-    const [x, y] = toScreen(t.x + 0.5, t.y + 0.5);
+    // drawn at its hex's centre, lifted so its base sits right on it
+    const spot = hexSpot(t.x, t.y);
+    const [x, y] = toScreen(spot.x, spot.y - (t.ruin || !t.owner ? 0 : baseLift(t.kind, t.level)));
     if (!onScreen(x, y, s * 3)) continue;
     if (t.ruin || !t.owner) {
       drawRuin(t, x, y, s);

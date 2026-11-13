@@ -4,7 +4,7 @@ import { resetFog, updateFog } from './fog.js';
 import { formError, onLeft, onRoom } from './lobby.js';
 import { clearSelection } from './overlay.js';
 import { showDeath, showMenu, showRoundOver, startSpectating, stopSpectating, toast } from './screens.js';
-import { S, $, C, cam, CAMP_KEYS, CREEP_KEYS, feed, grid, KIND_KEYS, players, selUnits, terr, UNIT_KEYS } from './state.js';
+import { S, $, C, baseLift, cam, CAMP_KEYS, hexSpot, CREEP_KEYS, feed, grid, KIND_KEYS, players, selUnits, terr, UNIT_KEYS } from './state.js';
 import { tipDone } from './tips.js';
 
 // ------------------------------------------------------------------ network
@@ -236,6 +236,11 @@ function applyState(msg) {
       const p = t ? null : [...players.values()].find((q) => q.x === tx && q.y === ty);
       const o = t || p;
       if (o) {
+        // the bolt leaves from the building as drawn: at its hex centre, lifted
+        const spot = hexSpot(tx, ty);
+        const lift0 = t ? baseLift(t.kind, t.level) : baseLift('core');
+        fx.x1 = spot.x;
+        fx.y1 = spot.y - lift0;
         o.aim = Math.atan2(f.y2 - f.y1, f.x2 - f.x1);
         o.shotAt = now + INTERP_DELAY; // the crystal flares as the bolt leaves
       }

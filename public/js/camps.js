@@ -2,13 +2,14 @@
 
 import { interpPos, renderTime } from './net.js';
 import { hpBar, label, lungeOffset, onScreen } from './render.js';
-import { S, C, ctx, scale, toScreen } from './state.js';
+import { S, C, ctx, hexSpot, scale, toScreen } from './state.js';
 import { polygon } from './structures.js';
 
 function drawCamps() {
   const s = scale();
   for (const c of S.campsView) {
-    const [x, y] = toScreen(c.x + 0.5, c.y + 0.5);
+    const spot = hexSpot(c.x, c.y);
+    const [x, y] = toScreen(spot.x, spot.y);
     if (!onScreen(x, y, s * 3)) continue;
     if (c.alive) {
       if (s >= 8) drawCampDecor(c, x, y, s, performance.now());
