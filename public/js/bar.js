@@ -49,7 +49,7 @@ function buildBar() {
     card.querySelector('.up').onclick = () => sendMsg({ t: 'army', op: 'level', kind });
     army.appendChild(card);
   }
-  $('slots').dataset.tip = `<span class="t">Wave slots</span>${C.BASE_WAVE} from your core, +${C.BARRACKS_TROOPS} per barracks. Bright slots are troops you picked; faded ones are filled with soldiers automatically.`;
+  $('slots').dataset.tip = `<span class="t">Your next wave</span>The troops your core (${C.BASE_WAVE}) and each barracks (+${C.BARRACKS_TROOPS}) will send. Change the mix with the <b>+</b> and <b>−</b> buttons below; slots you leave free are filled with soldiers (<i>auto</i>).`;
   $('alive').dataset.tip = 'Troops alive now / the most you can have. The cap grows with your land (and always fits one full wave).';
   buildStats();
   $('defend-home').onclick = () => orderAt({ k: 'c', id: S.myId }, { everyone: true });

@@ -39,22 +39,31 @@ function updateHud() {
   updateRound();
   updateStats(p, gold, rank, sorted.length);
 
-  // wave: size, countdown ring, slot strip
+  // wave: size, countdown ring, and the next wave's lineup
   $('wave-size').textContent = `${perWave} troops every ${C.WAVE_INTERVAL}s`;
   const frac = Math.max(0, Math.min(1, S.me.nextWave / C.WAVE_INTERVAL));
   $('wave-timer').innerHTML = `<svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="11" fill="none" stroke="#273041" stroke-width="3"/>
     <circle cx="13" cy="13" r="11" fill="none" stroke="#ffd54f" stroke-width="3" stroke-linecap="round" stroke-dasharray="${(69.1 * (1 - frac)).toFixed(1)} 69.1"/></svg><span>${S.me.nextWave}</span>`;
   $('wave-timer').dataset.tip = `<span class="t">Next wave in ${S.me.nextWave}s</span>Every ${C.WAVE_INTERVAL} seconds your core (and each barracks) sends out a free wave.`;
+  // The next wave at a glance: a chip per troop type with how many are coming (auto-filled
+  // soldiers counted separately). A chip glows briefly when its number changes.
   const list = waveListOf(S.me);
-  const assignedOf = { ...S.me.army };
-  const slotKey = list.join(',') + JSON.stringify(S.me.army);
-  if ($('slots').dataset.key !== slotKey) {
-    $('slots').dataset.key = slotKey;
-    $('slots').innerHTML = list.map((k) => {
-      const auto = !(assignedOf[k] > 0);
-      if (!auto) assignedOf[k]--;
-      return `<i class="${auto ? 'auto' : ''}" style="flex-grow:${C.slotsOf(k)};background:${C.UNITS[k].color}"></i>`;
+  const lineup = UNIT_KEYS.map((k) => {
+    const n = list.filter((x) => x === k).length;
+    return { k, n, auto: Math.max(0, n - (S.me.army[k] || 0)) };
+  }).filter((c) => c.n);
+  const slotKey = lineup.map((c) => `${c.k}${c.n}/${c.auto}`).join(',');
+  const box = $('slots');
+  if (box.dataset.key !== slotKey) {
+    const before = Object.fromEntries((box.dataset.key || '').split(',').filter(Boolean).map((t) => [t.replace(/[\d/]+$/, ''), t]));
+    box.dataset.key = slotKey;
+    box.innerHTML = '<span class="nw-label">Next wave</span>' + lineup.map((c) => {
+      const changed = before[c.k] !== `${c.k}${c.n}/${c.auto}` && box.dataset.ready;
+      const picked = c.n - c.auto;
+      const count = picked ? `×${picked}${c.auto ? `<span class="auto">+${c.auto} auto</span>` : ''}` : `×${c.auto}<span class="auto">auto</span>`;
+      return `<span class="nw ${changed ? 'pulse' : ''}" style="--c:${C.UNITS[c.k].color}"><img src="${iconURL(c.k, 36)}" alt="">${count}</span>`;
     }).join('');
+    box.dataset.ready = '1';
   }
   const cap = C.unitCap(p.territory, perWave);
   $('alive').innerHTML = `Troops alive <b>${myTroops}</b> / ${cap}`;
@@ -171,11 +180,13 @@ function updateTowerAndArmy(gold, perWave) {
     const lvl = S.me.levels[kind];
     const upCost = lvl < C.MAX_LEVEL ? C.armyLevelCost(kind, lvl) : 0;
     card.classList.toggle('off', n === 0);
+    card.classList.toggle('in', n > 0);
+    card.style.setProperty('--c', C.UNITS[kind].color);
     card.querySelector('.lvl').textContent = `Lv ${lvl}`;
     const slots = C.slotsOf(kind);
     const auto = Math.max(0, n - set);
     const html = n
-      ? `<b>×${n}</b> <span class="muted">${auto ? (auto === n ? 'auto-filled' : `· ${auto} auto`) : 'per wave'}</span>`
+      ? `<b class="n">×${n}</b> <span class="muted">${auto ? (auto === n ? 'auto-filled' : `in wave · ${auto} auto`) : 'in each wave'}</span>`
       : slots > 1 ? `none · ${slots} slots each` : 'none in waves';
     const countEl = card.querySelector('.count');
     if (countEl.innerHTML !== html) countEl.innerHTML = html;

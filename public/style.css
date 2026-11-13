@@ -117,14 +117,19 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 #wave-timer { position: relative; width: 26px; height: 26px; flex: none; }
 #wave-timer svg { position: absolute; inset: 0; transform: rotate(-90deg); }
 #wave-timer span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; }
-#slots { display: flex; gap: 2px; flex: 1; height: 12px; }
-#slots i { flex: 1 1 0; border-radius: 3px; min-width: 4px; opacity: 0.95; }
-#slots i.auto { opacity: 0.45; }
-#slots i.gap { flex-basis: 0; min-width: 4px; width: 4px; flex-grow: 0; background: none; }
-
+#slots { display: flex; gap: 5px; flex: 1; align-items: center; flex-wrap: wrap; min-height: 26px; }
+#slots .nw-label { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-right: 2px; }
+#slots .nw { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px 0 3px; border-radius: 999px;
+  border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 14%, var(--raise)); font-weight: 800; font-size: 13px; color: var(--text); }
+#slots .nw img { width: 19px; height: 19px; }
+#slots .nw .auto { margin-left: 3px; font-size: 10px; font-weight: 600; color: var(--muted); }
+#slots .nw.pulse { animation: nw-pulse 0.9s ease-out; }
+@keyframes nw-pulse { 0% { box-shadow: 0 0 0 0 var(--c); transform: scale(1.12); } 100% { box-shadow: 0 0 0 8px transparent; transform: scale(1); } }
 #army { display: flex; gap: 6px; }
 .troop { width: 112px; background: var(--raise); border: 1px solid var(--line); border-radius: 10px; padding: 5px 6px 6px; display: flex; flex-direction: column; gap: 3px; }
-.troop.off { opacity: 0.62; }
+.troop.off { opacity: 0.55; }
+.troop.in { border-color: var(--c); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 35%, transparent); background: color-mix(in srgb, var(--c) 7%, var(--raise)); }
+.troop .count b.n { color: var(--c); font-size: 15px; }
 .troop .head { display: flex; align-items: center; gap: 5px; font-size: 12px; }
 .troop .head img { width: 22px; height: 22px; flex: none; }
 .troop .head b { flex: 1; }

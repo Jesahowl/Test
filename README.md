@@ -93,7 +93,7 @@ and get a turning gold rune ring at level 4 and a radiant aura at level 5.
 ### Interface
 
 - **Player card** (top left): gold and income, land, kills, spawn protection / jungle buff, and your core's health.
-- **Command bar** (bottom): *Build* (tower, barracks), *Your wave* (countdown ring, a slot strip showing how the next wave is made up, one card per troop type with +/− and level-up), and *Squads* (a chip per squad with its number, order and size; All, Merge, Home, the new-squads setting, troops alive).
+- **Command bar** (bottom): *Build* (tower, barracks), *Your wave* (countdown ring, a **Next wave** lineup with a chip per troop type showing how many are coming, auto-filled soldiers marked *auto*, and one card per troop type with +/− and level-up; types in the wave get a coloured border), and *Squads* (a chip per squad with its number, order and size; All, Merge, Home, the new-squads setting, troops alive).
 - **Hover anything** for a tooltip explaining it, with costs and what an upgrade would change.
 - **First-game tips** walk you through attacking, towers, barracks, the wave mix, squads and the jungle; each ticks off when you do it. `?` shows the controls and can bring the tips back.
 
