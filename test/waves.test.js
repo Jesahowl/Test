@@ -489,3 +489,31 @@ test('troops keep their personal space: never on top of each other or inside bui
     }
   }
 });
+
+test('standing troops fill their hex in an even formation', () => {
+  const { g, a } = duel(32);
+  for (const k of Object.keys(a.army)) a.army[k] = 0; // all soldiers
+  a.nextWaveAt = g.time;
+  g.update(0.05);
+  a.nextWaveAt = Infinity;
+  const squad = mine(g, a);
+  run(g, 20);
+  const hexes = new Set(squad.map((u) => g.hexAt(Math.floor(u.x), Math.floor(u.y))));
+  assert.strictEqual(hexes.size, 1, 'the squad stands in one hex');
+  const [h] = hexes;
+  const core = g.hexAt(a.core.x, a.core.y);
+  assert.ok(g.hex.hexes[core].n.includes(h), 'a hex next to the core');
+  for (const u of squad) {
+    assert.ok(u.slotPos && Math.hypot(u.x - u.slotPos.x, u.y - u.slotPos.y) < 0.3, 'on its spot');
+    for (const v of squad) if (v !== u) assert.ok(Math.hypot(u.x - v.x, u.y - v.y) > 0.9, 'evenly spaced');
+  }
+  // a second squad forms up in a different hex
+  a.nextWaveAt = g.time;
+  g.update(0.05);
+  a.nextWaveAt = Infinity;
+  const second = mine(g, a).filter((u) => !squad.includes(u));
+  run(g, 20);
+  const h2 = new Set(second.map((u) => g.hexAt(Math.floor(u.x), Math.floor(u.y))));
+  assert.strictEqual(h2.size, 1);
+  assert.notStrictEqual([...h2][0], h, 'each squad has its own hex');
+});

@@ -57,6 +57,8 @@
     // Personal space: troops keep at least UNIT_SPACING apart (friend or foe) and stay this far from
     // the middle of buildings and barbarians, so they never sit on top of each other.
     UNIT_SPACING: 0.95, // a little more than the widest troop icon, so icons never overlap
+    SLOT_RING1: 1.2, // formation rings inside a hex (tiles from its centre): 6 troops...
+    SLOT_RING2: 2.05, // ...and 12 more
     STRUCT_BODY: 0.6,
     CORE_BODY: 0.85,
     CREEP_BODY: 0.55,

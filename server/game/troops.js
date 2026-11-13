@@ -368,13 +368,80 @@ module.exports = {
 
   // Where a squad stands guard: its own spot around the core (spread by squad number), or at the
   // tower it defends.
-  squadPost(u, a) {
-    if (u.anchor) return { x: a.x, y: a.y };
+  squadPost(u) {
+    return u.slotPos || this.players.get(u.owner).core;
+  },
+
+  // ---- formations: troops standing still fill their hex evenly. A hex holds a troop in the
+  // middle, a ring of 6 round it and an outer ring of 12 (19 in all); a hex with a building keeps its
+  // middle free. More troops than fit spill into the next hexes.
+  hexSlots() {
+    if (!this.slotOffsets) {
+      const o = [[0, 0]];
+      for (let k = 0; k < 6; k++) o.push([C.SLOT_RING1 * Math.cos((k * Math.PI) / 3), C.SLOT_RING1 * Math.sin((k * Math.PI) / 3)]);
+      for (let k = 0; k < 12; k++) {
+        const a = ((15 + 30 * k) * Math.PI) / 180;
+        o.push([C.SLOT_RING2 * Math.cos(a), C.SLOT_RING2 * Math.sin(a)]);
+      }
+      this.slotOffsets = o;
+    }
+    return this.slotOffsets;
+  },
+
+  // The hex a standing troop forms up in: the hex it holds, the tower it guards, or (guarding the
+  // core) one of the hexes round the core, a different one for each squad. -1: not standing still.
+  postHex(u) {
+    if (u.attack) return u.attack.k === 'p' ? this.hex.tileHex[u.attack.id] : -1;
+    if (u.anchor) {
+      const t = this.towers.get(u.anchor);
+      if (t) return this.hexAt(t.x, t.y);
+    }
     const p = this.players.get(u.owner);
-    const num = (p && p.squadNum.get(u.sq)) || 1;
-    const ang = num * 2.39996; // golden angle: squads fan out evenly around the core
-    const r = Math.min(a.leash * 0.6, 2.6);
-    return { x: a.x + Math.cos(ang) * r, y: a.y + Math.sin(ang) * r };
+    const core = this.hex.hexes[this.hexAt(p.core.x, p.core.y)];
+    const bh = this.buildingHexes();
+    if (!p.postRing || p.postRingAt !== this.structVersion + this.terrVersion * 1e6) {
+      // the hexes round the core that are mine and free, in a ring
+      p.postRing = core.n.filter((j) => this.hexOwner[j] === p.id && !bh[j])
+        .sort((a, b) => Math.atan2(this.hex.hexes[a].cy - core.cy, this.hex.hexes[a].cx - core.cx) - Math.atan2(this.hex.hexes[b].cy - core.cy, this.hex.hexes[b].cx - core.cx));
+      p.postRingAt = this.structVersion + this.terrVersion * 1e6;
+    }
+    if (!p.postRing.length) return core.i;
+    const num = p.squadNum.get(u.sq) || 1;
+    return p.postRing[(num - 1) % p.postRing.length];
+  },
+
+  // Give every standing troop its spot (u.slotPos) in its hex's formation.
+  assignSlots() {
+    const offs = this.hexSlots();
+    const byHex = new Map();
+    for (const u of this.units.values()) {
+      u.slotPos = null;
+      if (C.UNITS[u.kind].scout && !u.attack) continue; // scouts off exploring
+      const h = this.postHex(u);
+      if (h < 0) continue;
+      const key = `${u.owner}:${h}`;
+      if (!byHex.has(key)) byHex.set(key, { h, list: [] });
+      byHex.get(key).list.push(u);
+    }
+    const bh = this.buildingHexes();
+    for (const { h, list } of byHex.values()) {
+      list.sort((a, b) => a.sq - b.sq || a.id - b.id);
+      const hx = this.hex.hexes[h];
+      const free = bh[h] ? offs.slice(1) : offs; // keep the middle clear of a building
+      list.forEach((u, k) => {
+        let into = hx;
+        let slot = k;
+        if (k >= free.length) {
+          // spill into the next hexes round it
+          const extra = k - free.length;
+          into = this.hex.hexes[hx.n[Math.floor(extra / offs.length) % hx.n.length]];
+          slot = extra % offs.length;
+          u.slotPos = { x: into.cx + offs[slot][0], y: into.cy + offs[slot][1] };
+          return;
+        }
+        u.slotPos = { x: hx.cx + free[slot][0], y: hx.cy + free[slot][1] };
+      });
+    }
   },
 
   // Push troops apart so none sit on top of each other (friend or foe), and out of buildings and
@@ -438,6 +505,7 @@ module.exports = {
 
   updateUnits(dt) {
     this.groups = this.squadGroups();
+    this.assignSlots();
     for (const u of this.units.values()) {
       if (u.hp <= 0 || !this.units.has(u.id)) continue;
       const def = C.UNITS[u.kind];
@@ -527,9 +595,12 @@ module.exports = {
             continue;
           }
         }
-        const stop = tgt.struct ? Math.max(0.6, s.range * 0.85) : tgt.hold ? 1.2 : 1;
-        const pace = this.squadPace(u, tgt.x, tgt.y, speed);
-        if (pace > 0) this.marchTo(u, tgt.goal, tgt.x, tgt.y, stop, pace, dt);
+        const stop = tgt.struct ? Math.max(0.6, s.range * 0.85) : tgt.hold ? 0.05 : 1;
+        // holding a hex: each troop heads for its own spot in the formation
+        const gx = tgt.hold && u.slotPos ? u.slotPos.x : tgt.x;
+        const gy = tgt.hold && u.slotPos ? u.slotPos.y : tgt.y;
+        const pace = this.squadPace(u, gx, gy, speed);
+        if (pace > 0) this.marchTo(u, tgt.goal, gx, gy, stop, pace, dt);
         continue;
       }
 
@@ -580,19 +651,17 @@ module.exports = {
         if (this.moveUnit(u, dt, speed)) u.idleUntil = this.time + 0.8 + this.rand() * 2;
         continue;
       }
-      // Stand guard with the squad, milling about its post.
-      const post = this.squadPost(u, a);
-      const g = this.groups.get(u.sq);
-      const spread = 0.5 + 0.55 * C.UNIT_SPACING * Math.sqrt(g ? g.n : 1); // room for the squad without crowding
-      if (dist(u.x, u.y, post.x, post.y) > spread + 0.75 || this.terr[this.idx(tx, ty)] !== u.owner) {
-        this.planUnit(u, post.x, post.y);
-        continue;
+      // Stand guard in formation: walk to my spot in the squad's hex and stay there.
+      const post = this.squadPost(u);
+      const off = dist(u.x, u.y, post.x, post.y);
+      if (off <= 0.8) {
+        this.stepToward(u, post.x, post.y, 0.02, speed * 0.6, dt); // the last bit, straight onto the spot
+      } else {
+        if (this.time >= u.idleUntil) {
+          this.planUnit(u, post.x, post.y);
+          u.idleUntil = this.time + 0.5;
+        }
       }
-      if (this.time < u.idleUntil) continue;
-      const ang = this.rand() * Math.PI * 2;
-      const r = spread * Math.sqrt(this.rand());
-      this.planUnit(u, post.x + Math.cos(ang) * r, post.y + Math.sin(ang) * r);
-      u.idleUntil = this.time + 0.8 + this.rand() * 1.5;
     }
   },
 
