@@ -2,7 +2,7 @@
 
 import { interpPos, renderTime } from './net.js';
 import { drawShape, hpBar, onScreen } from './render.js';
-import { S, C, colorOf, ctx, players, scale, selUnits, toScreen } from './state.js';
+import { S, C, colorOf, ctx, players, scale, selUnits, SQUAD_N, toScreen } from './state.js';
 
 function drawUnits(dt) {
   const s = scale();
@@ -12,8 +12,12 @@ function drawUnits(dt) {
     [u.rx, u.ry] = interpPos(u, rt);
     const [x, y] = toScreen(u.rx, u.ry);
     if (!onScreen(x, y, s)) continue;
-    if (selUnits.has(u.id)) {
-      ctx.strokeStyle = '#fff';
+    const mine = u.owner === S.myId;
+    // picked single troops: white ring; troops of the picked squads (when not all): gold ring
+    const picked = selUnits.has(u.id);
+    const inSquad = mine && !selUnits.size && S.selSquads.size < SQUAD_N && S.selSquads.has(u.sq);
+    if (picked || inSquad) {
+      ctx.strokeStyle = picked ? '#fff' : 'rgba(255, 213, 79, 0.85)';
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(x, y, r * 1.45, 0, Math.PI * 2);
@@ -46,6 +50,20 @@ function drawUnits(dt) {
       ctx.fill();
     }
     hpBar(x, y - r * 1.6, s * 0.7, u.hp / u.maxHp);
+    // my troops carry their squad number when zoomed in enough to read it
+    if (mine && s > 30) {
+      const fx = x + r * 1.05;
+      const fy = y - r * 0.85;
+      ctx.fillStyle = 'rgba(13, 17, 23, 0.85)';
+      ctx.beginPath();
+      ctx.arc(fx, fy, Math.max(5.5, r * 0.42), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = S.selSquads.has(u.sq) && S.selSquads.size < SQUAD_N ? '#ffd54f' : '#e6edf3';
+      ctx.font = `800 ${Math.round(Math.max(8, r * 0.6))}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(u.sq + 1), fx, fy + 0.5);
+    }
   }
 }
 

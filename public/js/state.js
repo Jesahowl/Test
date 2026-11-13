@@ -5,7 +5,6 @@
 // exported directly (ES module exports are live, so readers always see the current value).
 export const S = {};
 
-import { updateShareUi } from './bar.js';
 
 const C = TD_CONFIG;
 
@@ -135,36 +134,9 @@ S.specTarget = 0;
 
 S.specFollow = true;
 
-const SHARES = [0.25, 0.5, 0.75, 1]; // presets on Z X C V
-const SHARE_KEYS = ['z', 'x', 'c', 'v'];
-
-const SHARE_STEP = 0.05; // the send slider moves in 5% steps
-S.sendShare = 1; // share of troops a right-click order sends (when no troops are selected)
-try {
-  const saved = Number(localStorage.getItem('ts-share'));
-  if (saved >= SHARE_STEP && saved <= 1) S.sendShare = saved;
-} catch { /* ignore */ }
-
-// Which troop types right-click orders send (all by default).
-S.sendKinds = new Set(UNIT_KEYS);
-
-try {
-  const saved = JSON.parse(localStorage.getItem('ts-kinds') || 'null');
-  if (Array.isArray(saved) && saved.some((k) => UNIT_KEYS.includes(k))) S.sendKinds = new Set(saved.filter((k) => UNIT_KEYS.includes(k)));
-} catch { /* ignore */ }
-
-const allKinds = () => UNIT_KEYS.every((k) => S.sendKinds.has(k));
-
-// Whether right-click orders also redirect new waves (an explicit toggle, F).
-let wavesFollow = true;
-
-try { wavesFollow = localStorage.getItem('ts-follow') !== '0'; } catch { /* ignore */ }
-
-function setFollow(on) {
-  wavesFollow = on;
-  try { localStorage.setItem('ts-follow', on ? '1' : '0'); } catch { /* ignore */ }
-  updateShareUi();
-}
+// Squads: which ones right-click orders go to (all of them until the player picks).
+const SQUAD_N = C.SQUADS;
+S.selSquads = new Set(Array.from({ length: SQUAD_N }, (_, i) => i));
 
 S.pendingOrder = null; // toast text waiting for the server to say how many troops moved
 const keys = new Set();
@@ -181,4 +153,4 @@ const hueOf = (pid) => (players.get(pid) || { hue: 0 }).hue;
 
 const colorOf = (pid, l = 55, a = 1) => (pid ? `hsla(${hueOf(pid)}, 75%, ${l}%, ${a})` : `rgba(140, 120, 90, ${a})`);
 
-export { FOG_PAD, FOG_RES, fogSoft, fogSoftCtx, $, C, CAMP_KEYS, CREEP_KEYS, KIND_KEYS, NTILES, SHARES, SHARE_KEYS, SHARE_STEP, SMOOTH_PASSES, SMOOTH_WINDOW, TPX, UNIT_KEYS, Vision, allKinds, cam, canvas, colorOf, ctx, explored, feed, fogCanvas, fogCtx, fogImg, grid, keys, mctx, mini, mouse, players, scale, selUnits, setFollow, tctx, terr, terrCanvas, toScreen, toWorld, vis, wavesFollow, withContext };
+export { FOG_PAD, FOG_RES, fogSoft, fogSoftCtx, $, C, CAMP_KEYS, CREEP_KEYS, KIND_KEYS, NTILES, SMOOTH_PASSES, SQUAD_N, SMOOTH_WINDOW, TPX, UNIT_KEYS, Vision, cam, canvas, colorOf, ctx, explored, feed, fogCanvas, fogCtx, fogImg, grid, keys, mctx, mini, mouse, players, scale, selUnits, tctx, terr, terrCanvas, toScreen, toWorld, vis, withContext };

@@ -101,69 +101,81 @@ module.exports = {
     return 'Invalid target';
   },
 
-  // Order troops.
-  // - ids: exactly those troops.
-  // - otherwise, share (0..1] of your troops: 1 (default) means every troop plus all future waves;
-  //   less than 1 sends that fraction of your current troops (keeping the army's mix of types, nearest
-  //   to the target first) and leaves the standing order for new waves alone.
+  // Order troops at a target.
+  // - ids: exactly those troops, as a one-off (their squads' standing orders stay as they are).
+  // - otherwise squads: the squad numbers (0-based) to order, or null for every squad. Each squad's
+  //   troops go, and the order becomes the squad's standing order: troops that join it later
+  //   follow it too. Hunting a single troop is a one-off for the troops now in the squad.
   // Returns null on success or an error string; this.lastOrderCount says how many troops moved.
-  // ids: specific troops (else `share` of all troops); kinds: only troops of these types;
-  // follow: whether new waves take this order too (default: only for an unfiltered 100% order).
-  // Hunting a single troop never becomes the waves' order.
-  order(pid, ids, target, share = 1, kinds = null, follow = null) {
+  order(pid, ids, target, squads = null) {
     this.lastOrderCount = 0;
     const p = this.players.get(pid);
     if (!p || !p.alive) return 'Invalid order';
     const ord = this.makeOrder(pid, target);
     if (typeof ord === 'string') return ord;
-    const filter = Array.isArray(kinds) && kinds.length && UNIT_KEYS.some((k) => !kinds.includes(k))
-      ? new Set(kinds.filter((k) => C.UNITS[k]))
-      : null;
-    const ok = (u) => !filter || filter.has(u.kind);
-    const selected = Array.isArray(ids) && ids.length;
-    const waves = ord.target?.k !== 'u' && (follow === null || follow === undefined ? !selected && !(share < 1) && !filter : !!follow);
     let chosen;
-    if (selected) {
+    if (Array.isArray(ids) && ids.length) {
       chosen = ids.slice(0, C.MAX_UNITS).map((id) => this.units.get(id)).filter((u) => u && u.owner === pid);
       if (!chosen.length) return 'No troops selected';
-      chosen = chosen.filter(ok);
-      if (!chosen.length) return 'None of the selected troops are of the chosen types';
-    } else if (!(share < 1)) {
-      chosen = [...this.units.values()].filter((u) => u.owner === pid && ok(u));
     } else {
-      chosen = this.pickShare(pid, ord, Math.max(0.01, share), ok);
+      const which = this.squadList(squads);
+      if (!which) return 'Invalid squad';
+      if (ord.target?.k !== 'u') for (const i of which) p.squads[i].order = ord;
+      chosen = [...this.units.values()].filter((u) => u.owner === pid && which.includes(u.sq || 0));
+      if (!chosen.length && ord.target?.k === 'u') return 'No troops in that squad';
     }
-    if (!chosen.length && !waves) return filter ? 'You have no troops of the chosen types' : 'No troops available to send';
-    if (waves) p.order = ord;
     for (const u of chosen) this.applyOrder(u, ord);
     this.lastOrderCount = chosen.length;
     return null;
   },
 
-  // Pick `share` of pid's troops for an order: troops not already following it, each type taken in
-  // proportion so the group keeps the army's mix, nearest to the order's destination first.
-  pickShare(pid, ord, share, ok = () => true) {
-    const mine = [...this.units.values()].filter((u) => u.owner === pid && ok(u));
-    const want = Math.max(1, Math.round(mine.length * share));
-    const dest = this.orderPos(pid, ord);
-    const already = (u) => (ord.type === 'defend'
-      ? !u.attack && u.anchor === ord.anchor
-      : u.attack && u.attack.k === ord.target.k && u.attack.id === ord.target.id);
-    const free = mine.filter((u) => !already(u));
-    const byDist = (u1, u2) => dist(u1.x, u1.y, dest.x, dest.y) - dist(u2.x, u2.y, dest.x, dest.y);
-    const picked = [];
-    const leftovers = [];
-    for (const kind of UNIT_KEYS) {
-      const ofKind = free.filter((u) => u.kind === kind).sort(byDist);
-      const take = Math.round(ofKind.length * share);
-      picked.push(...ofKind.slice(0, take));
-      leftovers.push(...ofKind.slice(take));
+  // Validate a list of squad numbers (null = all). Returns the list or null if invalid.
+  squadList(squads) {
+    if (squads === null || squads === undefined) return Array.from({ length: C.SQUADS }, (_, i) => i);
+    if (!Array.isArray(squads) || !squads.length) return null;
+    const out = [...new Set(squads)].filter((i) => Number.isInteger(i) && i >= 0 && i < C.SQUADS);
+    return out.length ? out : null;
+  },
+
+  // Move troops into squad `sq`: they take on its standing order.
+  squadAssign(pid, ids, sq) {
+    const p = this.players.get(pid);
+    if (!p || !p.alive) return 'Invalid order';
+    if (!Number.isInteger(sq) || sq < 0 || sq >= C.SQUADS) return 'Invalid squad';
+    if (!Array.isArray(ids) || !ids.length) return 'No troops selected';
+    const moved = ids.slice(0, C.MAX_UNITS).map((id) => this.units.get(id)).filter((u) => u && u.owner === pid);
+    if (!moved.length) return 'No troops selected';
+    const ord = p.squads[sq].order;
+    for (const u of moved) {
+      u.sq = sq;
+      if (this.orderValid(pid, ord)) this.applyOrder(u, ord);
     }
-    // Rounding per type can miss the total: top up (or trim) with the nearest remaining troops.
-    leftovers.sort(byDist);
-    while (picked.length < want && leftovers.length) picked.push(leftovers.shift());
-    picked.sort(byDist);
-    return picked.slice(0, want);
+    this.lastOrderCount = moved.length;
+    return null;
+  },
+
+  // Whether new waves add troops to squad `sq`. At least one squad always takes them.
+  squadReinforce(pid, sq, on) {
+    const p = this.players.get(pid);
+    if (!p || !p.alive) return 'Invalid order';
+    if (!Number.isInteger(sq) || sq < 0 || sq >= C.SQUADS) return 'Invalid squad';
+    if (!on && p.squads.filter((s) => s.reinforce).length === 1 && p.squads[sq].reinforce) {
+      return 'New troops have to go somewhere: at least one squad takes them';
+    }
+    p.squads[sq].reinforce = !!on;
+    return null;
+  },
+
+  // The squad the next new troop joins: the squads taking new troops, in turn.
+  pickSquad(p) {
+    for (let k = 0; k < C.SQUADS; k++) {
+      const i = (p.nextSquad + k) % C.SQUADS;
+      if (p.squads[i].reinforce) {
+        p.nextSquad = (i + 1) % C.SQUADS;
+        return i;
+      }
+    }
+    return 0;
   },
 
   // Where an order sends troops.
@@ -222,7 +234,7 @@ module.exports = {
 
   // The core sends BASE_WAVE troops; each barracks sends its BARRACKS_TROOPS from where it stands.
   spawnWave(p) {
-    if (!this.orderValid(p.id, p.order)) p.order = { type: 'defend', anchor: 0 };
+    for (const sq of p.squads) if (!this.orderValid(p.id, sq.order)) sq.order = { type: 'defend', anchor: 0 };
     let alive = 0; // in wave slots
     for (const u of this.units.values()) if (u.owner === p.id) alive += C.slotsOf(u.kind);
     const cap = C.unitCap(p.territory, this.waveSize(p));
@@ -259,11 +271,12 @@ module.exports = {
     const y = Math.max(0.5, Math.min(this.h - 0.5, oy + 0.5 + Math.sin(a) * (from ? 1 : 1.3)));
     const u = {
       isUnit: true, id, kind, owner: p.id, x, y, level, hp: stats.hp, maxHp: stats.hp, cd: 0,
-      anchor: 0, attack: null, path: [], dest: null, repathAt: 0, idleUntil: this.time + 0.5,
+      anchor: 0, attack: null, path: [], dest: null, repathAt: 0, idleUntil: this.time + 0.5, sq: this.pickSquad(p),
     };
-    this.applyOrder(u, p.order);
-    // Troops from a barracks guard it when the standing order is "defend the core".
-    if (from && p.order.type === 'defend' && !p.order.anchor) u.anchor = from.id;
+    const ord = p.squads[u.sq].order;
+    this.applyOrder(u, ord);
+    // Troops from a barracks guard it when their squad's order is "defend the core".
+    if (from && ord.type === 'defend' && !ord.anchor) u.anchor = from.id;
     this.units.set(id, u);
     if (this.ucells) this.ucells[this.ucellOf(u.x, u.y)].push(u); // findable before the next grid rebuild
     return u;

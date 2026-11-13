@@ -82,7 +82,7 @@ function drawEffects(now) {
         // where you sent troops to: a shrinking double ring
         const [x, y] = toScreen(f.x, f.y);
         const p = age / 0.6;
-        ctx.strokeStyle = `rgba(255, 213, 79, ${1 - p})`;
+        ctx.strokeStyle = f.atk ? `rgba(255, 110, 100, ${1 - p})` : `rgba(255, 213, 79, ${1 - p})`;
         ctx.lineWidth = 2.5;
         for (const r of [1.4, 0.8]) {
           ctx.beginPath();
@@ -168,7 +168,7 @@ function drawEffects(now) {
       case 'coreDown': {
         const [x, y] = toScreen(f.x, f.y);
         const p = age / 1.2;
-        ctx.strokeStyle = `rgba(255, 213, 79, ${1 - p})`;
+        ctx.strokeStyle = f.atk ? `rgba(255, 110, 100, ${1 - p})` : `rgba(255, 213, 79, ${1 - p})`;
         ctx.lineWidth = 6 * (1 - p) + 1;
         ctx.beginPath();
         ctx.arc(x, y, s * (1 + p * 7), 0, Math.PI * 2);

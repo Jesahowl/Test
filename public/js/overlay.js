@@ -1,8 +1,8 @@
 // Overlays: build preview, leap zone, order lines and markers, and the minimap.
 
-import { kindsLabel, shareCount } from './bar.js';
+import { squadsLabel } from './bar.js';
 import { drawShape, label } from './render.js';
-import { S, allKinds, C, canvas, colorOf, ctx, FOG_PAD, fogSoft, grid, mctx, mini, mouse, players, scale, selUnits, terr, terrCanvas, toScreen, toWorld } from './state.js';
+import { S, C, canvas, colorOf, ctx, FOG_PAD, fogSoft, grid, mctx, mini, mouse, players, scale, selUnits, terr, terrCanvas, toScreen, toWorld } from './state.js';
 import { campVerb, isMineTarget, orderTargetAt, targetName, targetPos } from './targets.js';
 
 // ---- leapfrogging: unclaimed tiles within TOWER_LEAP of my land accept towers
@@ -128,10 +128,23 @@ function drawOverlay() {
     }
   }
 
-  // Standing order for my waves.
-  if (S.myId && S.me && S.me.order) {
-    const pos = targetPos(S.me.order.target);
-    if (pos) drawTargetMarker(pos, S.me.order.type === 'attack', !selUnits.size);
+  // Each squad's standing order, tagged with the squad numbers going there.
+  if (S.myId && S.me && S.me.squads) {
+    const byTarget = new Map();
+    S.me.squads.forEach((sq, i) => {
+      const [type, key] = sq.o.split(' ');
+      const k = `${type} ${key}`;
+      if (!byTarget.has(k)) byTarget.set(k, { type, key, nums: [] });
+      byTarget.get(k).nums.push(i);
+    });
+    for (const { type, key, nums } of byTarget.values()) {
+      const pos = targetPos(key);
+      if (!pos) continue;
+      const picked = nums.some((i) => S.selSquads.has(i)) && !selUnits.size;
+      drawTargetMarker(pos, type === 'attack', picked);
+      const [mx, my] = toScreen(pos.x, pos.y);
+      label(nums.map((i) => i + 1).join(' '), mx + s * 1.2, my + s * 1.2, 11, picked ? '#ffd54f' : 'rgba(230,237,243,0.7)');
+    }
   }
 
   // Selected troops: range and a line to where they're headed.
@@ -173,9 +186,7 @@ function drawOverlay() {
     if (tg) {
       const pos = targetPos(`${tg.k}:${tg.id}`);
       const mine = isMineTarget(tg);
-      const n = shareCount(S.sendShare);
-      const kindTxt = allKinds() ? `troop${n === 1 ? '' : 's'}` : kindsLabel(n);
-      const who = selUnits.size ? `${selUnits.size} selected` : S.sendShare < 1 ? `${n} ${kindTxt} (${Math.round(S.sendShare * 100)}%)` : `all ${allKinds() ? 'troops' : kindsLabel(2)}`;
+      const who = selUnits.size ? `${selUnits.size} picked troop${selUnits.size === 1 ? '' : 's'}` : squadsLabel();
       const verb = mine ? 'defend' : tg.k === 'j' ? campVerb(tg.id) : tg.k === 'u' ? `hunt ${targetName(`u:${tg.id}`)}` : 'attack';
       const [hx, hy] = toScreen(pos.x, pos.y);
       if (tg.k === 'u') drawTargetMarker(pos, true, false, 0.6);
@@ -264,8 +275,9 @@ function drawMinimap() {
     mctx.arc((p.x + 0.5) * sx, (p.y + 0.5) * sy, p.id === S.myId ? 4 : 3, 0, Math.PI * 2);
     mctx.fill();
   }
-  if (S.me && S.me.order && S.me.order.type === 'attack') {
-    const pos = targetPos(S.me.order.target);
+  for (const sq of (S.me && S.me.squads) || []) {
+    const [type, key] = sq.o.split(' ');
+    const pos = type === 'attack' && targetPos(key);
     if (pos) {
       mctx.strokeStyle = '#ff5252';
       mctx.lineWidth = 1.5;

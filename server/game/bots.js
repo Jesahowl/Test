@@ -150,8 +150,7 @@ module.exports = {
         }
       }
       const strike = home.slice(0, Math.ceil(home.length * C.BOT_STRIKE_SHARE)).map((u) => u.id);
-      this.order(p.id, strike, target);
-      p.order = { type: 'defend', anchor: 0 };
+      this.order(p.id, strike, target); // picked troops only: squads keep defending home
       return;
     }
   },

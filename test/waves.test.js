@@ -145,12 +145,12 @@ test('orders: everyone plus future waves, or only selected troops', () => {
   assert.strictEqual(g.order(a.id, [squad[0].id], { k: 't', id: t.id }), null);
   assert.deepStrictEqual(squad[0].attack, { k: 't', id: t.id, owner: b.id });
   assert.strictEqual(squad[1].attack, null);
-  assert.strictEqual(a.order.type, 'defend', 'selection orders leave the standing order alone');
+  assert.strictEqual(a.squads[0].order.type, 'defend', 'selected-troop orders leave the squads\' orders alone');
   assert.strictEqual(g.order(a.id, null, { k: 'c', id: b.id }), null);
   assert.ok(squad.every((u) => u.attack && u.attack.k === 'c'));
   a.nextWaveAt = g.time;
   g.update(0.05);
-  assert.ok(mine(g, a).every((u) => u.attack && u.attack.k === 'c'), 'new waves follow the standing order');
+  assert.ok(mine(g, a).every((u) => u.attack && u.attack.k === 'c'), 'new troops follow their squad\'s order');
   assert.strictEqual(g.order(a.id, null, { k: 'c', id: a.id }), null);
   assert.ok(mine(g, a).every((u) => !u.attack && u.anchor === 0));
   assert.match(g.order(a.id, null, { k: 't', id: 999 }), /No such/);
@@ -190,7 +190,7 @@ test('destroying a tower claims it for the attacker', () => {
     g.update(0.05);
     assert.ok(a.territory > landBefore, 'its land comes with it');
     for (const u of squad.filter((v) => g.units.has(v.id))) assert.strictEqual(u.anchor, t.id, 'the attackers garrison it');
-    assert.deepStrictEqual(a.order, { type: 'attack', target: { k: 'c', id: b.id } }, 'new waves push on to the core');
+    assert.deepStrictEqual(a.squads[0].order, { type: 'attack', target: { k: 'c', id: b.id } }, 'new waves push on to the core');
   }
 });
 
@@ -271,44 +271,9 @@ test('the standing order rolls on to the next structure when its tower is taken'
   const t2 = outpost(g, b, 0, 1);
   g.order(a.id, null, { k: 't', id: t1.id });
   g.transferTower(t1, a.id);
-  assert.deepStrictEqual(a.order, { type: 'attack', target: { k: 't', id: t2.id, owner: b.id } });
+  assert.deepStrictEqual(a.squads[0].order, { type: 'attack', target: { k: 't', id: t2.id, owner: b.id } });
   g.damageTower(t2, 1e9, a.id);
-  assert.deepStrictEqual(a.order, { type: 'attack', target: { k: 'c', id: b.id } });
-});
-
-test('send a percentage: that share of troops, keeping the mix, nearest first', () => {
-  const { g, a, b } = duel(13);
-  const t = outpost(g, b);
-  const near = troops(g, a, 'soldier', 4, t.x - 6, t.y + 0.5);
-  const far = troops(g, a, 'soldier', 4, a.core.x + 0.5, a.core.y + 1);
-  const guards = troops(g, a, 'medic', 4, a.core.x + 0.5, a.core.y - 1);
-  const standing = { ...a.order };
-  assert.strictEqual(g.order(a.id, null, { k: 't', id: t.id }, 0.5), null);
-  assert.strictEqual(g.lastOrderCount, 6);
-  const sent = [...near, ...far, ...guards].filter((u) => u.attack);
-  assert.strictEqual(sent.length, 6);
-  assert.strictEqual(sent.filter((u) => u.kind === 'medic').length, 2, 'half the medics');
-  assert.strictEqual(sent.filter((u) => u.kind === 'soldier').length, 4, 'half the soldiers');
-  assert.ok(near.every((u) => u.attack), 'the soldiers nearest the target go first');
-  assert.deepStrictEqual(a.order, standing, 'new waves keep their standing order');
-
-  // Sending another 50% picks from the troops that aren't already on it.
-  assert.strictEqual(g.order(a.id, null, { k: 't', id: t.id }, 0.5), null);
-  assert.strictEqual([...near, ...far, ...guards].filter((u) => u.attack).length, 12);
-
-  // 25% home again, and 100% still means everyone plus new waves.
-  assert.strictEqual(g.order(a.id, null, { k: 'c', id: a.id }, 0.25), null);
-  assert.strictEqual([...near, ...far, ...guards].filter((u) => !u.attack).length, 3);
-  assert.strictEqual(g.order(a.id, null, { k: 't', id: t.id }, 1), null);
-  assert.strictEqual(a.order.type, 'attack');
-});
-
-test('a percentage of a tiny army still sends at least one troop', () => {
-  const { g, a, b } = duel(14);
-  troops(g, a, 'soldier', 1, a.core.x + 0.5, a.core.y + 1);
-  assert.strictEqual(g.order(a.id, null, { k: 'c', id: b.id }, 0.25), null);
-  assert.strictEqual(g.lastOrderCount, 1);
-  assert.match(g.order(a.id, null, { k: 'c', id: b.id }, 0.25), /No troops available/);
+  assert.deepStrictEqual(a.squads[0].order, { type: 'attack', target: { k: 'c', id: b.id } });
 });
 
 test('the spatial grid finds the same nearby troops as a full scan', () => {
@@ -340,10 +305,10 @@ test('hunting: troops chase a chosen enemy troop, focus it, then move on to its 
   const decoy = troops(g, b, 'soldier', 1, mx + 1, my + 2)[0]; // right next to the hunters
   const [target] = prey;
   for (const v of [...prey, decoy]) v.attack = { k: 'c', id: b.id }; // hold them still: no orders to follow
-  const before = a.order;
-  assert.strictEqual(g.order(a.id, null, { k: 'u', id: target.id }, 1), null);
+  const before = a.squads[0].order;
+  assert.strictEqual(g.order(a.id, null, { k: 'u', id: target.id }), null);
   assert.strictEqual(g.lastOrderCount, 4);
-  assert.deepStrictEqual(a.order, before, 'new waves keep their standing order');
+  assert.deepStrictEqual(a.squads[0].order, before, 'new waves keep their standing order');
   assert.ok(hunters.every((u) => u.attack.k === 'u' && u.attack.id === target.id));
   // pin the prey in place and let the hunters work
   const pin = () => { for (const v of [...prey, decoy]) if (g.units.has(v.id)) { v.x = v === decoy ? mx + 1 : mx + 8 + prey.indexOf(v) * 0.4; v.y = v === decoy ? my + 2 : my; v.path = []; } };
@@ -359,33 +324,6 @@ test('hunting: troops chase a chosen enemy troop, focus it, then move on to its 
   const mine = troops(g, a, 'soldier', 1, 40, 40)[0];
   assert.match(g.order(a.id, null, { k: 'u', id: mine.id }), /own troop/);
   assert.match(g.order(a.id, null, { k: 'u', id: 99999 }), /gone/);
-});
-
-test('orders can be limited to certain troop types', () => {
-  const { g, a, b } = duel(22);
-  const t = outpost(g, b);
-  const soldiers = troops(g, a, 'soldier', 4, a.core.x + 0.5, a.core.y + 1);
-  const archers = troops(g, a, 'archer', 2, a.core.x + 0.5, a.core.y - 1);
-  const medics = troops(g, a, 'medic', 2, a.core.x - 1, a.core.y + 0.5);
-  const standing = { ...a.order };
-  // only archers, everyone of that type
-  assert.strictEqual(g.order(a.id, null, { k: 't', id: t.id }, 1, ['archer']), null);
-  assert.strictEqual(g.lastOrderCount, 2);
-  assert.ok(archers.every((u) => u.attack) && soldiers.every((u) => !u.attack) && medics.every((u) => !u.attack));
-  assert.deepStrictEqual(a.order, standing, 'a filtered order leaves new waves alone');
-  // 50% of soldiers + medics
-  assert.strictEqual(g.order(a.id, null, { k: 't', id: t.id }, 0.5, ['soldier', 'medic']), null);
-  assert.strictEqual(g.lastOrderCount, 3);
-  assert.strictEqual(soldiers.filter((u) => u.attack).length, 2);
-  assert.strictEqual(medics.filter((u) => u.attack).length, 1);
-  // a selection, filtered
-  assert.strictEqual(g.order(a.id, [...soldiers, ...archers].map((u) => u.id), { k: 'c', id: a.id }, 1, ['archer']), null);
-  assert.ok(archers.every((u) => !u.attack) && soldiers.filter((u) => u.attack).length === 2);
-  assert.match(g.order(a.id, soldiers.map((u) => u.id), { k: 'c', id: a.id }, 1, ['scout']), /chosen types/);
-  assert.match(g.order(a.id, null, { k: 't', id: t.id }, 1, ['scout']), /no troops of the chosen types/);
-  // all types ticked = a normal order (new waves follow)
-  assert.strictEqual(g.order(a.id, null, { k: 't', id: t.id }, 1, ['soldier', 'scout', 'medic', 'archer']), null);
-  assert.strictEqual(a.order.type, 'attack');
 });
 
 test('right-clicking the ground sends troops to hold that spot', () => {
@@ -410,25 +348,6 @@ test('right-clicking the ground sends troops to hold that spot', () => {
   assert.match(g.order(a.id, null, { k: 'p', id: -5 }), /Invalid/);
 });
 
-test('"new waves follow" is an explicit choice on each order', () => {
-  const { g, a, b } = duel(24);
-  const t = outpost(g, b);
-  troops(g, a, 'soldier', 4, a.core.x + 0.5, a.core.y + 1);
-  const home = { ...a.order };
-  // 100% but follow off: troops go, waves stay home
-  assert.strictEqual(g.order(a.id, null, { k: 't', id: t.id }, 1, null, false), null);
-  assert.deepStrictEqual(a.order, home);
-  // 25%, or only one troop type, with follow on: waves follow
-  assert.strictEqual(g.order(a.id, null, { k: 'c', id: b.id }, 0.25, null, true), null);
-  assert.deepStrictEqual(a.order, { type: 'attack', target: { k: 'c', id: b.id } });
-  assert.strictEqual(g.order(a.id, null, { k: 'c', id: a.id }, 1, ['archer'], true), null, 'waves follow even with no archers alive');
-  assert.deepStrictEqual(a.order, { type: 'defend', anchor: 0 });
-  // hunting one troop never redirects waves
-  const [foe] = troops(g, b, 'soldier', 1, a.core.x + 3, a.core.y);
-  assert.strictEqual(g.order(a.id, null, { k: 'u', id: foe.id }, 1, null, true), null);
-  assert.deepStrictEqual(a.order, { type: 'defend', anchor: 0 });
-});
-
 test('cleared fog stays clear: explored areas keep showing live activity', () => {
   const { g, a, b } = duel(25);
   g.update(0.05);
@@ -443,4 +362,64 @@ test('cleared fog stays clear: explored areas keep showing live activity', () =>
   g.update(0.05);
   g.update(0.05);
   assert.ok(g.sees(a, spot.x, spot.y + 4), '...but the area stays revealed');
+});
+
+test('squads: each has its own order, and new troops join them in turn', () => {
+  const { g, a, b } = duel(26);
+  const t = outpost(g, b);
+  a.nextWaveAt = g.time;
+  g.update(0.05);
+  const first = mine(g, a);
+  assert.strictEqual(first.length, C.BASE_WAVE);
+  const per = [0, 1, 2].map((i) => first.filter((u) => u.sq === i).length);
+  assert.ok(Math.max(...per) - Math.min(...per) <= 1, `waves are dealt out evenly (${per})`);
+  // squad 2 attacks the tower; squads 1 and 3 stay home
+  assert.strictEqual(g.order(a.id, null, { k: 't', id: t.id }, [1]), null);
+  assert.strictEqual(g.lastOrderCount, per[1]);
+  for (const u of first) assert.strictEqual(!!u.attack, u.sq === 1);
+  assert.strictEqual(a.squads[1].order.type, 'attack');
+  assert.strictEqual(a.squads[0].order.type, 'defend');
+  // new troops of squad 2 follow its order
+  a.nextWaveAt = g.time;
+  g.update(0.05);
+  for (const u of mine(g, a)) if (!first.includes(u)) assert.strictEqual(!!u.attack, u.sq === 1);
+  // ordering several squads at once
+  assert.strictEqual(g.order(a.id, null, { k: 'c', id: b.id }, [0, 2]), null);
+  assert.ok(mine(g, a).every((u) => u.attack), 'everyone is out now');
+  // null = every squad
+  assert.strictEqual(g.order(a.id, null, { k: 'c', id: a.id }), null);
+  assert.ok(a.squads.every((sq) => sq.order.type === 'defend'));
+  assert.match(g.order(a.id, null, { k: 'c', id: b.id }, [7]), /Invalid squad/);
+});
+
+test('squads: moving troops between squads, and which squads new waves fill', () => {
+  const { g, a, b } = duel(27);
+  const t = outpost(g, b);
+  const four = troops(g, a, 'soldier', 4, a.core.x + 0.5, a.core.y + 1);
+  for (const u of four) u.sq = 0;
+  g.order(a.id, null, { k: 't', id: t.id }, [2]);
+  assert.ok(four.every((u) => !u.attack), 'helper troops start in squad 1');
+  assert.strictEqual(g.squadAssign(a.id, [four[0].id, four[1].id], 2), null);
+  assert.ok(four[0].sq === 2 && four[0].attack && four[0].attack.k === 't', 'moved troops take on the squad order');
+  assert.ok(four[2].sq === 0 && !four[2].attack);
+  assert.match(g.squadAssign(a.id, [four[0].id], 5), /Invalid squad/);
+  assert.match(g.squadAssign(b.id, [four[0].id], 1), /No troops/);
+  // only squad 3 takes new troops
+  assert.strictEqual(g.squadReinforce(a.id, 0, false), null);
+  assert.strictEqual(g.squadReinforce(a.id, 1, false), null);
+  assert.match(g.squadReinforce(a.id, 2, false), /at least one/);
+  a.nextWaveAt = g.time;
+  g.update(0.05);
+  const fresh = mine(g, a).filter((u) => !four.includes(u));
+  assert.strictEqual(fresh.length, C.BASE_WAVE);
+  assert.ok(fresh.every((u) => u.sq === 2 && u.attack && u.attack.k === 't'), 'all new troops join squad 3 and its attack');
+});
+
+test('hunting one troop is a one-off: the squad keeps its standing order', () => {
+  const { g, a, b } = duel(28);
+  for (const u of troops(g, a, 'soldier', 2, a.core.x + 0.5, a.core.y + 1)) u.sq = 0;
+  const [foe] = troops(g, b, 'soldier', 1, a.core.x + 3, a.core.y);
+  assert.strictEqual(g.order(a.id, null, { k: 'u', id: foe.id }, [0]), null);
+  assert.deepStrictEqual(a.squads[0].order, { type: 'defend', anchor: 0 });
+  assert.match(g.order(a.id, null, { k: 'u', id: foe.id }, [1]), /No troops in that squad/);
 });

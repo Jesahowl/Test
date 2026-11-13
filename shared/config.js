@@ -44,6 +44,7 @@
     BARRACKS_TROOPS: 5,
     MAX_BARRACKS: 5,
     BARRACKS_COST_STEP: 150, // each extra barracks costs this much more than the last
+    SQUADS: 3, // troops are split into this many squads, each with its own orders
     START_ARMY: {}, // wave slots assigned at the start (the rest are soldiers)
     // How many troop slots can be alive at once grows with land: one per LAND_PER_UNIT tiles.
     LAND_PER_UNIT: 10,

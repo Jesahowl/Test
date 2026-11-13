@@ -1,11 +1,11 @@
 // Input: mouse, keyboard, minimap and help window.
 
-import { orderAt, setShare, toggleBuild } from './bar.js';
+import { orderAt, pickSquadOf, selectAllSquads, squadKey, toggleBuild } from './bar.js';
 import { sendMsg } from './net.js';
 import { clearSelection } from './overlay.js';
 import { resize } from './render.js';
 import { join, specNext, startSpectating } from './screens.js';
-import { S, $, C, cam, canvas, grid, keys, mini, mouse, players, scale, selUnits, setFollow, SHARE_KEYS, SHARES, toWorld, UNIT_KEYS, wavesFollow } from './state.js';
+import { S, $, C, cam, canvas, grid, keys, mini, mouse, players, scale, selUnits, SQUAD_N, toWorld } from './state.js';
 import { orderTargetAt } from './targets.js';
 import { hideTip } from './ui.js';
 
@@ -49,7 +49,8 @@ canvas.addEventListener('mousedown', (e) => {
     return;
   }
 
-  // Left-click selects: my troops (Shift adds), else a tower or ruin.
+  // Left-click a troop: pick its squad (Shift: pick single troops, to move them to another squad).
+  // Otherwise select a tower or ruin.
   let hit = null;
   let hitD = 0.6;
   for (const u of S.units.values()) {
@@ -66,13 +67,13 @@ canvas.addEventListener('mousedown', (e) => {
       if (selUnits.has(hit.id)) selUnits.delete(hit.id);
       else selUnits.add(hit.id);
     } else {
-      selUnits.clear();
-      selUnits.add(hit.id);
+      pickSquadOf(hit);
     }
     return;
   }
   const tid = grid.get(`${tx},${ty}`);
-  clearSelection();
+  selUnits.clear();
+  S.buildKind = null;
   S.selectedId = tid && S.towers.has(tid) ? tid : null;
 });
 
@@ -148,14 +149,9 @@ window.addEventListener('keydown', (e) => {
   }
   if (k === 'q') {
     S.buildKind = null;
-    S.selectedId = null;
-    selUnits.clear();
-    for (const u of S.units.values()) if (u.owner === S.myId) selUnits.add(u.id);
+    selectAllSquads();
   }
-  if (k === 'h') orderAt({ k: 'c', id: S.myId }, 1, { everyone: true });
-  if (k === 'f') setFollow(!wavesFollow);
-  const si = SHARE_KEYS.indexOf(k);
-  if (si >= 0) setShare(SHARES[si]);
+  if (k === 'h') orderAt({ k: 'c', id: S.myId }, { everyone: true });
   if (k === ' ') {
     e.preventDefault();
     const p = players.get(S.myId);
@@ -164,23 +160,15 @@ window.addEventListener('keydown', (e) => {
       cam.y = p.y + 0.5;
     }
   }
-  // 1-5: add one of that troop type to every wave (Shift: level it up).
-  const idx = Number(e.key) - 1;
-  if (Number.isInteger(idx) && idx >= 0 && idx < UNIT_KEYS.length) {
-    sendMsg({ t: 'army', op: e.shiftKey ? 'level' : 'add', kind: UNIT_KEYS[idx] });
-  }
+  // 1-3: pick a squad (Shift adds; with single troops picked, move them into it).
+  const m = /^Digit(\d)$/.exec(e.code);
+  const idx = m ? Number(m[1]) - 1 : -1;
+  if (idx >= 0 && idx < SQUAD_N) squadKey(idx, e.shiftKey);
   if (k === 'u' && S.selectedId) sendMsg({ t: 'upgrade', id: S.selectedId });
   if ((k === 'delete' || k === 'backspace') && S.selectedId) {
     const t = S.towers.get(S.selectedId);
     if (t && t.owner === S.myId) sendMsg({ t: 'sell', id: S.selectedId });
   }
-});
-
-// Shift+digit gives e.key '!' etc. on some layouts: map by code instead.
-window.addEventListener('keydown', (e) => {
-  if (!S.myId || !e.shiftKey || document.activeElement?.tagName === 'INPUT') return;
-  const m = /^Digit([1-5])$/.exec(e.code);
-  if (m && Number.isNaN(Number(e.key))) sendMsg({ t: 'army', op: 'level', kind: UNIT_KEYS[Number(m[1]) - 1] });
 });
 
 window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));

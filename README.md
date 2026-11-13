@@ -34,11 +34,11 @@ closes after a minute. **Play** still drops you into the always-running public g
 | **Waves** | Every 20s your core sends out a free wave of **5 troops**. |
 | **Barracks** | Build **barracks** (`R`, on your own land) for **+5 troops in every wave**. Each barracks' 5 march out from the barracks itself and guard it while your standing order is "defend home". Up to 5 barracks (30 troops per wave). They cost 250g, then 150g more for each one you own. They don't shoot or level up, and like towers they can be destroyed: whoever destroys one takes it over, with its +5. |
 | **Army mix** | The army panel decides **which troops fill your wave slots**, for free (`1`–`4` / `+`). Unassigned slots are filled with soldiers. Gold goes into **levelling troop types** (`Shift`+number), barracks and towers. |
-| **Orders** | **Right-click** an enemy tower or core to attack it, or one of your own towers or your core to defend there. Who goes depends on the **Send slider** in the bar (5% steps; it shows how many of your troops that is, e.g. "12 of 20"): at 100% every troop goes; below 100% only that share of your current troops goes (nearest to the target first, keeping your army's mix of types), so you can split your forces. The **New waves follow** toggle (`F`) decides whether an order also sends your *future* waves to the same target. Select specific troops first (click, Shift-click, `Q` = all) to command exactly those. `H` brings everyone home. |
+| **Squads** | Your troops are split into **3 squads**. New waves deal their troops out to the squads in turn (each squad card has a **⬇ new troops** toggle: switch it off and that squad stops growing). **Pick a squad** with `1` `2` `3` or by clicking its card (or any of its troops), `Shift` to pick several, `Q` for all, then **right-click** a target: that squad goes, and it becomes the squad's **standing order**, so its new troops march there too. Each card shows the squad's order and size; markers on the map are tagged with squad numbers. Press a squad's number twice to jump the camera to it. `H` sends every squad home. |
 | **Fog of war** | The map starts dark except your own land and what your core (9 tiles), towers (range + 2), barracks and troops can see; scouts see furthest. **Once an area has been explored, the fog there is cleared for good**: you keep seeing everything that happens there (troops, fights, buildings, camps), even after your troops leave. Enemy troops in unexplored fog aren't even sent to your browser. Spectators see everything. |
-| **Troop types** | The four toggles under the Send slider pick **which troop types** your orders send: click to switch a type on/off, **Shift-click or right-click** to send *only* that type (again for all). The Send % then applies to those types, e.g. "50% of my archers". Works with selections too. |
-| **Moving** | **Right-click empty ground** to send troops there. They hold the spot, fight enemies that come within 6 tiles of it, and come back to it afterwards. With *New waves follow* on, new waves rally there too. |
-| **Hunting** | **Right-click an enemy troop** to send your troops after it. They chase it down and focus it, ignoring other enemies on the way. When it dies they go after its squadmates within 6 tiles, then head home once the squad is gone. A red crosshair marks troops you're hunting. Hunts use the Send slider (or your selection) like other orders, but never redirect new waves. |
+| **Regrouping** | **Shift-click** single troops to pick them, then press `1`–`3` (or click a squad card) to move them into that squad; they take on its orders. Right-clicking with troops picked sends just those, as a one-off. |
+| **Moving** | **Right-click empty ground** to send the picked squads there. They hold the spot, fight enemies that come within 6 tiles of it, and come back to it afterwards. |
+| **Hunting** | **Right-click an enemy troop** to send your troops after it. They chase it down and focus it, ignoring other enemies on the way. When it dies they go after its squadmates within 6 tiles, then head home once the squad is gone. A red crosshair marks troops you're hunting. Hunts use the picked squads (or picked troops) like other orders, but are a one-off: the squads keep their standing orders. |
 | **The push** | Troops march across the map (pathfinding around structures), fight whatever they meet, then hit the target. When a tower falls, the push rolls on to that player's next tower, then their core. |
 | **Towers** | Claim land and shoot enemy troops. Your core shoots too. Place them on your land, or **leapfrog** up to 3 tiles past your border onto unclaimed ground. |
 | **Taking towers** | **Destroy** one and it becomes yours (+250g): it keeps its level, comes back at 70% health, and its land switches to you. The attackers stay on as its garrison and your waves push on to that player's next tower. Towers only become ruins when their owner's core falls. |
@@ -54,14 +54,14 @@ closes after a minute. **Play** still drops you into the always-running public g
 
 ### Troops
 
-| Key | Troop | Wave slots | Level 2 | HP | Role |
-|---|---|---|---|---|---|
-| `1` | Soldier | 1 | 120g | 300 | Sword and shield: the backbone of every wave. Unassigned slots are filled with soldiers |
-| `2` | Scout | 1 | 100g | 110 | Very fast, sees 11 tiles, **never fights**. While your troops defend, scouts **explore on their own**, heading for ground you haven't seen and staying clear of enemy guns |
-| `3` | Medic | 1 | 180g | 150 | Heals nearby troops, never attacks |
-| `4` | Archer | 1 | 160g | 170 | **Shoots arrows from range** (5 tiles). Fragile: keep soldiers in front of them |
+| Troop | Wave slots | Level 2 | HP | Role |
+|---|---|---|---|---|
+| Soldier | 1 | 120g | 300 | Sword and shield: the backbone of every wave. Unassigned slots are filled with soldiers |
+| Scout | 1 | 100g | 110 | Very fast, sees 11 tiles, **never fights**. While your troops defend, scouts **explore on their own**, heading for ground you haven't seen and staying clear of enemy guns |
+| Medic | 1 | 180g | 150 | Heals nearby troops, never attacks |
+| Archer | 1 | 160g | 170 | **Shoots arrows from range** (5 tiles). Fragile: keep soldiers in front of them |
 
-`Shift`+number levels a type up
+The **Lv** button on each troop card levels that type up
 (+50% HP, +60% damage, +0.5 range per level, **max 5**); levels apply to troops spawned after.
 Levels 4 and 5 (for troops and towers) cost a lot more: a late-game place to spend gold. Towers stop gaining land after level 3,
 and get a turning gold rune ring at level 4 and a radiant aura at level 5.
@@ -71,12 +71,11 @@ and get a turning gold rune ring at level 4 and a radiant aura at level 5.
 | Key | Action |
 |---|---|
 | Right-click target | Order troops: attack an enemy tower/core/camp, hunt an enemy troop, or defend your own tower/core |
-| Send slider | How many of your troops each order sends: drag it, or scroll the wheel over it. `Z` `X` `C` `V` jump to 25% / 50% / 75% / 100% |
-| `F` | New waves follow on/off: whether orders also redirect future waves |
-| Left-click | Select a troop (`Shift` adds), or a tower / ruin |
-| `Q` / `Esc` | Select all troops / clear selection |
-| `H` | All troops and new waves defend your core |
-| `1`–`4` (`Shift` = level up) | Put a troop type in one more wave slot (free) |
+| `1` `2` `3` | Pick a squad (`Shift` adds; press twice to find it). With troops picked: move them into that squad |
+| `Q` | Pick all squads |
+| Left-click | A troop: pick its squad (`Shift`: pick single troops). A tower / ruin: select it |
+| `Esc` | Clear picked troops / selected building |
+| `H` | Every squad defends your core |
 | `R` | Place a barracks (your own land only): +5 troops per wave |
 | `B` | Place a tower (shows where you can leap, and the land you'd gain or take) |
 | `U` / `Del` | Upgrade / sell the selected tower |
@@ -85,9 +84,9 @@ and get a turning gold rune ring at level 4 and a radiant aura at level 5.
 ### Interface
 
 - **Player card** (top left): gold and income, land, kills, spawn protection / jungle buff, and your core's health.
-- **Command bar** (bottom): *Build* (tower, barracks), *Your wave* (countdown ring, a slot strip showing how the next wave is made up, one card per troop type with +/− and level-up), and *Orders* (Send slider, Defend home, troops alive).
+- **Command bar** (bottom): *Build* (tower, barracks), *Your wave* (countdown ring, a slot strip showing how the next wave is made up, one card per troop type with +/− and level-up), and *Squads* (one card per squad with its order, size and new-troops toggle; All, Home, troops alive).
 - **Hover anything** for a tooltip explaining it, with costs and what an upgrade would change.
-- **First-game tips** walk you through attacking, towers, barracks, the wave mix, the Send slider and the jungle; each ticks off when you do it. `?` shows the controls and can bring the tips back.
+- **First-game tips** walk you through attacking, towers, barracks, the wave mix, squads and the jungle; each ticks off when you do it. `?` shows the controls and can bring the tips back.
 
 All numbers live in [`shared/config.js`](shared/config.js), shared by server and client, so tuning happens in one place.
 The most useful knobs: economy (`BASE_INCOME`, `INCOME_PER_TILE`, `TROOP_BOUNTY`, `TOWER_BOUNTY`, `CORE_KILL_BOUNTY`,
@@ -118,7 +117,7 @@ public/js/*.js          the browser client as ES modules (entry: main.js):
 test/                   node:test suite (game rules, waves & orders, jungle, rounds, pathfinding, server)
 ```
 
-- **Authoritative server.** Clients only send intents (`build`, `upgrade`, `sell`, `capture`, `army`, `order` with optional `ids`, `share`, `kinds`, `follow`). The server validates everything.
+- **Authoritative server.** Clients only send intents (`build`, `upgrade`, `sell`, `capture`, `army`, `order` with optional `ids` or `squads`, `squad` to regroup troops or toggle new troops). The server validates everything.
 - **State sync.** The game simulates 20 times a second and sends state 10 times a second. Entity lists (players, towers, troops,
   monsters, camps) go out as compact arrays containing only the rows that changed since the last update, plus removed ids; a
   client that just joined gets everything once. Positions are sent in tenths of a tile, and WebSocket compression

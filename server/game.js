@@ -168,7 +168,7 @@ class Game {
       const a = u.attack;
       // positions in tenths of a tile; max HP follows from kind + level on the client
       units.push([u.id, UNIT_KEYS.indexOf(u.kind), Math.round(u.x * 10), Math.round(u.y * 10), u.owner, u.level, Math.ceil(u.hp), u.anchor,
-        a ? `${a.k}:${a.id}` : 0]);
+        a ? `${a.k}:${a.id}` : 0, u.sq || 0]);
     }
     const creeps = [];
     for (const c of this.creeps.values()) {
@@ -191,9 +191,13 @@ class Game {
 
   // Personal state for one player (sent only to them).
   personal(p) {
-    const order = p.order.type === 'defend'
-      ? { type: 'defend', target: p.order.anchor ? `t:${p.order.anchor}` : `c:${p.id}` }
-      : { type: 'attack', target: `${p.order.target.k}:${p.order.target.id}` };
+    // Each squad: its order as "defend|attack target-key", and whether new waves add to it.
+    const squads = p.squads.map((sq) => ({
+      o: sq.order.type === 'defend'
+        ? `defend ${sq.order.anchor ? `t:${sq.order.anchor}` : `c:${p.id}`}`
+        : `attack ${sq.order.target.k}:${sq.order.target.id}`,
+      r: sq.reinforce ? 1 : 0,
+    }));
     return {
       id: p.id,
       gold: Math.floor(p.gold),
@@ -201,7 +205,7 @@ class Game {
       waveSize: this.waveSize(p),
       army: p.army,
       levels: p.levels,
-      order,
+      squads,
     };
   }
 }

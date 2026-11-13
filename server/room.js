@@ -205,13 +205,19 @@ class Room {
         return null;
       case 'order': {
         const target = msg.target && typeof msg.target === 'object' ? { k: String(msg.target.k), id: msg.target.id } : null;
-        const share = typeof msg.share === 'number' && msg.share > 0 && msg.share <= 1 ? msg.share : 1;
-        const kinds = Array.isArray(msg.kinds) ? msg.kinds.slice(0, 8).map(String) : null;
-        const follow = typeof msg.follow === 'boolean' ? msg.follow : null;
-        const err = game.order(client.pid, Array.isArray(msg.ids) ? msg.ids : null, target, share, kinds, follow);
+        const squads = Array.isArray(msg.squads) ? msg.squads.slice(0, 8) : null;
+        const err = game.order(client.pid, Array.isArray(msg.ids) ? msg.ids : null, target, squads);
         if (!err) send(client, { t: 'ordered', n: game.lastOrderCount });
         return err;
       }
+      case 'squad':
+        if (msg.op === 'assign') {
+          const err = game.squadAssign(client.pid, msg.ids, msg.sq);
+          if (!err) send(client, { t: 'ordered', n: game.lastOrderCount, sq: msg.sq });
+          return err;
+        }
+        if (msg.op === 'reinforce') return game.squadReinforce(client.pid, msg.sq, !!msg.on);
+        return null;
       default:
         return null;
     }

@@ -192,7 +192,7 @@ function applyState(msg) {
     const kind = UNIT_KEYS[a[1]];
     const x = a[2] / 10;
     const y = a[3] / 10;
-    return { id: a[0], kind, x, y, owner: a[4], level: a[5], hp: a[6], maxHp: C.towerStats(kind, a[5]).hp, anchor: a[7], attack: a[8] || '',
+    return { id: a[0], kind, x, y, owner: a[4], level: a[5], hp: a[6], maxHp: C.towerStats(kind, a[5]).hp, anchor: a[7], attack: a[8] || '', sq: a[9] || 0,
       rx: old ? old.rx : x, ry: old ? old.ry : y, samples: addSample(old, x, y) };
   });
   for (const u of S.units.values()) if (!moved.has(u.id)) addSample(u, u.x, u.y);

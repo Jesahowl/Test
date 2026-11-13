@@ -38,7 +38,10 @@ module.exports = {
       explored: new Uint8Array(this.w * this.h), // ...and everywhere they have seen
       army,
       levels,
-      order: { type: 'defend', anchor: 0 },
+      // Squads: each has a standing order (new troops in it follow it too) and whether new waves
+      // add troops to it. New troops are dealt out in turn to the squads that take them.
+      squads: Array.from({ length: C.SQUADS }, () => ({ order: { type: 'defend', anchor: 0 }, reinforce: true })),
+      nextSquad: 0,
       nextWaveAt: this.time + C.FIRST_WAVE_DELAY,
       bot: isBot ? { next: this.time + 1, nextOrder: this.time + 10 } : null,
     };
@@ -207,6 +210,7 @@ module.exports = {
         continue;
       }
       u.owner = killer.id;
+      u.sq = this.pickSquad(killer);
       u.attack = null;
       u.anchor = site.id;
       u.path = [];
@@ -227,7 +231,7 @@ module.exports = {
       killer.coresDestroyed++;
       p.gold = 0;
       // Waves that were pushing on this player head home instead of wandering off.
-      if (killer.order.type === 'attack' && !this.orderValid(killer.id, killer.order)) killer.order = { type: 'defend', anchor: 0 };
+      for (const sq of killer.squads) if (sq.order.type === 'attack' && !this.orderValid(killer.id, sq.order)) sq.order = { type: 'defend', anchor: 0 };
       this.pushFeed(`${killer.name} destroyed ${p.name}'s core: +${bounty}g, ${troopsTaken} troop${troopsTaken === 1 ? '' : 's'} and a new tower`);
     } else if (leftGame) {
       this.pushFeed(`${p.name} left - their base lies in ruins`);

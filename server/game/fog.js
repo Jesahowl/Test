@@ -83,8 +83,8 @@ module.exports = {
   // When tower t stops being `enemyId`'s, standing attack orders on it roll on to that
   // enemy's nearest remaining tower (or core), so waves keep pushing like a lane.
   rollOnOrders(t, enemyId) {
-    for (const p of this.players.values()) {
-      const o = p.order;
+    for (const p of this.players.values()) for (const sq of p.squads) {
+      const o = sq.order;
       if (o.type !== 'attack' || o.target.k !== 't' || o.target.id !== t.id) continue;
       let next = null;
       let nextD = Infinity;
@@ -97,9 +97,9 @@ module.exports = {
         }
       }
       const enemy = this.players.get(enemyId);
-      if (next) p.order = { type: 'attack', target: { k: 't', id: next.id, owner: enemyId } };
-      else if (enemy && enemy.alive) p.order = { type: 'attack', target: { k: 'c', id: enemyId } };
-      else p.order = { type: 'defend', anchor: 0 };
+      if (next) sq.order = { type: 'attack', target: { k: 't', id: next.id, owner: enemyId } };
+      else if (enemy && enemy.alive) sq.order = { type: 'attack', target: { k: 'c', id: enemyId } };
+      else sq.order = { type: 'defend', anchor: 0 };
     }
   },
 
