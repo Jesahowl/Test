@@ -49,7 +49,10 @@
     BARRACKS_TROOPS: 5,
     MAX_BARRACKS: 5,
     BARRACKS_COST_STEP: 150, // each extra barracks costs this much more than the last
-    SQUADS: 3, // troops are split into this many squads, each with its own orders
+    // Squads stay together: on the march a squad moves at its slowest troop's pace, and troops
+    // more than SQUAD_SPREAD (+ a little per troop) from the squad's centre wait for it or catch up.
+    SQUAD_SPREAD: 1.3,
+    SQUAD_WAIT_MAX: 5, // seconds a troop waits for a straggling squad before carrying on
     START_ARMY: {}, // wave slots assigned at the start (the rest are soldiers)
     // How many troop slots can be alive at once grows with land: one per LAND_PER_UNIT tiles.
     LAND_PER_UNIT: 10,

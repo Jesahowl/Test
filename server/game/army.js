@@ -101,11 +101,32 @@ module.exports = {
     return 'Invalid target';
   },
 
+  // ---- squads: every wave is a squad of its own; its troops carry the squad id (u.sq).
+
+  // A new, empty squad for player p: a fresh id, numbered with the lowest number not in use.
+  newSquad(p) {
+    const used = new Set(p.squadNum.values());
+    let num = 1;
+    while (used.has(num)) num++;
+    const id = this.nextId++;
+    p.squadNum.set(id, num);
+    return id;
+  },
+
+  // Forget squads that have no troops left (their numbers become free again).
+  pruneSquads() {
+    const live = new Set();
+    for (const u of this.units.values()) live.add(u.sq);
+    for (const p of this.players.values()) {
+      for (const id of p.squadNum.keys()) if (!live.has(id)) p.squadNum.delete(id);
+    }
+  },
+
   // Order troops at a target.
-  // - ids: exactly those troops, as a one-off (their squads' standing orders stay as they are).
-  // - otherwise squads: the squad numbers (0-based) to order, or null for every squad. Each squad's
-  //   troops go, and the order becomes the squad's standing order: troops that join it later
-  //   follow it too. Hunting a single troop is a one-off for the troops now in the squad.
+  // - squads: squad ids to send (null = every squad). Each squad goes as a group.
+  // - ids: exactly those troops. Picked troops that aren't whole squads split off into a new squad
+  //   of their own, so a squad's troops always share one order.
+  // Unless it's a hunt, the order is remembered: with newWaves 'follow', new squads take it.
   // Returns null on success or an error string; this.lastOrderCount says how many troops moved.
   order(pid, ids, target, squads = null) {
     this.lastOrderCount = 0;
@@ -117,65 +138,96 @@ module.exports = {
     if (Array.isArray(ids) && ids.length) {
       chosen = ids.slice(0, C.MAX_UNITS).map((id) => this.units.get(id)).filter((u) => u && u.owner === pid);
       if (!chosen.length) return 'No troops selected';
+      this.splitOff(p, chosen);
+    } else if (squads === null || squads === undefined) {
+      chosen = [...this.units.values()].filter((u) => u.owner === pid);
+      if (!chosen.length && ord.target?.k === 'u') return 'No troops available';
     } else {
-      const which = this.squadList(squads);
-      if (!which) return 'Invalid squad';
-      if (ord.target?.k !== 'u') for (const i of which) p.squads[i].order = ord;
-      chosen = [...this.units.values()].filter((u) => u.owner === pid && which.includes(u.sq || 0));
-      if (!chosen.length && ord.target?.k === 'u') return 'No troops in that squad';
+      if (!Array.isArray(squads) || !squads.length) return 'Invalid squad';
+      const which = new Set(squads.filter((id) => p.squadNum.has(id)));
+      chosen = [...this.units.values()].filter((u) => u.owner === pid && which.has(u.sq));
+      if (!chosen.length) return 'That squad has no troops left';
     }
+    if (ord.target?.k !== 'u') p.lastOrder = ord;
     for (const u of chosen) this.applyOrder(u, ord);
     this.lastOrderCount = chosen.length;
     return null;
   },
 
-  // Validate a list of squad numbers (null = all). Returns the list or null if invalid.
-  squadList(squads) {
-    if (squads === null || squads === undefined) return Array.from({ length: C.SQUADS }, (_, i) => i);
-    if (!Array.isArray(squads) || !squads.length) return null;
-    const out = [...new Set(squads)].filter((i) => Number.isInteger(i) && i >= 0 && i < C.SQUADS);
-    return out.length ? out : null;
+  // Troops picked out of their squads become a squad of their own (unless they're whole squads).
+  splitOff(p, list) {
+    const picked = new Set(list.map((u) => u.id));
+    const whole = new Set(list.map((u) => u.sq));
+    for (const u of this.units.values()) {
+      if (u.owner === p.id && whole.has(u.sq) && !picked.has(u.id)) whole.delete(u.sq);
+    }
+    if (whole.size === 1 && list.every((u) => whole.has(u.sq))) return; // exactly one whole squad
+    const sq = this.newSquad(p);
+    for (const u of list) u.sq = sq;
+    this.pruneSquads();
   },
 
-  // Move troops into squad `sq`: they take on its standing order.
+  // Move troops into squad `sq` (an id, or 'new' for a squad of their own). They take on its order.
   squadAssign(pid, ids, sq) {
     const p = this.players.get(pid);
     if (!p || !p.alive) return 'Invalid order';
-    if (!Number.isInteger(sq) || sq < 0 || sq >= C.SQUADS) return 'Invalid squad';
     if (!Array.isArray(ids) || !ids.length) return 'No troops selected';
     const moved = ids.slice(0, C.MAX_UNITS).map((id) => this.units.get(id)).filter((u) => u && u.owner === pid);
     if (!moved.length) return 'No troops selected';
-    const ord = p.squads[sq].order;
-    for (const u of moved) {
-      u.sq = sq;
-      if (this.orderValid(pid, ord)) this.applyOrder(u, ord);
+    if (sq === 'new') {
+      const id = this.newSquad(p);
+      for (const u of moved) u.sq = id;
+    } else {
+      if (!p.squadNum.has(sq)) return 'Invalid squad';
+      const lead = [...this.units.values()].find((u) => u.sq === sq && !moved.includes(u));
+      for (const u of moved) {
+        u.sq = sq;
+        if (lead) this.copyOrder(lead, u);
+      }
     }
+    this.pruneSquads();
     this.lastOrderCount = moved.length;
     return null;
   },
 
-  // Whether new waves add troops to squad `sq`. At least one squad always takes them.
-  squadReinforce(pid, sq, on) {
+  // Merge squads into the first one listed; they take on its order.
+  squadMerge(pid, squads) {
     const p = this.players.get(pid);
     if (!p || !p.alive) return 'Invalid order';
-    if (!Number.isInteger(sq) || sq < 0 || sq >= C.SQUADS) return 'Invalid squad';
-    if (!on && p.squads.filter((s) => s.reinforce).length === 1 && p.squads[sq].reinforce) {
-      return 'New troops have to go somewhere: at least one squad takes them';
+    if (!Array.isArray(squads)) return 'Invalid squad';
+    const list = squads.filter((id) => p.squadNum.has(id));
+    if (list.length < 2) return 'Pick two or more squads to merge';
+    const [into, ...rest] = list;
+    const from = new Set(rest);
+    const lead = [...this.units.values()].find((u) => u.sq === into);
+    let n = 0;
+    for (const u of this.units.values()) {
+      if (u.owner !== pid || !from.has(u.sq)) continue;
+      u.sq = into;
+      if (lead) this.copyOrder(lead, u);
+      n++;
     }
-    p.squads[sq].reinforce = !!on;
+    this.pruneSquads();
+    this.lastOrderCount = n;
     return null;
   },
 
-  // The squad the next new troop joins: the squads taking new troops, in turn.
-  pickSquad(p) {
-    for (let k = 0; k < C.SQUADS; k++) {
-      const i = (p.nextSquad + k) % C.SQUADS;
-      if (p.squads[i].reinforce) {
-        p.nextSquad = (i + 1) % C.SQUADS;
-        return i;
-      }
-    }
-    return 0;
+  // What new squads do: 'home' (guard the core) or 'follow' (take your last order).
+  setNewWaves(pid, mode) {
+    const p = this.players.get(pid);
+    if (!p || !p.alive) return 'Invalid order';
+    if (mode !== 'home' && mode !== 'follow') return 'Invalid setting';
+    p.newWaves = mode;
+    return null;
+  },
+
+  copyOrder(from, u) {
+    u.attack = from.attack ? { ...from.attack } : null;
+    u.anchor = from.anchor;
+    u.path = [];
+    u.dest = null;
+    u.repathAt = 0;
+    u.idleUntil = 0;
   },
 
   // Where an order sends troops.
@@ -225,6 +277,10 @@ module.exports = {
   },
 
   updateWaves() {
+    if (this.time >= (this.pruneAt || 0)) {
+      this.pruneAt = this.time + 1;
+      this.pruneSquads();
+    }
     for (const p of this.players.values()) {
       if (!p.alive || this.time < p.nextWaveAt) continue;
       p.nextWaveAt += C.WAVE_INTERVAL;
@@ -234,7 +290,9 @@ module.exports = {
 
   // The core sends BASE_WAVE troops; each barracks sends its BARRACKS_TROOPS from where it stands.
   spawnWave(p) {
-    for (const sq of p.squads) if (!this.orderValid(p.id, sq.order)) sq.order = { type: 'defend', anchor: 0 };
+    if (!this.orderValid(p.id, p.lastOrder)) p.lastOrder = { type: 'defend', anchor: 0 };
+    const ord = p.newWaves === 'follow' ? p.lastOrder : { type: 'defend', anchor: 0 };
+    const sq = this.newSquad(p); // this wave marches out as a squad of its own
     let alive = 0; // in wave slots
     for (const u of this.units.values()) if (u.owner === p.id) alive += C.slotsOf(u.kind);
     const cap = C.unitCap(p.territory, this.waveSize(p));
@@ -248,19 +306,20 @@ module.exports = {
       if (alive + n > cap) break;
       const slot = slotAt - C.BASE_WAVE;
       const from = slot < 0 ? null : barracks[Math.floor(slot / C.BARRACKS_TROOPS)];
-      this.spawnTroop(p, kind, from);
+      this.spawnTroop(p, kind, from, sq, ord);
       slotAt += n;
       alive += n;
       spawned++;
     }
+    if (!spawned) p.squadNum.delete(sq);
     if (spawned) {
       this.fx.push({ k: 'wave', x: p.core.x + 0.5, y: p.core.y + 0.5, o: p.id });
       for (const b of barracks) this.fx.push({ k: 'wave', x: b.x + 0.5, y: b.y + 0.5, o: p.id });
     }
   },
 
-  // Spawn one troop at the core, or at barracks `from`.
-  spawnTroop(p, kind, from = null) {
+  // Spawn one troop at the core, or at barracks `from`, into squad `sq` (default: a new one).
+  spawnTroop(p, kind, from = null, sq = 0, ord = null) {
     const id = this.nextId++;
     const level = p.levels[kind];
     const stats = C.towerStats(kind, level);
@@ -271,12 +330,9 @@ module.exports = {
     const y = Math.max(0.5, Math.min(this.h - 0.5, oy + 0.5 + Math.sin(a) * (from ? 1 : 1.3)));
     const u = {
       isUnit: true, id, kind, owner: p.id, x, y, level, hp: stats.hp, maxHp: stats.hp, cd: 0,
-      anchor: 0, attack: null, path: [], dest: null, repathAt: 0, idleUntil: this.time + 0.5, sq: this.pickSquad(p),
+      anchor: 0, attack: null, path: [], dest: null, repathAt: 0, idleUntil: this.time + 0.5, sq: sq || this.newSquad(p),
     };
-    const ord = p.squads[u.sq].order;
-    this.applyOrder(u, ord);
-    // Troops from a barracks guard it when their squad's order is "defend the core".
-    if (from && ord.type === 'defend' && !ord.anchor) u.anchor = from.id;
+    this.applyOrder(u, ord || { type: 'defend', anchor: 0 });
     this.units.set(id, u);
     if (this.ucells) this.ucells[this.ucellOf(u.x, u.y)].push(u); // findable before the next grid rebuild
     return u;

@@ -38,10 +38,11 @@ module.exports = {
       explored: new Uint8Array(this.w * this.h), // ...and everywhere they have seen
       army,
       levels,
-      // Squads: each has a standing order (new troops in it follow it too) and whether new waves
-      // add troops to it. New troops are dealt out in turn to the squads that take them.
-      squads: Array.from({ length: C.SQUADS }, () => ({ order: { type: 'defend', anchor: 0 }, reinforce: true })),
-      nextSquad: 0,
+      // Squads: every wave marches out as a squad of its own (u.sq = squad id), numbered with the
+      // lowest number free. New squads guard home, or with newWaves 'follow' take lastOrder.
+      squadNum: new Map(),
+      newWaves: 'home',
+      lastOrder: { type: 'defend', anchor: 0 },
       nextWaveAt: this.time + C.FIRST_WAVE_DELAY,
       bot: isBot ? { next: this.time + 1, nextOrder: this.time + 10 } : null,
     };
@@ -203,6 +204,7 @@ module.exports = {
 
     // Surviving troops defect to the conqueror and garrison the new tower; otherwise they vanish.
     let troopsTaken = 0;
+    let defectors = 0; // the squad they form for the conqueror
     for (const u of this.units.values()) {
       if (u.owner !== p.id) continue;
       if (!conquered) {
@@ -210,7 +212,7 @@ module.exports = {
         continue;
       }
       u.owner = killer.id;
-      u.sq = this.pickSquad(killer);
+      u.sq = defectors || (defectors = this.newSquad(killer));
       u.attack = null;
       u.anchor = site.id;
       u.path = [];
@@ -231,7 +233,7 @@ module.exports = {
       killer.coresDestroyed++;
       p.gold = 0;
       // Waves that were pushing on this player head home instead of wandering off.
-      for (const sq of killer.squads) if (sq.order.type === 'attack' && !this.orderValid(killer.id, sq.order)) sq.order = { type: 'defend', anchor: 0 };
+      if (killer.lastOrder.type === 'attack' && !this.orderValid(killer.id, killer.lastOrder)) killer.lastOrder = { type: 'defend', anchor: 0 };
       this.pushFeed(`${killer.name} destroyed ${p.name}'s core: +${bounty}g, ${troopsTaken} troop${troopsTaken === 1 ? '' : 's'} and a new tower`);
     } else if (leftGame) {
       this.pushFeed(`${p.name} left - their base lies in ruins`);

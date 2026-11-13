@@ -8,7 +8,7 @@ const TIPS = [
   { id: 'tower', text: 'Press <kbd>B</kbd>, then click near your border to build a <b>tower</b>. Towers claim land (land = gold) and shoot enemies.' },
   { id: 'barracks', text: 'Press <kbd>R</kbd> and click your land for a <b>barracks</b>: <b>+5 troops</b> in every wave, marching out from it.' },
   { id: 'mix', text: 'Choose your wave with the <b>+</b> buttons. <b>Scouts</b> explore the fog, <b>archers</b> shoot from range, <b>medics</b> heal.' },
-  { id: 'send', text: 'Your troops form <b>3 squads</b>. Press <kbd>1</kbd>, <kbd>2</kbd> or <kbd>3</kbd> (or click a squad card) and right-click to send <b>just that squad</b>. Keep one home to defend.' },
+  { id: 'send', text: 'Every wave marches out as a <b>squad</b> (its number floats above it). <b>Click one of its troops</b> or press its number, then right-click to send <b>just that squad</b>. Keep some home to defend.' },
   { id: 'jungle', text: 'Right-click <b>barbarian camps</b> for gold. Beat a <b>Warlord\'s Fort</b> (🔥) to power up your troops for 60s.' },
 ];
 

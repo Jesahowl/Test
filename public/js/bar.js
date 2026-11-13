@@ -3,7 +3,8 @@
 import { buildStats } from './hud.js';
 import { sendMsg } from './net.js';
 import { clearSelection } from './overlay.js';
-import { S, $, C, cam, selUnits, SQUAD_N, UNIT_KEYS } from './state.js';
+import { S, $, C, cam, selUnits, UNIT_KEYS } from './state.js';
+import { mySquads, squadPicked } from './squads.js';
 import { isMineTarget, targetName, targetPos } from './targets.js';
 import { tipDone } from './tips.js';
 import { escapeHtml } from './screens.js';
@@ -49,130 +50,154 @@ function buildBar() {
   buildStats();
   $('defend-home').onclick = () => orderAt({ k: 'c', id: S.myId }, { everyone: true });
   $('squad-all').onclick = selectAllSquads;
-  const box = $('squads');
-  for (let i = 0; i < SQUAD_N; i++) {
-    const card = document.createElement('div');
-    card.className = 'squad';
-    card.innerHTML = `<span class="num">${i + 1}</span><span class="what"></span><span class="n"></span><button class="reinf">⬇</button>`;
-    card.onclick = (e) => squadKey(i, e.shiftKey);
-    const rb = card.querySelector('.reinf');
-    rb.onclick = (e) => {
-      e.stopPropagation();
-      const on = !(S.me && S.me.squads[i].r);
-      sendMsg({ t: 'squad', op: 'reinforce', sq: i, on });
-    };
-    box.appendChild(card);
-  }
+  $('squad-merge').onclick = mergeSquads;
+  $('new-waves').onclick = toggleNewWaves;
 }
 
-// ---- squads
+// ---- squads: every wave is a squad of its own
 
-const SQUAD_NAMES = Array.from({ length: SQUAD_N }, (_, i) => `Squad ${i + 1}`);
+const findSquad = (id) => mySquads().find((q) => q.id === id);
 
-// "Squad 1", "Squads 1 & 3", "All squads"
-function squadsLabel(set = S.selSquads) {
-  if (set.size === SQUAD_N) return 'All squads';
-  const nums = [...set].sort().map((i) => i + 1);
+// "Squad 2", "Squads 1 & 3", "All squads"
+function squadsLabel() {
+  if (S.allSquads) return 'All squads';
+  const nums = mySquads().filter((q) => S.selSquads.has(q.id)).map((q) => q.num);
+  if (!nums.length) return 'All squads';
   return nums.length === 1 ? `Squad ${nums[0]}` : `Squads ${nums.slice(0, -1).join(', ')} & ${nums[nums.length - 1]}`;
 }
 
-function myTroops(sqSet = null) {
-  const out = [];
-  for (const u of S.units.values()) if (u.owner === S.myId && (!sqSet || sqSet.has(u.sq))) out.push(u);
-  return out;
+// Pick squad `id` (add: add it to / remove it from the picked squads). Picking the same squad
+// again quickly jumps the camera to it.
+let lastPick = { id: 0, at: 0 };
+function pickSquad(id, add = false) {
+  if (!S.myId || !findSquad(id)) return;
+  selUnits.clear();
+  S.selectedId = null;
+  const now = performance.now();
+  if (!add && lastPick.id === id && now - lastPick.at < 400 && !S.allSquads && S.selSquads.size === 1) {
+    centerOnSquad(id);
+  } else if (add && !S.allSquads) {
+    if (S.selSquads.has(id) && S.selSquads.size > 1) S.selSquads.delete(id);
+    else S.selSquads.add(id);
+  } else {
+    S.selSquads = new Set([id]);
+  }
+  S.allSquads = false;
+  lastPick = { id, at: now };
+  updateSquadsUi();
 }
 
-// 1/2/3 or a click on a squad card. With single troops picked: move them into that squad.
-// Otherwise pick that squad (Shift: add/remove it); pressing the same squad again finds it on the map.
-let lastKey = { i: -1, at: 0 };
-function squadKey(i, add) {
-  if (!S.myId) return;
+// 1-9: the squad with that number. With single troops picked: move them into it.
+function squadKey(num, add) {
+  const q = mySquads().find((x) => x.num === num);
   if (selUnits.size) {
-    sendMsg({ t: 'squad', op: 'assign', sq: i, ids: [...selUnits] });
-    S.pendingOrder = (n) => `${n} troop${n === 1 ? '' : 's'} moved to ${SQUAD_NAMES[i]}`;
+    if (!q) return;
+    sendMsg({ t: 'squad', op: 'assign', sq: q.id, ids: [...selUnits] });
+    S.pendingOrder = (n) => `${n} troop${n === 1 ? '' : 's'} moved to squad ${num}`;
     selUnits.clear();
     return;
   }
-  const now = performance.now();
-  if (!add && lastKey.i === i && now - lastKey.at < 400 && S.selSquads.size === 1) {
-    centerOnSquad(i);
-  } else if (add) {
-    if (S.selSquads.has(i) && S.selSquads.size > 1) S.selSquads.delete(i);
-    else S.selSquads.add(i);
-  } else {
-    S.selSquads = new Set([i]);
-  }
-  lastKey = { i, at: now };
-  S.selectedId = null;
-  updateSquadsUi();
+  if (q) pickSquad(q.id, add);
+}
+
+// N: the picked single troops become a new squad.
+function newSquadFromPicked() {
+  if (!selUnits.size) return;
+  sendMsg({ t: 'squad', op: 'assign', sq: 'new', ids: [...selUnits] });
+  S.pendingOrder = (n) => `${n} troop${n === 1 ? '' : 's'} formed a new squad`;
+  selUnits.clear();
 }
 
 function selectAllSquads() {
   selUnits.clear();
   S.selectedId = null;
-  S.selSquads = new Set(Array.from({ length: SQUAD_N }, (_, k) => k));
+  S.allSquads = true;
+  S.selSquads = new Set();
   updateSquadsUi();
 }
 
-// Click a troop: pick its squad.
-function pickSquadOf(u) {
-  selUnits.clear();
-  S.selSquads = new Set([u.sq]);
-  updateSquadsUi();
+// Click a troop: pick its squad (Shift: add its squad).
+function pickSquadOf(u, add = false) {
+  pickSquad(u.sq, add);
 }
 
-function centerOnSquad(i) {
-  const list = myTroops(new Set([i]));
-  if (!list.length) return;
-  cam.x = list.reduce((a, u) => a + u.rx, 0) / list.length;
-  cam.y = list.reduce((a, u) => a + u.ry, 0) / list.length;
+function mergeSquads() {
+  const list = mySquads().filter((q) => squadPicked(q.id));
+  if (list.length < 2) return;
+  sendMsg({ t: 'squad', op: 'merge', squads: list.map((q) => q.id) });
+  S.pendingOrder = () => `Squads ${list.map((q) => q.num).join(' + ')} merged into squad ${list[0].num}`;
+  S.selSquads = new Set([list[0].id]);
 }
 
-// A squad's standing order, for its card: [css class, text, tooltip text]
-function squadStatus(i) {
-  const o = S.me && S.me.squads ? S.me.squads[i].o : 'defend c:0';
-  const [type, key] = o.split(' ');
-  if (type === 'defend') {
-    return key.startsWith('c:') ? ['def', '🛡 Home', 'Defending your core'] : ['def', `🛡 ${targetName(key)}`, `Defending ${targetName(key)}`];
-  }
-  if (key.startsWith('p:')) return ['atk', '🚩 Holding a spot', 'Holding a spot on the map'];
-  return ['atk', `⚔ ${targetName(key)}`, `Attacking ${targetName(key)}`];
+function toggleNewWaves() {
+  if (!S.me) return;
+  sendMsg({ t: 'squad', op: 'waves', mode: S.me.newWaves === 'follow' ? 'home' : 'follow' });
+}
+
+function centerOnSquad(id) {
+  const q = findSquad(id);
+  if (!q) return;
+  cam.x = q.cx;
+  cam.y = q.cy;
+}
+
+const STATUS_ICON = { defend: '🛡', attack: '⚔', hold: '🚩' };
+
+// A squad's order for its chip: [kind, short text, long text]
+function squadStatus(q) {
+  const [type, key] = q.status.split(' ');
+  if (type === 'defend') return key.startsWith('c:') ? ['defend', 'Home', 'Guarding your core'] : ['defend', targetName(key), `Defending ${targetName(key)}`];
+  if (key.startsWith('p:')) return ['hold', 'Holding', 'Holding a spot on the map'];
+  return ['attack', targetName(key), `Attacking ${targetName(key)}`];
 }
 
 function updateSquadsUi() {
   if (!S.me || !S.me.squads) return;
-  const cards = $('squads').children;
-  const counts = new Array(SQUAD_N).fill(0);
-  const kinds = Array.from({ length: SQUAD_N }, () => ({}));
-  for (const u of myTroops()) {
-    counts[u.sq]++;
-    kinds[u.sq][u.kind] = (kinds[u.sq][u.kind] || 0) + 1;
-  }
+  const squads = mySquads();
+  // drop picks of squads that are gone
+  for (const id of S.selSquads) if (!squads.some((q) => q.id === id)) S.selSquads.delete(id);
+  if (!S.allSquads && !S.selSquads.size) S.allSquads = true;
   const moving = selUnits.size;
-  for (let i = 0; i < SQUAD_N; i++) {
-    const card = cards[i];
-    const [cls, text, long] = squadStatus(i);
-    const on = S.selSquads.has(i);
-    card.classList.toggle('on', on && !moving);
-    card.classList.toggle('drop', !!moving);
-    const what = card.querySelector('.what');
-    const label = moving ? `Move ${moving} here` : text;
-    if (what.textContent !== label) what.textContent = label;
-    what.className = `what ${moving ? '' : cls}`;
-    card.querySelector('.n').textContent = counts[i];
-    const r = !!S.me.squads[i].r;
-    const rb = card.querySelector('.reinf');
-    rb.classList.toggle('on', r);
-    rb.dataset.tip = `<span class="t">New troops: ${r ? 'on' : 'off'}</span>${r
-      ? `New waves add troops to ${SQUAD_NAMES[i]}. Click to stop, so it stays the size it is.`
-      : `${SQUAD_NAMES[i]} gets no new troops. Click to start adding them again.`}`;
-    const mix = UNIT_KEYS.filter((k) => kinds[i][k]).map((k) => `${kinds[i][k]} ${C.UNITS[k].name.toLowerCase()}${kinds[i][k] === 1 ? '' : 's'}`).join(', ') || 'no troops yet';
-    card.dataset.tip = moving
-      ? `<span class="t">Move to ${SQUAD_NAMES[i]}</span>Put the ${moving} picked troop${moving === 1 ? '' : 's'} in this squad. They take on its orders. <kbd>${i + 1}</kbd>`
-      : `<span class="t">${SQUAD_NAMES[i]} <kbd>${i + 1}</kbd></span>${escapeHtml(long)} · ${mix}.<br><span class="m">Click to pick it, then right-click a target. <kbd>Shift</kbd>-click to pick several. Press <kbd>${i + 1}</kbd> twice to find it.</span>`;
+  const box = $('squads');
+  const key = squads.map((q) => `${q.id}:${q.num}:${q.units.length}:${q.status}:${squadPicked(q.id) ? 1 : 0}`).join('|') + `|${moving}|${S.allSquads}`;
+  if (box.dataset.key !== key) {
+    box.dataset.key = key;
+    box.innerHTML = squads.length ? squads.map((q) => {
+      const [kind] = squadStatus(q);
+      const on = !moving && (S.allSquads || squadPicked(q.id));
+      return `<button class="chip ${kind} ${on ? 'on' : ''} ${squadPicked(q.id) ? 'picked' : ''} ${moving ? 'drop' : ''}" data-id="${q.id}">`
+        + `<span class="num">${q.num}</span><span class="ic">${STATUS_ICON[kind]}</span><span class="n">${q.units.length}</span></button>`;
+    }).join('') : '<div class="none">Your first wave forms squad 1</div>';
+    for (const el of box.querySelectorAll('.chip')) {
+      const id = Number(el.dataset.id);
+      const q = squads.find((x) => x.id === id);
+      const [, , long] = squadStatus(q);
+      const mix = UNIT_KEYS.filter((k) => q.kinds[k]).map((k) => `${q.kinds[k]} ${C.UNITS[k].name.toLowerCase()}${q.kinds[k] === 1 ? '' : 's'}`).join(', ');
+      el.dataset.tip = moving
+        ? `<span class="t">Move to squad ${q.num}</span>Put the ${moving} picked troop${moving === 1 ? '' : 's'} in this squad. They take on its orders.${q.num <= 9 ? ` <kbd>${q.num}</kbd>` : ''}`
+        : `<span class="t">Squad ${q.num}${q.num <= 9 ? ` <kbd>${q.num}</kbd>` : ''}</span>${escapeHtml(long)} · ${mix}.<br><span class="m">Click to pick it (or click one of its troops), then right-click a target. <kbd>Shift</kbd>-click to pick several. Click again to find it.</span>`;
+      el.onclick = (e) => {
+        if (moving) {
+          sendMsg({ t: 'squad', op: 'assign', sq: id, ids: [...selUnits] });
+          S.pendingOrder = (n) => `${n} troop${n === 1 ? '' : 's'} moved to squad ${q.num}`;
+          selUnits.clear();
+          return;
+        }
+        pickSquad(id, e.shiftKey);
+      };
+    }
   }
-  $('squad-all').classList.toggle('on', S.selSquads.size === SQUAD_N && !moving);
-  const hint = moving ? `· moving ${moving} troop${moving === 1 ? '' : 's'}` : '';
+  const picked = squads.filter((q) => squadPicked(q.id)).length;
+  $('squad-all').classList.toggle('on', S.allSquads && !moving);
+  $('squad-merge').disabled = picked < 2;
+  const follow = S.me.newWaves === 'follow';
+  const nw = $('new-waves');
+  nw.classList.toggle('on', follow);
+  nw.innerHTML = follow ? '⚔ New squads follow your last order <kbd>F</kbd>' : '🛡 New squads guard home <kbd>F</kbd>';
+  nw.dataset.tip = `<span class="t">New squads</span>Every wave marches out as a new squad. ${follow
+    ? `It follows your <b>last order</b> (now: ${escapeHtml(targetName(S.me.follow))}).`
+    : 'It <b>guards your core</b> until you send it somewhere.'}<br><span class="m">Click or press <kbd>F</kbd> to switch.</span>`;
+  const hint = moving ? `· moving ${moving} troop${moving === 1 ? '' : 's'}` : `· ${squads.length}`;
   if ($('squad-hint').textContent !== hint) $('squad-hint').textContent = hint;
 }
 
@@ -181,13 +206,15 @@ function toggleBuild(kind) {
   clearSelection();
 }
 
-// Order troops at a target: the single troops picked, else the picked squads.
-// opts.everyone: every squad (Defend home / H).
+// Order troops at a target: the single troops picked (they become a squad of their own), else the
+// picked squads, else every squad. opts.everyone: every squad (Defend home / H).
 function orderAt(tg, opts = {}) {
   if (!S.myId || !tg) return;
   const ids = selUnits.size && !opts.everyone ? [...selUnits] : null;
-  const squads = opts.everyone ? null : [...S.selSquads];
+  const everyone = opts.everyone || S.allSquads;
+  const squads = everyone ? null : [...S.selSquads];
   sendMsg({ t: 'order', ids, target: tg, squads });
+  if (ids) selUnits.clear();
   if (tg.k === 'p') S.effects.push({ k: 'ping', x: (tg.id % C.MAP_W) + 0.5, y: Math.floor(tg.id / C.MAP_W) + 0.5, born: performance.now() });
   else {
     const pos = targetPos(`${tg.k}:${tg.id}`);
@@ -195,16 +222,11 @@ function orderAt(tg, opts = {}) {
   }
   if (!isMineTarget(tg)) tipDone('attack');
   if (tg.k === 'j') tipDone('jungle');
-  if (!ids && squads && squads.length < SQUAD_N) tipDone('send');
+  if (!ids && !everyone) tipDone('send');
   const verb = isMineTarget(tg) ? 'defending' : tg.k === 'j' ? 'clearing' : tg.k === 'u' ? 'hunting' : tg.k === 'p' ? 'holding a spot' : 'attacking';
   const what = tg.k === 'p' ? '' : ` ${targetName(`${tg.k}:${tg.id}`)}`;
-  const who = ids ? null : opts.everyone ? 'All squads' : squadsLabel();
-  S.pendingOrder = (n) => {
-    const troopsTxt = `${n} troop${n === 1 ? '' : 's'}`;
-    if (ids) return `${troopsTxt}: ${verb}${what}`;
-    const follow = tg.k === 'u' ? '' : ' · new troops follow';
-    return `${who} (${troopsTxt}): ${verb}${what}${follow}`;
-  };
+  const who = ids ? 'New squad' : opts.everyone ? 'All squads' : squadsLabel();
+  S.pendingOrder = (n) => `${who} (${n} troop${n === 1 ? '' : 's'}): ${verb}${what}`;
 }
 
-export { buildBar, orderAt, pickSquadOf, selectAllSquads, squadKey, squadsLabel, toggleBuild, updateSquadsUi };
+export { buildBar, newSquadFromPicked, orderAt, pickSquadOf, selectAllSquads, squadKey, squadsLabel, toggleBuild, toggleNewWaves, updateSquadsUi };

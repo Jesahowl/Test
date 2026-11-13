@@ -1,6 +1,7 @@
 // Overlays: build preview, leap zone, order lines and markers, and the minimap.
 
 import { squadsLabel } from './bar.js';
+import { mySquads, squadPicked } from './squads.js';
 import { drawShape, label } from './render.js';
 import { S, C, canvas, colorOf, ctx, FOG_PAD, fogSoft, grid, mctx, mini, mouse, players, scale, selUnits, terr, terrCanvas, toScreen, toWorld } from './state.js';
 import { campVerb, isMineTarget, orderTargetAt, targetName, targetPos } from './targets.js';
@@ -126,6 +127,37 @@ function drawTargetMarker(pos, attack, strong, size = 1) {
   ctx.restore();
 }
 
+// A squad's number in a little flag above the group, so you can see and click squads at a glance.
+// Gold when it's one of the squads your orders go to.
+function drawSquadTag(q, s) {
+  const [x, y0] = toScreen(q.cx, q.top);
+  const y = y0 - s * 0.75;
+  const picked = squadPicked(q.id) && !selUnits.size;
+  const fs = Math.max(10, Math.min(15, Math.round(s * 0.36)));
+  ctx.font = `800 ${fs}px system-ui, sans-serif`;
+  const txt = String(q.num);
+  const w = Math.max(fs * 1.35, ctx.measureText(txt).width + fs * 0.7);
+  const h = fs * 1.3;
+  ctx.fillStyle = picked ? '#ffd54f' : 'rgba(13, 17, 23, 0.85)';
+  ctx.strokeStyle = picked ? '#fff3c4' : 'rgba(230, 237, 243, 0.55)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(x - w / 2, y - h / 2, w, h, h * 0.3);
+  ctx.fill();
+  ctx.stroke();
+  // a little pointer down to the squad
+  ctx.beginPath();
+  ctx.moveTo(x - fs * 0.25, y + h / 2);
+  ctx.lineTo(x, y + h / 2 + fs * 0.3);
+  ctx.lineTo(x + fs * 0.25, y + h / 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = picked ? '#1a1505' : '#e6edf3';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(txt, x, y + 0.5);
+}
+
 function drawOverlay() {
   const s = scale();
   if (S.selectedId) {
@@ -136,24 +168,25 @@ function drawOverlay() {
     }
   }
 
-  // Each squad's standing order, tagged with the squad numbers going there.
+  // Where my squads are headed (tagged with their numbers), and each squad's number over it.
   if (S.myId && S.me && S.me.squads) {
+    const squads = mySquads();
     const byTarget = new Map();
-    S.me.squads.forEach((sq, i) => {
-      const [type, key] = sq.o.split(' ');
-      const k = `${type} ${key}`;
-      if (!byTarget.has(k)) byTarget.set(k, { type, key, nums: [] });
-      byTarget.get(k).nums.push(i);
-    });
-    for (const { type, key, nums } of byTarget.values()) {
+    for (const q of squads) {
+      if (!byTarget.has(q.status)) byTarget.set(q.status, []);
+      byTarget.get(q.status).push(q);
+    }
+    for (const [status, list] of byTarget) {
+      const [type, key] = status.split(' ');
       if (type === 'defend' && key === `c:${S.myId}`) continue; // home: nothing to point out
       const pos = targetPos(key);
       if (!pos) continue;
-      const picked = nums.some((i) => S.selSquads.has(i)) && !selUnits.size;
+      const picked = list.some((q) => squadPicked(q.id)) && !selUnits.size;
       drawTargetMarker(pos, type === 'attack', picked);
       const [mx, my] = toScreen(pos.x, pos.y);
-      label(nums.map((i) => i + 1).join(' '), mx + s * 1.2, my + s * 1.2, 11, picked ? '#ffd54f' : 'rgba(230,237,243,0.7)');
+      label(list.map((q) => q.num).join(' '), mx + s * 1.2, my + s * 1.2, 11, picked ? '#ffd54f' : 'rgba(230,237,243,0.7)');
     }
+    if (s >= 12) for (const q of squads) drawSquadTag(q, s);
   }
 
   // Selected troops: range and a line to where they're headed.
@@ -336,9 +369,9 @@ function drawMinimap() {
       mctx.stroke();
     }
   }
-  for (const sq of (S.me && S.me.squads) || []) {
-    const [type, key] = sq.o.split(' ');
-    const pos = type === 'attack' && targetPos(key);
+  const attacked = new Set(S.me && S.me.squads ? mySquads().map((q) => q.status).filter((st) => st.startsWith('attack')) : []);
+  for (const st of attacked) {
+    const pos = targetPos(st.split(' ')[1]);
     if (pos) {
       mctx.strokeStyle = '#ff5252';
       mctx.lineWidth = 1.5;

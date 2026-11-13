@@ -205,18 +205,20 @@ class Room {
         return null;
       case 'order': {
         const target = msg.target && typeof msg.target === 'object' ? { k: String(msg.target.k), id: msg.target.id } : null;
-        const squads = Array.isArray(msg.squads) ? msg.squads.slice(0, 8) : null;
+        const squads = Array.isArray(msg.squads) ? msg.squads.slice(0, 64).map(Number) : null;
         const err = game.order(client.pid, Array.isArray(msg.ids) ? msg.ids : null, target, squads);
         if (!err) send(client, { t: 'ordered', n: game.lastOrderCount });
         return err;
       }
       case 'squad':
-        if (msg.op === 'assign') {
-          const err = game.squadAssign(client.pid, msg.ids, msg.sq);
-          if (!err) send(client, { t: 'ordered', n: game.lastOrderCount, sq: msg.sq });
+        if (msg.op === 'assign' || msg.op === 'merge') {
+          const err = msg.op === 'assign'
+            ? game.squadAssign(client.pid, msg.ids, msg.sq === 'new' ? 'new' : Number(msg.sq))
+            : game.squadMerge(client.pid, Array.isArray(msg.squads) ? msg.squads.slice(0, 64).map(Number) : null);
+          if (!err) send(client, { t: 'ordered', n: game.lastOrderCount });
           return err;
         }
-        if (msg.op === 'reinforce') return game.squadReinforce(client.pid, msg.sq, !!msg.on);
+        if (msg.op === 'waves') return game.setNewWaves(client.pid, msg.mode);
         return null;
       default:
         return null;

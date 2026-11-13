@@ -61,8 +61,8 @@ function updateHud() {
 
   const who = selUnits.size ? `${selUnits.size} picked troop${selUnits.size === 1 ? '' : 's'}` : squadsLabel();
   const orderHtml = selUnits.size
-    ? `<span class="def">${who}</span><span class="hint">press 1–3 to move them to a squad, or right-click to send them</span>`
-    : `<span class="def">🎯 ${who}</span><span class="hint">right-click a target to send ${S.selSquads.size === 1 ? 'it' : 'them'}${S.selSquads.size < C.SQUADS ? ' · Q picks all' : ' · 1–3 picks one squad'}</span>`;
+    ? `<span class="def">${who}</span><span class="hint">a number moves them to that squad · N makes a new squad · right-click sends them</span>`
+    : `<span class="def">🎯 ${who}</span><span class="hint">right-click a target to send ${!S.allSquads && S.selSquads.size === 1 ? 'it' : 'them'}${S.allSquads ? ' · click a troop to pick its squad' : ' · Q for all squads'}</span>`;
   if ($('order-info').dataset.html !== orderHtml) {
     $('order-info').dataset.html = orderHtml;
     $('order-info').innerHTML = orderHtml;
@@ -201,7 +201,7 @@ function updateSelectionPanel(gold) {
       panel.innerHTML = `<h4><img src="${iconURL(first)}" alt="">${list.length} troop${list.length === 1 ? "" : "s"} picked</h4>
         <div class="muted">${Object.entries(counts).map(([k, c]) => `${c}× ${C.UNITS[k].name}`).join(' · ')}</div>
         <div id="sel-info" class="stats"></div>
-        <div class="muted">Press <kbd>1</kbd>–<kbd>3</kbd> (or click a squad) to move them into that squad, or right-click to send just these. <kbd>Esc</kbd> to cancel.</div>`;
+        <div class="muted">Press a squad's number (or click its chip) to move them into it, <kbd>N</kbd> to make them a new squad, or right-click to send just these as a new squad. <kbd>Esc</kbd> to cancel.</div>`;
     }
     if (list.length === 1) {
       const u = list[0];

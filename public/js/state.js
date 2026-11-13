@@ -134,9 +134,9 @@ S.specTarget = 0;
 
 S.specFollow = true;
 
-// Squads: which ones right-click orders go to (all of them until the player picks).
-const SQUAD_N = C.SQUADS;
-S.selSquads = new Set(Array.from({ length: SQUAD_N }, (_, i) => i));
+// Squads: right-click orders go to every squad (S.allSquads) or to the squads picked (ids).
+S.allSquads = true;
+S.selSquads = new Set();
 
 S.pendingOrder = null; // toast text waiting for the server to say how many troops moved
 const keys = new Set();
@@ -153,4 +153,4 @@ const hueOf = (pid) => (players.get(pid) || { hue: 0 }).hue;
 
 const colorOf = (pid, l = 55, a = 1) => (pid ? `hsla(${hueOf(pid)}, 75%, ${l}%, ${a})` : `rgba(140, 120, 90, ${a})`);
 
-export { FOG_PAD, FOG_RES, fogSoft, fogSoftCtx, $, C, CAMP_KEYS, CREEP_KEYS, KIND_KEYS, NTILES, SMOOTH_PASSES, SQUAD_N, SMOOTH_WINDOW, TPX, UNIT_KEYS, Vision, cam, canvas, colorOf, ctx, explored, feed, fogCanvas, fogCtx, fogImg, grid, keys, mctx, mini, mouse, players, scale, selUnits, tctx, terr, terrCanvas, toScreen, toWorld, vis, withContext };
+export { FOG_PAD, FOG_RES, fogSoft, fogSoftCtx, $, C, CAMP_KEYS, CREEP_KEYS, KIND_KEYS, NTILES, SMOOTH_PASSES, SMOOTH_WINDOW, TPX, UNIT_KEYS, Vision, cam, canvas, colorOf, ctx, explored, feed, fogCanvas, fogCtx, fogImg, grid, keys, mctx, mini, mouse, players, scale, selUnits, tctx, terr, terrCanvas, toScreen, toWorld, vis, withContext };

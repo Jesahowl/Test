@@ -2,7 +2,8 @@
 
 import { interpPos, renderTime } from './net.js';
 import { drawShape, hpBar, onScreen, tokenPath } from './render.js';
-import { S, C, colorOf, ctx, grid, players, scale, selUnits, SQUAD_N, toScreen } from './state.js';
+import { S, C, colorOf, ctx, grid, players, scale, selUnits, toScreen } from './state.js';
+import { squadPicked } from './squads.js';
 
 // Is this spot on top of a tower, barracks or core (their drawings are about 2 tiles wide)?
 function overBuilding(wx, wy) {
@@ -32,7 +33,7 @@ function drawUnits(dt) {
     if (onBuilding) ctx.globalAlpha = 0.6;
     // picked single troops: white ring; troops of the picked squads (when not all): gold ring
     const picked = selUnits.has(u.id);
-    const inSquad = mine && !selUnits.size && S.selSquads.size < SQUAD_N && S.selSquads.has(u.sq);
+    const inSquad = mine && !selUnits.size && squadPicked(u.sq);
     if (picked || inSquad) {
       ctx.strokeStyle = picked ? '#fff' : 'rgba(255, 213, 79, 0.85)';
       ctx.lineWidth = 2;
@@ -67,20 +68,6 @@ function drawUnits(dt) {
     }
     hpBar(x, y - r * 1.6, s * 0.7, u.hp / u.maxHp);
     ctx.globalAlpha = 1;
-    // my troops carry their squad number when zoomed in enough to read it
-    if (mine && s > 30) {
-      const fx = x + r * 1.05;
-      const fy = y - r * 0.85;
-      ctx.fillStyle = 'rgba(13, 17, 23, 0.85)';
-      ctx.beginPath();
-      ctx.arc(fx, fy, Math.max(5.5, r * 0.42), 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = S.selSquads.has(u.sq) && S.selSquads.size < SQUAD_N ? '#ffd54f' : '#e6edf3';
-      ctx.font = `800 ${Math.round(Math.max(8, r * 0.6))}px system-ui, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(String(u.sq + 1), fx, fy + 0.5);
-    }
   }
 }
 

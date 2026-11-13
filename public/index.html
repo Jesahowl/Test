@@ -50,9 +50,11 @@
           <h5>Squads <span id="squad-hint"></span></h5>
           <div id="squads"></div>
           <div class="squad-btns">
-            <button id="squad-all" class="secondary-btn" data-tip="Select every squad <kbd>Q</kbd>">All <kbd>Q</kbd></button>
-            <button id="defend-home" class="secondary-btn" data-tip="Every squad goes home to defend your core <kbd>H</kbd>">🛡 Home <kbd>H</kbd></button>
+            <button id="squad-all" data-tip="Orders go to every squad <kbd>Q</kbd>">All <kbd>Q</kbd></button>
+            <button id="squad-merge" data-tip="Merge the picked squads into one <kbd>M</kbd>">Merge <kbd>M</kbd></button>
+            <button id="defend-home" data-tip="Every squad goes home to guard your core <kbd>H</kbd>">🛡 Home <kbd>H</kbd></button>
           </div>
+          <button id="new-waves" class="toggle"></button>
           <div id="alive"></div>
         </section>
       </div>
@@ -69,17 +71,19 @@
       <h2>How to play</h2>
       <div class="how-grid">
         <div><b>🏰 Waves</b>Every 20s your core sends <b>5 troops</b>, plus 5 from every <b>barracks</b>. Choose the mix in the wave panel. It's free; gold buys levels.</div>
-        <div><b>🎯 Squads</b>Your troops form <b>3 squads</b>. Pick one (<kbd>1</kbd>–<kbd>3</kbd>), then <b>right-click</b> a target: that squad goes, and its new troops follow.</div>
+        <div><b>🎯 Squads</b>Every wave marches out as a <b>squad</b> that sticks together. Click one of its troops (or press its number), then <b>right-click</b> a target.</div>
         <div><b>🗺 Land</b><b>Towers</b> claim land and shoot. More land means more gold. Explore the <b>fog</b> with scouts.</div>
         <div><b>🏆 Win</b>Take enemy towers, break their core, and be the <b>last core standing</b>. Beating a barbarian Warlord powers up your troops.</div>
       </div>
       <h3>Controls</h3>
       <div class="keys">
-        <div><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><span>Pick a squad (<kbd>Shift</kbd> adds, press twice to find it)</span></div>
-        <div><kbd>Q</kbd><span>Pick all squads</span></div>
+        <div><kbd>Left-click</kbd> a troop<span>Pick its squad (<kbd>Shift</kbd> adds another squad)</span></div>
+        <div><kbd>1</kbd>–<kbd>9</kbd><span>Pick that squad (press twice to find it)</span></div>
+        <div><kbd>Q</kbd><span>Orders go to all squads</span></div>
         <div><kbd>Right-click</kbd><span>Send the picked squads at a target, or to hold a spot</span></div>
-        <div><kbd>Left-click</kbd> a troop<span>Pick its squad (or select a building)</span></div>
-        <div><kbd>Shift</kbd>+click troops<span>Pick single troops; then <kbd>1</kbd>–<kbd>3</kbd> moves them to that squad</span></div>
+        <div><kbd>M</kbd><span>Merge the picked squads</span></div>
+        <div><kbd>Ctrl</kbd>+click troops<span>Pick single troops; then a number moves them, <kbd>N</kbd> makes a new squad</span></div>
+        <div><kbd>F</kbd><span>New squads: guard home / follow your last order</span></div>
         <div><kbd>H</kbd><span>Every squad home</span></div>
         <div><kbd>B</kbd><span>Build a tower</span></div>
         <div><kbd>R</kbd><span>Build a barracks</span></div>
@@ -116,7 +120,7 @@
       <div id="conn"></div>
       <div class="how-grid">
         <div><b>🏰 Waves</b>Your core sends troops every 20s. Build <b>barracks</b> for bigger waves.</div>
-        <div><b>🎯 Squads</b>Pick a squad, then <b>right-click</b> a target to send it.</div>
+        <div><b>🎯 Squads</b>Each wave is a squad. Click it, then <b>right-click</b> a target.</div>
         <div><b>🗺 Land</b><b>Towers</b> claim land and shoot. Land means gold. Scout the <b>fog</b>.</div>
         <div><b>🏆 Win</b>Be the <b>last core standing</b>. Rounds last about 15–22 minutes.</div>
       </div>

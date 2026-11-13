@@ -15,8 +15,8 @@ test('a new player gets a core, gold, land and a starting army plan', () => {
   assert.strictEqual(g.grid[g.idx(p.core.x, p.core.y)], -p.id);
   assert.deepStrictEqual(p.army, { soldier: 0, scout: 0, medic: 0, archer: 0 });
   assert.deepStrictEqual(g.waveList(p), ['soldier', 'soldier', 'soldier', 'soldier', 'soldier'], '5 soldiers per wave');
-  assert.strictEqual(p.squads.length, C.SQUADS);
-  assert.ok(p.squads.every((sq) => sq.reinforce && sq.order.type === 'defend' && !sq.order.anchor), 'every squad defends home');
+  assert.strictEqual(p.squadNum.size, 0, 'no squads until the first wave');
+  assert.strictEqual(p.newWaves, 'home');
 });
 
 test('names are sanitised', () => {

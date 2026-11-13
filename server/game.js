@@ -191,13 +191,10 @@ class Game {
 
   // Personal state for one player (sent only to them).
   personal(p) {
-    // Each squad: its order as "defend|attack target-key", and whether new waves add to it.
-    const squads = p.squads.map((sq) => ({
-      o: sq.order.type === 'defend'
-        ? `defend ${sq.order.anchor ? `t:${sq.order.anchor}` : `c:${p.id}`}`
-        : `attack ${sq.order.target.k}:${sq.order.target.id}`,
-      r: sq.reinforce ? 1 : 0,
-    }));
+    // My squads as [id, number] (their troops carry the id), and what new squads do.
+    const squads = [...p.squadNum].sort((x, y) => x[1] - y[1]);
+    const lo = p.lastOrder;
+    const follow = lo.type === 'defend' ? (lo.anchor ? `t:${lo.anchor}` : `c:${p.id}`) : `${lo.target.k}:${lo.target.id}`;
     return {
       id: p.id,
       gold: Math.floor(p.gold),
@@ -206,6 +203,8 @@ class Game {
       army: p.army,
       levels: p.levels,
       squads,
+      newWaves: p.newWaves,
+      follow,
     };
   }
 }

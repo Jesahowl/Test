@@ -1,11 +1,11 @@
 // Input: mouse, keyboard, minimap and help window.
 
-import { orderAt, pickSquadOf, selectAllSquads, squadKey, toggleBuild } from './bar.js';
+import { newSquadFromPicked, orderAt, pickSquadOf, selectAllSquads, squadKey, toggleBuild, toggleNewWaves } from './bar.js';
 import { sendMsg } from './net.js';
 import { clearSelection } from './overlay.js';
 import { resize } from './render.js';
 import { join, specNext, startSpectating } from './screens.js';
-import { S, $, C, cam, canvas, grid, keys, mini, mouse, players, scale, selUnits, SQUAD_N, toWorld } from './state.js';
+import { S, $, C, cam, canvas, grid, keys, mini, mouse, players, scale, selUnits, toWorld } from './state.js';
 import { orderTargetAt } from './targets.js';
 import { hideTip } from './ui.js';
 
@@ -63,11 +63,12 @@ canvas.addEventListener('mousedown', (e) => {
   }
   if (hit) {
     S.selectedId = null;
-    if (e.shiftKey) {
+    if (e.ctrlKey || e.metaKey || e.altKey) {
+      // pick single troops (to split them off or move them to another squad)
       if (selUnits.has(hit.id)) selUnits.delete(hit.id);
       else selUnits.add(hit.id);
     } else {
-      pickSquadOf(hit);
+      pickSquadOf(hit, e.shiftKey);
     }
     return;
   }
@@ -152,6 +153,9 @@ window.addEventListener('keydown', (e) => {
     selectAllSquads();
   }
   if (k === 'h') orderAt({ k: 'c', id: S.myId }, { everyone: true });
+  if (k === 'f') toggleNewWaves();
+  if (k === 'n') newSquadFromPicked();
+  if (k === 'm') $('squad-merge').click();
   if (k === ' ') {
     e.preventDefault();
     const p = players.get(S.myId);
@@ -160,10 +164,9 @@ window.addEventListener('keydown', (e) => {
       cam.y = p.y + 0.5;
     }
   }
-  // 1-3: pick a squad (Shift adds; with single troops picked, move them into it).
-  const m = /^Digit(\d)$/.exec(e.code);
-  const idx = m ? Number(m[1]) - 1 : -1;
-  if (idx >= 0 && idx < SQUAD_N) squadKey(idx, e.shiftKey);
+  // 1-9: pick the squad with that number (Shift adds; with single troops picked, move them in).
+  const m = /^Digit([1-9])$/.exec(e.code);
+  if (m) squadKey(Number(m[1]), e.shiftKey);
   if (k === 'u' && S.selectedId) sendMsg({ t: 'upgrade', id: S.selectedId });
   if ((k === 'delete' || k === 'backspace') && S.selectedId) {
     const t = S.towers.get(S.selectedId);

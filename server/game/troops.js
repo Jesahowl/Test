@@ -311,7 +311,59 @@ module.exports = {
     return false;
   },
 
+  // Where each squad is (centre of its troops, not counting scouts off exploring), how far its
+  // troops may spread, and its slowest troop's speed.
+  squadGroups() {
+    const groups = new Map();
+    for (const u of this.units.values()) {
+      const def = C.UNITS[u.kind];
+      if (def.scout && !u.attack) continue;
+      let g = groups.get(u.sq);
+      if (!g) groups.set(u.sq, (g = { x: 0, y: 0, n: 0, speed: Infinity }));
+      g.x += u.x;
+      g.y += u.y;
+      g.n++;
+      g.speed = Math.min(g.speed, def.speed);
+    }
+    for (const g of groups.values()) {
+      g.x /= g.n;
+      g.y /= g.n;
+      g.r = C.SQUAD_SPREAD + 0.3 * Math.sqrt(g.n);
+    }
+    return groups;
+  },
+
+  // Marching speed for troop u heading to (gx, gy) so its squad stays together: the squad's pace,
+  // 0 (wait) when it has run ahead of the squad, or full speed to catch up when it's behind.
+  squadPace(u, gx, gy, speed) {
+    const g = this.groups && this.groups.get(u.sq);
+    if (!g || g.n < 2) return speed;
+    if (dist(u.x, u.y, g.x, g.y) > g.r) {
+      const ahead = dist(u.x, u.y, gx, gy) + 0.3 < dist(g.x, g.y, gx, gy);
+      if (ahead) {
+        if (!u.waitSince) u.waitSince = this.time;
+        if (this.time - u.waitSince < C.SQUAD_WAIT_MAX) return 0;
+      }
+      u.waitSince = 0;
+      return speed;
+    }
+    u.waitSince = 0;
+    return Math.min(speed, g.speed);
+  },
+
+  // Where a squad stands guard: its own spot around the core (spread by squad number), or at the
+  // tower it defends.
+  squadPost(u, a) {
+    if (u.anchor) return { x: a.x, y: a.y };
+    const p = this.players.get(u.owner);
+    const num = (p && p.squadNum.get(u.sq)) || 1;
+    const ang = num * 2.39996; // golden angle: squads fan out evenly around the core
+    const r = Math.min(a.leash * 0.6, 2.6);
+    return { x: a.x + Math.cos(ang) * r, y: a.y + Math.sin(ang) * r };
+  },
+
   updateUnits(dt) {
+    this.groups = this.squadGroups();
     for (const u of this.units.values()) {
       if (u.hp <= 0 || !this.units.has(u.id)) continue;
       const def = C.UNITS[u.kind];
@@ -333,8 +385,10 @@ module.exports = {
 
       if (def.scout) {
         // Scouts never fight. With an attack order they run to the target; otherwise they explore.
-        if (tgt) this.marchTo(u, tgt.goal, tgt.x, tgt.y, 2, speed, dt);
-        else this.scoutTick(u, speed, dt);
+        if (tgt) {
+          const pace = this.squadPace(u, tgt.x, tgt.y, speed);
+          if (pace > 0) this.marchTo(u, tgt.goal, tgt.x, tgt.y, 2, pace, dt);
+        } else this.scoutTick(u, speed, dt);
         continue;
       }
 
@@ -400,7 +454,8 @@ module.exports = {
           }
         }
         const stop = tgt.struct ? Math.max(0.6, s.range * 0.85) : tgt.hold ? 1.2 : 1;
-        this.marchTo(u, tgt.goal, tgt.x, tgt.y, stop, speed, dt);
+        const pace = this.squadPace(u, tgt.x, tgt.y, speed);
+        if (pace > 0) this.marchTo(u, tgt.goal, tgt.x, tgt.y, stop, pace, dt);
         continue;
       }
 
@@ -412,7 +467,8 @@ module.exports = {
         // Out in the field (back from an attack, or land lost): march home.
         u.path = [];
         u.dest = null;
-        this.marchTo(u, a.goal, a.x, a.y, a.leash * 0.5, speed, dt);
+        const pace = this.squadPace(u, a.x, a.y, speed);
+        if (pace > 0) this.marchTo(u, a.goal, a.x, a.y, a.leash * 0.5, pace, dt);
         continue;
       }
 
@@ -450,15 +506,19 @@ module.exports = {
         if (this.moveUnit(u, dt, speed)) u.idleUntil = this.time + 0.8 + this.rand() * 2;
         continue;
       }
-      if (dist(u.x, u.y, a.x, a.y) > a.leash + 0.75 || this.terr[this.idx(tx, ty)] !== u.owner) {
-        this.planUnit(u, a.x, a.y);
+      // Stand guard with the squad, milling about its post.
+      const post = this.squadPost(u, a);
+      const g = this.groups.get(u.sq);
+      const spread = 0.8 + 0.18 * Math.sqrt(g ? g.n : 1);
+      if (dist(u.x, u.y, post.x, post.y) > spread + 0.75 || this.terr[this.idx(tx, ty)] !== u.owner) {
+        this.planUnit(u, post.x, post.y);
         continue;
       }
       if (this.time < u.idleUntil) continue;
       const ang = this.rand() * Math.PI * 2;
-      const r = a.leash * Math.sqrt(this.rand());
-      this.planUnit(u, a.x + Math.cos(ang) * r, a.y + Math.sin(ang) * r);
-      u.idleUntil = this.time + 0.5;
+      const r = spread * Math.sqrt(this.rand());
+      this.planUnit(u, post.x + Math.cos(ang) * r, post.y + Math.sin(ang) * r);
+      u.idleUntil = this.time + 0.8 + this.rand() * 1.5;
     }
   },
 

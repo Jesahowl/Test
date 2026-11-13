@@ -51,7 +51,7 @@ test('each barracks adds 5 troops to every wave, spawning at the barracks', () =
   const near = (t) => wave.filter((u) => Math.hypot(u.x - t.x - 0.5, u.y - t.y - 0.5) < 1.6).length;
   assert.strictEqual(near(b1), 5);
   assert.strictEqual(near(b2), 5);
-  assert.ok(wave.filter((u) => u.anchor === b1.id).length === 5, 'barracks troops guard their barracks');
+  assert.strictEqual(new Set(wave.map((u) => u.sq)).size, 1, 'the whole wave is one squad');
   // rules: own land only, a maximum count, no upgrades, and they don't shoot
   const out = edgeTile(g, a, 0, 1, 1);
   assert.match(g.build(a.id, out.x, out.y, 'barracks'), /own land/);
@@ -138,24 +138,38 @@ test('fog of war: you see your land and what your core, buildings and troops can
   assert.ok(g.sees(a, u.x, u.y + 2), 'troops see around them');
 });
 
-test('orders: everyone plus future waves, or only selected troops', () => {
+test('orders: every squad, or only picked troops (which split off as a squad of their own)', () => {
   const { g, a, b } = duel(4);
   const t = outpost(g, b);
-  const squad = troops(g, a, 'soldier', 4, a.core.x + 0.5, a.core.y + 2);
+  a.nextWaveAt = g.time;
+  g.update(0.05);
+  const squad = mine(g, a);
+  const sq = squad[0].sq;
+  assert.ok(squad.every((u) => u.sq === sq));
   assert.strictEqual(g.order(a.id, [squad[0].id], { k: 't', id: t.id }), null);
   assert.deepStrictEqual(squad[0].attack, { k: 't', id: t.id, owner: b.id });
   assert.strictEqual(squad[1].attack, null);
-  assert.strictEqual(a.squads[0].order.type, 'defend', 'selected-troop orders leave the squads\' orders alone');
+  assert.notStrictEqual(squad[0].sq, sq, 'a picked troop splits off into a new squad');
+  assert.strictEqual(a.squadNum.size, 2);
   assert.strictEqual(g.order(a.id, null, { k: 'c', id: b.id }), null);
   assert.ok(squad.every((u) => u.attack && u.attack.k === 'c'));
+  // new squads guard home by default...
   a.nextWaveAt = g.time;
   g.update(0.05);
-  assert.ok(mine(g, a).every((u) => u.attack && u.attack.k === 'c'), 'new troops follow their squad\'s order');
+  let fresh = mine(g, a).filter((u) => !squad.includes(u));
+  assert.ok(fresh.length && fresh.every((u) => !u.attack), 'new squads guard home');
+  // ...or follow your last order
+  assert.strictEqual(g.setNewWaves(a.id, 'follow'), null);
+  a.nextWaveAt = g.time;
+  g.update(0.05);
+  fresh = mine(g, a).filter((u) => !squad.includes(u) && !fresh.includes(u));
+  assert.ok(fresh.length && fresh.every((u) => u.attack && u.attack.k === 'c'), 'new squads follow the last order');
   assert.strictEqual(g.order(a.id, null, { k: 'c', id: a.id }), null);
   assert.ok(mine(g, a).every((u) => !u.attack && u.anchor === 0));
   assert.match(g.order(a.id, null, { k: 't', id: 999 }), /No such/);
   assert.match(g.order(a.id, null, { k: 'x', id: 1 }), /Invalid/);
   assert.match(g.order(b.id, [squad[0].id], { k: 'c', id: a.id }), /No troops/);
+  assert.match(g.setNewWaves(a.id, 'sometimes'), /Invalid/);
 });
 
 test('an attack marches across the map and takes an undefended tower', () => {
@@ -190,7 +204,7 @@ test('destroying a tower claims it for the attacker', () => {
     g.update(0.05);
     assert.ok(a.territory > landBefore, 'its land comes with it');
     for (const u of squad.filter((v) => g.units.has(v.id))) assert.strictEqual(u.anchor, t.id, 'the attackers garrison it');
-    assert.deepStrictEqual(a.squads[0].order, { type: 'attack', target: { k: 'c', id: b.id } }, 'new waves push on to the core');
+    assert.deepStrictEqual(a.lastOrder, { type: 'attack', target: { k: 'c', id: b.id } }, 'the remembered order pushes on to the core');
   }
 });
 
@@ -271,9 +285,9 @@ test('the standing order rolls on to the next structure when its tower is taken'
   const t2 = outpost(g, b, 0, 1);
   g.order(a.id, null, { k: 't', id: t1.id });
   g.transferTower(t1, a.id);
-  assert.deepStrictEqual(a.squads[0].order, { type: 'attack', target: { k: 't', id: t2.id, owner: b.id } });
+  assert.deepStrictEqual(a.lastOrder, { type: 'attack', target: { k: 't', id: t2.id, owner: b.id } });
   g.damageTower(t2, 1e9, a.id);
-  assert.deepStrictEqual(a.squads[0].order, { type: 'attack', target: { k: 'c', id: b.id } });
+  assert.deepStrictEqual(a.lastOrder, { type: 'attack', target: { k: 'c', id: b.id } });
 });
 
 test('the spatial grid finds the same nearby troops as a full scan', () => {
@@ -305,10 +319,10 @@ test('hunting: troops chase a chosen enemy troop, focus it, then move on to its 
   const decoy = troops(g, b, 'soldier', 1, mx + 1, my + 2)[0]; // right next to the hunters
   const [target] = prey;
   for (const v of [...prey, decoy]) v.attack = { k: 'c', id: b.id }; // hold them still: no orders to follow
-  const before = a.squads[0].order;
+  const before = a.lastOrder;
   assert.strictEqual(g.order(a.id, null, { k: 'u', id: target.id }), null);
   assert.strictEqual(g.lastOrderCount, 4);
-  assert.deepStrictEqual(a.squads[0].order, before, 'new waves keep their standing order');
+  assert.deepStrictEqual(a.lastOrder, before, 'a hunt is not remembered for new squads');
   assert.ok(hunters.every((u) => u.attack.k === 'u' && u.attack.id === target.id));
   // pin the prey in place and let the hunters work
   const pin = () => { for (const v of [...prey, decoy]) if (g.units.has(v.id)) { v.x = v === decoy ? mx + 1 : mx + 8 + prey.indexOf(v) * 0.4; v.y = v === decoy ? my + 2 : my; v.path = []; } };
@@ -364,62 +378,86 @@ test('cleared fog stays clear: explored areas keep showing live activity', () =>
   assert.ok(g.sees(a, spot.x, spot.y + 4), '...but the area stays revealed');
 });
 
-test('squads: each has its own order, and new troops join them in turn', () => {
+test('squads: every wave is a squad, numbered, and ordered on its own', () => {
   const { g, a, b } = duel(26);
   const t = outpost(g, b);
-  a.nextWaveAt = g.time;
-  g.update(0.05);
-  const first = mine(g, a);
-  assert.strictEqual(first.length, C.BASE_WAVE);
-  const per = [0, 1, 2].map((i) => first.filter((u) => u.sq === i).length);
-  assert.ok(Math.max(...per) - Math.min(...per) <= 1, `waves are dealt out evenly (${per})`);
-  // squad 2 attacks the tower; squads 1 and 3 stay home
-  assert.strictEqual(g.order(a.id, null, { k: 't', id: t.id }, [1]), null);
-  assert.strictEqual(g.lastOrderCount, per[1]);
-  for (const u of first) assert.strictEqual(!!u.attack, u.sq === 1);
-  assert.strictEqual(a.squads[1].order.type, 'attack');
-  assert.strictEqual(a.squads[0].order.type, 'defend');
-  // new troops of squad 2 follow its order
-  a.nextWaveAt = g.time;
-  g.update(0.05);
-  for (const u of mine(g, a)) if (!first.includes(u)) assert.strictEqual(!!u.attack, u.sq === 1);
-  // ordering several squads at once
-  assert.strictEqual(g.order(a.id, null, { k: 'c', id: b.id }, [0, 2]), null);
-  assert.ok(mine(g, a).every((u) => u.attack), 'everyone is out now');
-  // null = every squad
-  assert.strictEqual(g.order(a.id, null, { k: 'c', id: a.id }), null);
-  assert.ok(a.squads.every((sq) => sq.order.type === 'defend'));
-  assert.match(g.order(a.id, null, { k: 'c', id: b.id }, [7]), /Invalid squad/);
+  const wave = () => {
+    const before = new Set(mine(g, a));
+    a.nextWaveAt = g.time;
+    g.update(0.05);
+    return mine(g, a).filter((u) => !before.has(u));
+  };
+  const w1 = wave();
+  const w2 = wave();
+  assert.strictEqual(w1.length, C.BASE_WAVE);
+  const s1 = w1[0].sq;
+  const s2 = w2[0].sq;
+  assert.ok(w1.every((u) => u.sq === s1) && w2.every((u) => u.sq === s2) && s1 !== s2, 'one squad per wave');
+  assert.deepStrictEqual([a.squadNum.get(s1), a.squadNum.get(s2)], [1, 2]);
+  // send squad 2 at the tower; squad 1 stays home
+  assert.strictEqual(g.order(a.id, null, { k: 't', id: t.id }, [s2]), null);
+  assert.strictEqual(g.lastOrderCount, w2.length);
+  assert.ok(w2.every((u) => u.attack) && w1.every((u) => !u.attack));
+  assert.match(g.order(a.id, null, { k: 't', id: t.id }, [12345]), /no troops/);
+  // a squad that's wiped out frees its number for the next wave
+  for (const u of w1) g.units.delete(u.id);
+  g.pruneSquads();
+  const w3 = wave();
+  assert.strictEqual(a.squadNum.get(w3[0].sq), 1);
 });
 
-test('squads: moving troops between squads, and which squads new waves fill', () => {
+test('squads: merging, and moving picked troops between squads', () => {
   const { g, a, b } = duel(27);
   const t = outpost(g, b);
-  const four = troops(g, a, 'soldier', 4, a.core.x + 0.5, a.core.y + 1);
-  for (const u of four) u.sq = 0;
-  g.order(a.id, null, { k: 't', id: t.id }, [2]);
-  assert.ok(four.every((u) => !u.attack), 'helper troops start in squad 1');
-  assert.strictEqual(g.squadAssign(a.id, [four[0].id, four[1].id], 2), null);
-  assert.ok(four[0].sq === 2 && four[0].attack && four[0].attack.k === 't', 'moved troops take on the squad order');
-  assert.ok(four[2].sq === 0 && !four[2].attack);
-  assert.match(g.squadAssign(a.id, [four[0].id], 5), /Invalid squad/);
-  assert.match(g.squadAssign(b.id, [four[0].id], 1), /No troops/);
-  // only squad 3 takes new troops
-  assert.strictEqual(g.squadReinforce(a.id, 0, false), null);
-  assert.strictEqual(g.squadReinforce(a.id, 1, false), null);
-  assert.match(g.squadReinforce(a.id, 2, false), /at least one/);
-  a.nextWaveAt = g.time;
-  g.update(0.05);
-  const fresh = mine(g, a).filter((u) => !four.includes(u));
-  assert.strictEqual(fresh.length, C.BASE_WAVE);
-  assert.ok(fresh.every((u) => u.sq === 2 && u.attack && u.attack.k === 't'), 'all new troops join squad 3 and its attack');
+  const wave = () => {
+    const before = new Set(mine(g, a));
+    a.nextWaveAt = g.time;
+    g.update(0.05);
+    return mine(g, a).filter((u) => !before.has(u));
+  };
+  const w1 = wave();
+  const w2 = wave();
+  g.order(a.id, null, { k: 't', id: t.id }, [w2[0].sq]);
+  // move two troops of squad 1 into squad 2: they take on its attack
+  assert.strictEqual(g.squadAssign(a.id, [w1[0].id, w1[1].id], w2[0].sq), null);
+  assert.ok(w1[0].sq === w2[0].sq && w1[0].attack && w1[0].attack.k === 't');
+  assert.ok(w1[2].sq !== w2[0].sq && !w1[2].attack);
+  // two more into a new squad of their own
+  assert.strictEqual(g.squadAssign(a.id, [w1[2].id, w1[3].id], 'new'), null);
+  assert.ok(w1[2].sq === w1[3].sq && w1[2].sq !== w1[4].sq);
+  assert.strictEqual(a.squadNum.size, 3);
+  // merge it back into squad 1
+  assert.strictEqual(g.squadMerge(a.id, [w1[4].sq, w1[2].sq]), null);
+  assert.ok(w1[2].sq === w1[4].sq);
+  assert.strictEqual(a.squadNum.size, 2);
+  assert.match(g.squadMerge(a.id, [w1[4].sq]), /two or more/);
+  assert.match(g.squadAssign(a.id, [w1[4].id], 999), /Invalid squad/);
+  assert.match(g.squadAssign(b.id, [w1[4].id], 'new'), /No troops/);
 });
 
-test('hunting one troop is a one-off: the squad keeps its standing order', () => {
+test('squads stay together on the march and stand guard together at home', () => {
   const { g, a, b } = duel(28);
-  for (const u of troops(g, a, 'soldier', 2, a.core.x + 0.5, a.core.y + 1)) u.sq = 0;
-  const [foe] = troops(g, b, 'soldier', 1, a.core.x + 3, a.core.y);
-  assert.strictEqual(g.order(a.id, null, { k: 'u', id: foe.id }, [0]), null);
-  assert.deepStrictEqual(a.squads[0].order, { type: 'defend', anchor: 0 });
-  assert.match(g.order(a.id, null, { k: 'u', id: foe.id }, [1]), /No troops in that squad/);
+  a.army.scout = 1; // a fast scout in a squad of soldiers
+  a.army.archer = 1;
+  a.nextWaveAt = g.time;
+  g.update(0.05);
+  const sq = mine(g, a);
+  assert.strictEqual(sq.length, C.BASE_WAVE);
+  g.order(a.id, null, { k: 'c', id: b.id }, [sq[0].sq]);
+  const spread = (home = false) => {
+    const live = sq.filter((u) => g.units.has(u.id) && !(home && u.kind === 'scout')); // at home, scouts explore
+    const cx = live.reduce((s, u) => s + u.x, 0) / live.length;
+    const cy = live.reduce((s, u) => s + u.y, 0) / live.length;
+    return Math.max(...live.map((u) => Math.hypot(u.x - cx, u.y - cy)));
+  };
+  let worst = 0;
+  for (let i = 0; i < 20 * 8; i++) {
+    g.update(0.05);
+    if (i > 40) worst = Math.max(worst, spread());
+  }
+  assert.ok(worst < 3.2, `squad stayed together on the march (spread ${worst.toFixed(2)})`);
+  // home again: they gather at their own post rather than spreading round the core
+  g.order(a.id, null, { k: 'c', id: a.id });
+  run(g, 25);
+  assert.ok(spread(true) < 2.6, `squad stands guard together (spread ${spread(true).toFixed(2)})`);
 });

@@ -140,29 +140,31 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 .troop button:disabled { opacity: 0.35; cursor: default; }
 
 #bar .orders { width: 214px; gap: 4px; }
-#squads { display: flex; flex-direction: column; gap: 3px; }
-.squad { display: flex; align-items: center; gap: 6px; height: 27px; padding: 0 4px 0 3px; border: 1px solid var(--line); border-radius: 7px;
-  background: var(--raise); cursor: pointer; font-size: 11.5px; color: var(--muted); }
-.squad:hover { border-color: var(--accent); }
-.squad.on { border-color: var(--gold); background: #2a2612; color: var(--text); }
-.squad.drop { border-style: dashed; border-color: var(--good); }
-.squad .num { width: 19px; height: 19px; border-radius: 5px; background: var(--raise-2); color: var(--text); font-weight: 800; font-size: 12px;
-  display: grid; place-items: center; flex: none; }
-.squad.on .num { background: var(--gold); color: #1a1505; }
-.squad .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.squad .what.atk { color: var(--bad-soft); }
-.squad .what.def { color: #7ee787; }
-.squad .n { font-weight: 700; color: var(--text); min-width: 16px; text-align: right; }
-.squad .reinf { flex: none; width: 20px; height: 19px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: transparent;
-  color: var(--muted); font-size: 11px; cursor: pointer; opacity: 0.55; }
-.squad .reinf.on { opacity: 1; color: var(--gold); border-color: rgba(255, 213, 79, 0.45); }
-.squad .reinf:hover { border-color: var(--accent); }
+#squads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; max-height: 84px; overflow-y: auto; align-content: start; }
+#squads .none { grid-column: 1 / -1; color: var(--muted); font-size: 11.5px; padding: 6px 2px; }
+#squads .chip { display: flex; align-items: center; gap: 3px; height: 25px; padding: 0 4px 0 3px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--raise); color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
+#squads .chip:hover { border-color: var(--accent); }
+#squads .chip .num { min-width: 17px; height: 17px; border-radius: 5px; background: var(--raise-2); color: var(--text); font-weight: 800; font-size: 11px;
+  display: grid; place-items: center; padding: 0 2px; }
+#squads .chip .ic { font-size: 10px; }
+#squads .chip .n { margin-left: auto; font-weight: 700; color: var(--text); }
+#squads .chip.attack { border-color: rgba(255, 123, 114, 0.45); }
+#squads .chip.on { background: #2a2612; border-color: rgba(255, 213, 79, 0.55); }
+#squads .chip.picked { border-color: var(--gold); }
+#squads .chip.picked .num { background: var(--gold); color: #1a1505; }
+#squads .chip.drop { border-style: dashed; border-color: var(--good); }
 .squad-btns { display: flex; gap: 4px; }
 .squad-btns button { flex: 1; height: 24px; border: 1px solid var(--line); border-radius: 7px; background: var(--raise-2); color: var(--text);
-  font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; }
-.squad-btns button:hover { border-color: var(--accent); }
+  font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; padding: 0 2px; white-space: nowrap; }
+.squad-btns button:hover:not(:disabled) { border-color: var(--accent); }
+.squad-btns button:disabled { opacity: 0.4; cursor: default; }
 .squad-btns button.on { border-color: var(--gold); color: var(--gold); }
-.squad-btns kbd { font-size: 9px; line-height: 12px; min-width: 14px; padding: 0 3px; }
+.squad-btns kbd, #new-waves kbd { font-size: 9px; line-height: 12px; min-width: 14px; padding: 0 3px; }
+#new-waves { height: 22px; border: 1px solid var(--line); border-radius: 6px; background: var(--raise); color: #7ee787; cursor: pointer;
+  font: inherit; font-size: 11px; display: flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; }
+#new-waves.on { color: var(--bad-soft); border-color: rgba(255, 123, 114, 0.4); }
+#new-waves:hover { border-color: var(--accent); }
 #squad-hint { color: var(--muted) !important; font-weight: 500 !important; }
 .wide-btn { width: 100%; height: 28px; border: 1px solid var(--line); border-radius: 8px; background: var(--raise-2); color: var(--text);
   cursor: pointer; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; }
