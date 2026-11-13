@@ -34,7 +34,7 @@ const SQ3 = Math.sqrt(3);
 const cv = document.getElementById('c');
 const g = cv.getContext('2d');
 let W = 0, H = 0, DPR = 1;
-const cam = { x: 0, y: 0, size: 29 };   // size = hex radius in screen px
+const cam = { x: 0, y: 0, size: 23 };   // size = hex radius in screen px
 function resize() { DPR = window.devicePixelRatio || 1; W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; cv.style.width = W + 'px'; cv.style.height = H + 'px'; }
 addEventListener('resize', resize); resize();
 
@@ -42,9 +42,11 @@ const key = (q, r) => `${q},${r}`;
 const DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
 const hexes = new Map(); // key -> { q, r, owner }
 for (let q = -R; q <= R; q++) for (let r = Math.max(-R, -q - R); r <= Math.min(R, -q + R); r++) hexes.set(key(q, r), { q, r, owner: 0 });
-const toPix = (q, r) => [SQ3 * (q + r / 2), 1.5 * r]; // world units (hex radius 1)
+const HS = 1.25;           // hex radius in world units: hexes are this much bigger than the buildings and troops on them
+const toPix = (q, r) => [HS * SQ3 * (q + r / 2), HS * 1.5 * r];
 const hexDist = (a, b) => (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs(a.q + a.r - b.q - b.r)) / 2;
 function pixToHex(x, y) {
+  x /= HS; y /= HS;
   let q = (SQ3 / 3 * x - y / 3), r = (2 / 3 * y);
   let s = -q - r, rq = Math.round(q), rr = Math.round(r), rs = Math.round(s);
   const dq = Math.abs(rq - q), dr = Math.abs(rr - r), ds = Math.abs(rs - s);
@@ -157,7 +159,7 @@ function corner(cx, cy, s, i) { const a = Math.PI / 180 * (60 * i - 30); return 
 function edgeNeighbour(h, i) {
   const [x0, y0] = toPix(h.q, h.r);
   const a = Math.PI / 180 * (60 * i);           // edge midpoint direction (between corner i and i+1)
-  return pixToHex(x0 + SQ3 * Math.cos(a), y0 + SQ3 * Math.sin(a));
+  return pixToHex(x0 + HS * SQ3 * Math.cos(a), y0 + HS * SQ3 * Math.sin(a));
 }
 
 function crystal(x, y, s, pid, glow) {
@@ -214,7 +216,7 @@ function frame(t) {
   for (const h of hexes.values()) {
     const [x, y] = toScreen(...toPix(h.q, h.r));
     if (x < -s * 2 || y < -s * 2 || x > W + s * 2 || y > H + s * 2) continue;
-    hexPath(x, y, s, 1);
+    hexPath(x, y, s * HS, 1);
     if (h.owner) { g.fillStyle = col(h.owner, 50, h.owner === ME ? 0.2 : 0.15); g.fill(); }
     g.strokeStyle = h.owner ? col(h.owner, 60, 0.18) : 'rgba(255,255,255,0.05)';
     g.lineWidth = 1; g.stroke();
@@ -227,7 +229,7 @@ function frame(t) {
       const n = edgeNeighbour(h, i);
       if (n && n.owner === h.owner) continue;
       const inset = h.owner === ME ? 2.2 : 1.9;
-      const [ax, ay] = corner(x, y, s - inset, i), [bx, by] = corner(x, y, s - inset, i + 1);
+      const [ax, ay] = corner(x, y, s * HS - inset, i), [bx, by] = corner(x, y, s * HS - inset, i + 1);
       g.strokeStyle = col(h.owner, 65, h.owner === ME ? 1 : 0.9); g.lineWidth = h.owner === ME ? 3 : 2.5; g.lineCap = 'round';
       g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke();
     }
@@ -237,12 +239,12 @@ function frame(t) {
   if (hover) for (const h of hexes.values()) {
     const d = hexDist(h, hover); if (d > 4 || !canBuy(h, pending)) continue;
     const [x, y] = toScreen(...toPix(h.q, h.r));
-    hexPath(x, y, s, 4); g.strokeStyle = `rgba(126,231,135,${0.75 * (1 - d / 5)})`; g.lineWidth = 2; g.setLineDash([5, 4]); g.stroke(); g.setLineDash([]);
+    hexPath(x, y, s * HS, 4); g.strokeStyle = `rgba(126,231,135,${0.75 * (1 - d / 5)})`; g.lineWidth = 2; g.setLineDash([5, 4]); g.stroke(); g.setLineDash([]);
   }
-  if (drag) for (const h of drag.list) { const [x, y] = toScreen(...toPix(h.q, h.r)); hexPath(x, y, s, 2); g.fillStyle = 'rgba(255,213,79,0.45)'; g.fill(); }
-  if (hover && canBuy(hover, pending)) { const [x, y] = toScreen(...toPix(hover.q, hover.r)); hexPath(x, y, s, 2); g.fillStyle = cost(myLand()) > gold ? 'rgba(248,81,73,.3)' : 'rgba(126,231,135,.35)'; g.fill(); }
+  if (drag) for (const h of drag.list) { const [x, y] = toScreen(...toPix(h.q, h.r)); hexPath(x, y, s * HS, 2); g.fillStyle = 'rgba(255,213,79,0.45)'; g.fill(); }
+  if (hover && canBuy(hover, pending)) { const [x, y] = toScreen(...toPix(hover.q, hover.r)); hexPath(x, y, s * HS, 2); g.fillStyle = cost(myLand()) > gold ? 'rgba(248,81,73,.3)' : 'rgba(126,231,135,.35)'; g.fill(); }
   // claim pop
-  for (let i = fx.length - 1; i >= 0; i--) { const f = fx[i], p = (t - f.t) / 500; if (p > 1) { fx.splice(i, 1); continue; } const [x, y] = toScreen(...toPix(f.h.q, f.h.r)); hexPath(x, y, s * (1 + .25 * (1 - p)), 0); g.strokeStyle = `rgba(255,255,255,${.8 * (1 - p)})`; g.lineWidth = 2; g.stroke(); }
+  for (let i = fx.length - 1; i >= 0; i--) { const f = fx[i], p = (t - f.t) / 500; if (p > 1) { fx.splice(i, 1); continue; } const [x, y] = toScreen(...toPix(f.h.q, f.h.r)); hexPath(x, y, s * HS * (1 + .25 * (1 - p)), 0); g.strokeStyle = `rgba(255,255,255,${.8 * (1 - p)})`; g.lineWidth = 2; g.stroke(); }
   // 4. names across land, camps, buildings, troops
   for (const [id, p] of Object.entries(PLAYERS)) {
     if (+id === ME) continue;
@@ -257,8 +259,8 @@ function frame(t) {
   for (const u of troops) troop(u, s);
   for (const [id, p] of Object.entries(PLAYERS)) { const [x, y] = toScreen(...toPix(p.core.q, p.core.r)); g.font = `700 ${Math.round(Math.max(11, s * .45))}px system-ui`; g.textAlign = 'center'; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.8)'; const n = +id === ME ? `${p.name} (you)` : p.name; g.strokeText(n, x, y - s * 1.35); g.fillStyle = '#fff'; g.fillText(n, x, y - s * 1.35); }
   // price tag by the cursor
-  if (hover && canBuy(hover, pending) && !drag) { const [x, y] = toScreen(...toPix(hover.q, hover.r)); const c = cost(myLand()); g.font = '700 12px system-ui'; g.textAlign = 'left'; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.85)'; g.strokeText(`Claim: ${c}g`, x + s * .9, y + 4); g.fillStyle = c > gold ? '#ffa198' : '#7ee787'; g.fillText(`Claim: ${c}g`, x + s * .9, y + 4); }
-  if (drag && drag.list.length) { const h = drag.list[drag.list.length - 1]; const [x, y] = toScreen(...toPix(h.q, h.r)); let tot = 0; for (let i = 0; i < drag.list.length; i++) tot += cost(myLand() + i); g.font = '700 12px system-ui'; g.textAlign = 'left'; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.85)'; const tx = `+${drag.list.length} hexes: ${tot}g`; g.strokeText(tx, x + s * .9, y + 4); g.fillStyle = '#ffd54f'; g.fillText(tx, x + s * .9, y + 4); }
+  if (hover && canBuy(hover, pending) && !drag) { const [x, y] = toScreen(...toPix(hover.q, hover.r)); const c = cost(myLand()); g.font = '700 12px system-ui'; g.textAlign = 'left'; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.85)'; g.strokeText(`Claim: ${c}g`, x + s * HS * .9, y + 4); g.fillStyle = c > gold ? '#ffa198' : '#7ee787'; g.fillText(`Claim: ${c}g`, x + s * HS * .9, y + 4); }
+  if (drag && drag.list.length) { const h = drag.list[drag.list.length - 1]; const [x, y] = toScreen(...toPix(h.q, h.r)); let tot = 0; for (let i = 0; i < drag.list.length; i++) tot += cost(myLand() + i); g.font = '700 12px system-ui'; g.textAlign = 'left'; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.85)'; const tx = `+${drag.list.length} hexes: ${tot}g`; g.strokeText(tx, x + s * HS * .9, y + 4); g.fillStyle = '#ffd54f'; g.fillText(tx, x + s * HS * .9, y + 4); }
   requestAnimationFrame(frame);
 }
 // start centred between my base and the rivals
