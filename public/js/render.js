@@ -69,41 +69,41 @@ function drawShape(kind, x, y, r, fill) {
   ctx.fillStyle = fill;
   ctx.beginPath();
   switch (kind) {
-    case 'soldier': {
-      // shield with a sword behind it
-      ctx.strokeStyle = '#e6edf3';
-      ctx.lineWidth = Math.max(1.2, r * 0.16);
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(x - r * 0.75, y + r * 0.75);
-      ctx.lineTo(x + r * 0.75, y - r * 0.75);
-      ctx.stroke();
-      ctx.lineCap = 'butt';
-      ctx.fillStyle = fill;
-      ctx.beginPath();
-      ctx.moveTo(x - r * 0.6, y - r * 0.6);
-      ctx.lineTo(x + r * 0.6, y - r * 0.6);
-      ctx.lineTo(x + r * 0.6, y);
-      ctx.quadraticCurveTo(x + r * 0.5, y + r * 0.55, x, y + r * 0.75);
-      ctx.quadraticCurveTo(x - r * 0.5, y + r * 0.55, x - r * 0.6, y);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-      ctx.lineWidth = Math.max(1, r * 0.1);
-      ctx.stroke();
+    case 'soldier':
+      // crossed swords
+      for (const side of [-1, 1]) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate((side * Math.PI) / 4);
+        ctx.fillStyle = fill;
+        ctx.beginPath();
+        ctx.moveTo(0, -r * 0.85);
+        ctx.lineTo(r * 0.11, -r * 0.65);
+        ctx.lineTo(r * 0.1, r * 0.3);
+        ctx.lineTo(-r * 0.1, r * 0.3);
+        ctx.lineTo(-r * 0.11, -r * 0.65);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#e0b43c';
+        ctx.fillRect(-r * 0.32, r * 0.28, r * 0.64, r * 0.11);
+        ctx.fillStyle = '#7b4a2a';
+        ctx.fillRect(-r * 0.06, r * 0.39, r * 0.12, r * 0.3);
+        ctx.restore();
+      }
       break;
-    }
     case 'scout':
-      // a swift chevron with an eye
-      ctx.moveTo(x, y - r * 0.85);
-      ctx.lineTo(x + r * 0.75, y + r * 0.65);
-      ctx.lineTo(x, y + r * 0.25);
-      ctx.lineTo(x - r * 0.75, y + r * 0.65);
-      ctx.closePath();
+      // an eye: sees far
+      ctx.moveTo(x - r * 0.8, y);
+      ctx.quadraticCurveTo(x, y - r * 0.75, x + r * 0.8, y);
+      ctx.quadraticCurveTo(x, y + r * 0.75, x - r * 0.8, y);
       ctx.fill();
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillStyle = '#2b2b2b';
       ctx.beginPath();
-      ctx.arc(x, y - r * 0.05, r * 0.18, 0, Math.PI * 2);
+      ctx.arc(x, y, r * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(x + r * 0.08, y - r * 0.08, r * 0.08, 0, Math.PI * 2);
       ctx.fill();
       break;
     case 'medic':
@@ -113,27 +113,21 @@ function drawShape(kind, x, y, r, fill) {
       ctx.fillRect(x - r * 0.14, y - r * 0.5, r * 0.28, r);
       ctx.fillRect(x - r * 0.5, y - r * 0.14, r, r * 0.28);
       break;
-    case 'giant': {
-      // a hulking body with a club
-      ctx.arc(x, y + r * 0.1, r * 0.78, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = 'rgba(0,0,0,0.25)';
-      ctx.beginPath();
-      ctx.arc(x, y - r * 0.45, r * 0.32, 0, Math.PI * 2);
+    case 'giant':
+      // a war hammer: breaks buildings
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(-Math.PI / 6);
+      ctx.fillStyle = '#7b4a2a';
+      roundRect(-r * 0.07, -r * 0.3, r * 0.14, r * 1.05, r * 0.06);
       ctx.fill();
       ctx.fillStyle = fill;
-      ctx.beginPath();
-      ctx.arc(x, y - r * 0.48, r * 0.26, 0, Math.PI * 2);
+      roundRect(-r * 0.55, -r * 0.7, r * 1.1, r * 0.45, r * 0.08);
       ctx.fill();
-      ctx.fillStyle = '#6d4c41';
-      ctx.save();
-      ctx.translate(x + r * 0.6, y - r * 0.1);
-      ctx.rotate(0.5);
-      roundRect(-r * 0.12, -r * 0.7, r * 0.24, r * 0.95, r * 0.12);
-      ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(-r * 0.55, -r * 0.52, r * 1.1, r * 0.06);
       ctx.restore();
       break;
-    }
     case 'barracks':
       // a hall with a pitched roof and a door
       ctx.fillRect(x - r * 0.8, y - r * 0.2, r * 1.6, r * 0.95);
