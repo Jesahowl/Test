@@ -1,7 +1,7 @@
 // Fog of war: only ground nobody on my side has explored is hidden. Once an area has been seen
 // (by my core, buildings, troops or scouts) it stays revealed, with everything happening there.
 
-import { S, C, ctx, explored, fogCanvas, fogCtx, fogImg, NTILES, players, scale, terr, terrSeen, toScreen, vis, Vision } from './state.js';
+import { S, C, ctx, explored, FOG_PAD, FOG_RES, fogCanvas, fogCtx, fogImg, fogSoft, fogSoftCtx, NTILES, players, scale, terr, toScreen, vis, Vision } from './state.js';
 import { drawTerritory } from './territory.js';
 
 const seesTile = (x, y) => explored[Math.floor(y) * C.MAP_W + Math.floor(x)] === 1;
@@ -24,15 +24,10 @@ function updateFog(terrChanged) {
   for (const t of S.towers.values()) if (t.owner === S.myId) sources.push({ x: t.x + 0.5, y: t.y + 0.5, r: C.structSight(t.kind, t.level) });
   for (const u of S.units.values()) if (u.owner === S.myId) sources.push({ x: u.x, y: u.y, r: C.UNITS[u.kind].sight || 5 });
   Vision.computeVision(vis, C.MAP_W, C.MAP_H, S.myId, terr, sources);
-  for (let k = 0; k < NTILES; k++) {
-    if (vis[k]) explored[k] = 1;
-    if (!explored[k]) continue;
-    if (terrSeen[k] !== terr[k]) {
-      terrSeen[k] = terr[k];
-      redraw = true;
-    }
-  }
-  S.terrView = terrSeen;
+  for (let k = 0; k < NTILES; k++) if (vis[k]) explored[k] = 1;
+  // Territory is always drawn with its real borders; the fog simply covers what I haven't
+  // explored, so clearing fog reveals the border underneath instead of re-tracing it.
+  S.terrView = terr;
   if (redraw) drawTerritory();
   // Buildings, cores and camps: live once their spot has been explored.
   const remember = (seen, live, posOf) => {
@@ -49,25 +44,45 @@ function updateFog(terrChanged) {
   S.towersView = remember(S.towersSeen, S.towers, (t) => [t.x, t.y]);
   S.coresView = remember(S.coresSeen, players, (p) => [p.x, p.y]);
   S.campsView = [...remember(S.campsSeen, S.campMap, (c) => [c.x, c.y]).values()];
-  // Fog image: clear wherever explored, dark where nobody has looked yet.
+  // Fog image: clear wherever explored, dark where nobody has looked yet. Rebuilt only when
+  // the explored area grows; drawn blurred so its edge is soft and round, not tile steps.
+  let count = 0;
+  for (let k = 0; k < NTILES; k++) count += explored[k];
+  if (count === exploredCount) return;
+  exploredCount = count;
+  const W = fogCanvas.width;
   const d = fogImg.data;
-  for (let k = 0; k < NTILES; k++) {
-    d[k * 4] = 8;
-    d[k * 4 + 1] = 11;
-    d[k * 4 + 2] = 15;
-    d[k * 4 + 3] = explored[k] ? 0 : 246;
+  for (let py = 0; py < fogCanvas.height; py++) {
+    for (let px = 0; px < W; px++) {
+      const x = px - FOG_PAD;
+      const y = py - FOG_PAD;
+      const inside = x >= 0 && y >= 0 && x < C.MAP_W && y < C.MAP_H;
+      const i = (py * W + px) * 4;
+      d[i] = 8;
+      d[i + 1] = 11;
+      d[i + 2] = 15;
+      d[i + 3] = inside && explored[y * C.MAP_W + x] ? 0 : 255;
+    }
   }
   fogCtx.putImageData(fogImg, 0, 0);
+  fogSoftCtx.clearRect(0, 0, fogSoft.width, fogSoft.height);
+  fogSoftCtx.save();
+  fogSoftCtx.imageSmoothingEnabled = true;
+  fogSoftCtx.filter = `blur(${FOG_RES * 0.9}px)`;
+  fogSoftCtx.drawImage(fogCanvas, 0, 0, fogSoft.width, fogSoft.height);
+  fogSoftCtx.restore();
 }
+
+let exploredCount = -1; // explored tiles when the fog layer was last rebuilt
 
 function resetFog() {
   vis.fill(0);
   explored.fill(0);
-  terrSeen.fill(0);
   S.towersSeen = new Map();
   S.coresSeen = new Map();
   S.campsSeen = new Map();
   S.fogWasOn = null;
+  exploredCount = -1;
 }
 
 function drawFog() {
@@ -77,7 +92,7 @@ function drawFog() {
   ctx.save();
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(fogCanvas, ox, oy, C.MAP_W * s, C.MAP_H * s);
+  ctx.drawImage(fogSoft, ox - FOG_PAD * s, oy - FOG_PAD * s, (C.MAP_W + FOG_PAD * 2) * s, (C.MAP_H + FOG_PAD * 2) * s);
   ctx.restore();
 }
 

@@ -2,7 +2,7 @@
 
 import { kindsLabel, shareCount } from './bar.js';
 import { drawShape, label } from './render.js';
-import { S, allKinds, C, canvas, colorOf, ctx, fogCanvas, grid, mctx, mini, mouse, players, scale, selUnits, terr, terrCanvas, toScreen, toWorld } from './state.js';
+import { S, allKinds, C, canvas, colorOf, ctx, FOG_PAD, fogSoft, grid, mctx, mini, mouse, players, scale, selUnits, terr, terrCanvas, toScreen, toWorld } from './state.js';
 import { campVerb, isMineTarget, orderTargetAt, targetName, targetPos } from './targets.js';
 
 // ---- leapfrogging: unclaimed tiles within TOWER_LEAP of my land accept towers
@@ -242,7 +242,7 @@ function drawMinimap() {
   const sy = H / C.MAP_H;
   mctx.clearRect(0, 0, W, H);
   mctx.drawImage(terrCanvas, 0, 0, W, H);
-  if (S.fogOn) mctx.drawImage(fogCanvas, 0, 0, W, H);
+  if (S.fogOn) mctx.drawImage(fogSoft, -FOG_PAD * sx, -FOG_PAD * sy, (C.MAP_W + FOG_PAD * 2) * sx, (C.MAP_H + FOG_PAD * 2) * sy);
   for (const c of S.campsView) {
     if (!c.alive) {
       // where a camp will appear next

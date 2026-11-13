@@ -77,18 +77,14 @@ const tctx = terrCanvas.getContext('2d');
 const grid = new Map(); // "x,y" -> tower id
 S.terrShapes = []; // [{ owner, path: Path2D in tile units }]
 // ---- fog of war
-// vis: what I can see now; explored: what I've ever seen. While fogged, the map shows territory,
-// buildings and camps as they were when last seen (terrSeen / *Seen maps); enemy troops are only
-// sent by the server when they're in sight. Spectators see everything.
+// vis: what I can see now; explored: what I've ever seen. Explored ground stays revealed with
+// live activity; the fog overlay covers the rest (territory is drawn in full underneath). The
+// server only sends enemy troops in explored ground. Spectators see everything.
 const Vision = window.TD_VISION;
 
 const NTILES = C.MAP_W * C.MAP_H;
-
 const vis = new Uint8Array(NTILES);
-
 const explored = new Uint8Array(NTILES);
-
-const terrSeen = new Int32Array(NTILES);
 
 S.terrView = terr; // what the territory layer draws
 S.fogOn = false;
@@ -107,15 +103,19 @@ S.coresView = new Map();
 
 S.campsView = [];
 
+// Fog layers: one pixel per tile (with FOG_PAD tiles of solid fog around the map, so blurring
+// never thins the map's edges), then a blurred, FOG_RES-times larger copy for smooth edges.
+const FOG_PAD = 3;
+const FOG_RES = 6;
 const fogCanvas = document.createElement('canvas');
-
-fogCanvas.width = C.MAP_W;
-
-fogCanvas.height = C.MAP_H;
-
+fogCanvas.width = C.MAP_W + FOG_PAD * 2;
+fogCanvas.height = C.MAP_H + FOG_PAD * 2;
 const fogCtx = fogCanvas.getContext('2d');
-
-const fogImg = fogCtx.createImageData(C.MAP_W, C.MAP_H);
+const fogImg = fogCtx.createImageData(fogCanvas.width, fogCanvas.height);
+const fogSoft = document.createElement('canvas');
+fogSoft.width = fogCanvas.width * FOG_RES;
+fogSoft.height = fogCanvas.height * FOG_RES;
+const fogSoftCtx = fogSoft.getContext('2d');
 
 S.terrStamp = 0; // bumps whenever territory changes
 
@@ -181,4 +181,4 @@ const hueOf = (pid) => (players.get(pid) || { hue: 0 }).hue;
 
 const colorOf = (pid, l = 55, a = 1) => (pid ? `hsla(${hueOf(pid)}, 75%, ${l}%, ${a})` : `rgba(140, 120, 90, ${a})`);
 
-export { $, C, CAMP_KEYS, CREEP_KEYS, KIND_KEYS, NTILES, SHARES, SHARE_KEYS, SHARE_STEP, SMOOTH_PASSES, SMOOTH_WINDOW, TPX, UNIT_KEYS, Vision, allKinds, cam, canvas, colorOf, ctx, explored, feed, fogCanvas, fogCtx, fogImg, grid, keys, mctx, mini, mouse, players, scale, selUnits, setFollow, tctx, terr, terrCanvas, terrSeen, toScreen, toWorld, vis, wavesFollow, withContext };
+export { FOG_PAD, FOG_RES, fogSoft, fogSoftCtx, $, C, CAMP_KEYS, CREEP_KEYS, KIND_KEYS, NTILES, SHARES, SHARE_KEYS, SHARE_STEP, SMOOTH_PASSES, SMOOTH_WINDOW, TPX, UNIT_KEYS, Vision, allKinds, cam, canvas, colorOf, ctx, explored, feed, fogCanvas, fogCtx, fogImg, grid, keys, mctx, mini, mouse, players, scale, selUnits, setFollow, tctx, terr, terrCanvas, toScreen, toWorld, vis, wavesFollow, withContext };
