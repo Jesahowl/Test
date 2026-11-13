@@ -54,6 +54,8 @@ closes after a minute. **Play** still drops you into the always-running public g
 
 ### Troops
 
+Each type has its own token shape, so you can tell them apart at a glance: soldiers are **rounded squares**, scouts **diamonds**, medics **circles** and archers **triangles**.
+
 | Troop | Wave slots | Level 2 | HP | Role |
 |---|---|---|---|---|
 | Soldier | 1 | 120g | 300 | Sword and shield: the backbone of every wave. Unassigned slots are filled with soldiers |

@@ -1,6 +1,6 @@
 // HUD helpers: icons drawn from the in-game shapes, and tooltips.
 
-import { drawShape } from './render.js';
+import { drawShape, tokenPath } from './render.js';
 import { $, C, ctx, withContext } from './state.js';
 
 // ------------------------------------------------------------------ HUD
@@ -17,8 +17,7 @@ function iconURL(kind, size = 44) {
     const color = unit ? unit.color : C.TOWERS[kind].color;
     if (unit) {
       ctx.fillStyle = '#0e1219';
-      ctx.beginPath();
-      ctx.arc(size / 2, size / 2, size * 0.46, 0, Math.PI * 2);
+      tokenPath(ctx, kind, size / 2, size / 2, size * (kind === 'archer' ? 0.32 : kind === 'scout' ? 0.38 : 0.44));
       ctx.fill();
       ctx.strokeStyle = color;
       ctx.globalAlpha = 0.55;

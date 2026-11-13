@@ -209,20 +209,20 @@ function drawOverlay() {
     const ok = canBuildAt(tx, ty);
     // Leap zone: unclaimed ground a tower can jump to (barracks stay on your own land).
     const zone = C.TOWERS[S.buildKind].ownLandOnly ? new Uint8Array(0) : getLeapZone();
-    const [x0, y0] = toWorld(0, 0);
-    const [x1, y1] = toWorld(canvas.width, canvas.height);
-    // a soft dot on every tile a tower could leap to
-    ctx.fillStyle = 'rgba(255,213,79,0.35)';
-    ctx.beginPath();
-    for (let y = Math.max(0, Math.floor(y0)); y <= Math.min(C.MAP_H - 1, Math.ceil(y1)); y++) {
-      for (let x = Math.max(0, Math.floor(x0)); x <= Math.min(C.MAP_W - 1, Math.ceil(x1)); x++) {
+    // soft dots on the tiles a tower could leap to, only around the cursor (fading with distance)
+    const DOTS = 6;
+    for (let y = Math.max(0, ty - DOTS); y <= Math.min(C.MAP_H - 1, ty + DOTS); y++) {
+      for (let x = Math.max(0, tx - DOTS); x <= Math.min(C.MAP_W - 1, tx + DOTS); x++) {
         if (!zone[y * C.MAP_W + x]) continue;
+        const d = Math.hypot(x - tx, y - ty);
+        if (d > DOTS) continue;
         const [sx, sy] = toScreen(x + 0.5, y + 0.5);
-        ctx.moveTo(sx + s * 0.09, sy);
+        ctx.fillStyle = `rgba(255,213,79,${0.45 * (1 - d / (DOTS + 0.5))})`;
+        ctx.beginPath();
         ctx.arc(sx, sy, s * 0.09, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
-    ctx.fill();
     if (ok) {
       const { gained, stolen } = claimPreview(tx, ty);
       for (const [gx, gy, o] of gained) {
@@ -265,26 +265,76 @@ function drawMinimap() {
   mctx.clearRect(0, 0, W, H);
   mctx.drawImage(terrCanvas, 0, 0, W, H);
   if (S.fogOn) mctx.drawImage(fogSoft, -FOG_PAD * sx, -FOG_PAD * sy, (C.MAP_W + FOG_PAD * 2) * sx, (C.MAP_H + FOG_PAD * 2) * sy);
+  const now = performance.now();
+  // camps: a little tent (the Warlord's Fort in orange, with a glow); upcoming ones as an outline
   for (const c of S.campsView) {
-    if (!c.alive) {
-      // where a camp will appear next
-      mctx.strokeStyle = 'rgba(201, 166, 107, 0.6)';
-      mctx.lineWidth = 1;
-      mctx.strokeRect((c.x + 0.5) * sx - 1.5, (c.y + 0.5) * sy - 1.5, 3, 3);
-      continue;
+    const cx = (c.x + 0.5) * sx;
+    const cy = (c.y + 0.5) * sy;
+    const big = C.BUFF_CAMPS.includes(c.type);
+    const t = big ? 4.5 : 3.5;
+    if (big && c.alive) {
+      mctx.fillStyle = 'rgba(255, 140, 40, 0.3)';
+      mctx.beginPath();
+      mctx.arc(cx, cy, 6, 0, Math.PI * 2);
+      mctx.fill();
     }
-    mctx.fillStyle = C.BUFF_CAMPS.includes(c.type) ? '#ffab40' : '#c9a66b';
-    mctx.fillRect((c.x + 0.5) * sx - 1.5, (c.y + 0.5) * sy - 1.5, 3, 3);
+    mctx.beginPath();
+    mctx.moveTo(cx, cy - t);
+    mctx.lineTo(cx + t, cy + t * 0.8);
+    mctx.lineTo(cx - t, cy + t * 0.8);
+    mctx.closePath();
+    if (c.alive) {
+      mctx.fillStyle = big ? '#ffab40' : '#d9b77e';
+      mctx.fill();
+    } else {
+      mctx.strokeStyle = 'rgba(201, 166, 107, 0.55)';
+      mctx.lineWidth = 1;
+      mctx.stroke();
+    }
+  }
+  // towers and barracks: small squares in the owner's colour
+  for (const t of S.towersView.values()) {
+    if (!t.owner) continue;
+    mctx.fillStyle = colorOf(t.owner, 72);
+    mctx.strokeStyle = 'rgba(0,0,0,0.7)';
+    mctx.lineWidth = 1;
+    const tx = (t.x + 0.5) * sx;
+    const ty = (t.y + 0.5) * sy;
+    mctx.fillRect(tx - 1.6, ty - 1.6, 3.2, 3.2);
+    mctx.strokeRect(tx - 1.6, ty - 1.6, 3.2, 3.2);
   }
   for (const u of S.units.values()) {
-    mctx.fillStyle = u.owner === S.myId ? '#ffffff' : colorOf(u.owner, 70);
-    mctx.fillRect(u.x * sx - 0.75, u.y * sy - 0.75, 1.5, 1.5);
+    mctx.fillStyle = u.owner === S.myId ? '#ffffff' : colorOf(u.owner, 72);
+    mctx.fillRect(u.x * sx - 0.8, u.y * sy - 0.8, 1.6, 1.6);
   }
+  // cores: enemy cores as diamonds; mine white with a pulsing ring so it's easy to find
   for (const p of S.coresView.values()) {
-    mctx.fillStyle = p.id === S.myId ? '#fff' : colorOf(p.id, 60);
-    mctx.beginPath();
-    mctx.arc((p.x + 0.5) * sx, (p.y + 0.5) * sy, p.id === S.myId ? 4 : 3, 0, Math.PI * 2);
-    mctx.fill();
+    const px = (p.x + 0.5) * sx;
+    const py = (p.y + 0.5) * sy;
+    if (p.id === S.myId) {
+      const pulse = (now % 1600) / 1600;
+      mctx.strokeStyle = `rgba(255, 255, 255, ${0.8 * (1 - pulse)})`;
+      mctx.lineWidth = 1.5;
+      mctx.beginPath();
+      mctx.arc(px, py, 4 + pulse * 7, 0, Math.PI * 2);
+      mctx.stroke();
+      mctx.fillStyle = '#ffffff';
+      mctx.beginPath();
+      mctx.arc(px, py, 3.5, 0, Math.PI * 2);
+      mctx.fill();
+    } else {
+      mctx.fillStyle = colorOf(p.id, 62);
+      mctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      mctx.lineWidth = 1;
+      mctx.beginPath();
+      mctx.moveTo(px, py - 4.5);
+      mctx.lineTo(px + 4.5, py);
+      mctx.lineTo(px, py + 4.5);
+      mctx.lineTo(px - 4.5, py);
+      mctx.closePath();
+      mctx.fill();
+      mctx.stroke();
+    }
   }
   for (const sq of (S.me && S.me.squads) || []) {
     const [type, key] = sq.o.split(' ');

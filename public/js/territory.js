@@ -147,10 +147,10 @@ function drawTerritory() {
   tctx.clearRect(0, 0, terrCanvas.width, terrCanvas.height);
   tctx.setTransform(TPX, 0, 0, TPX, 0, 0);
   for (const { owner, path } of S.terrShapes) {
-    tctx.fillStyle = colorOf(owner, 50, 0.35);
+    tctx.fillStyle = colorOf(owner, 52, owner === S.myId ? 0.6 : 0.48);
     tctx.fill(path);
-    tctx.strokeStyle = colorOf(owner, 62, 0.9);
-    tctx.lineWidth = 0.6;
+    tctx.strokeStyle = colorOf(owner, 68, 1);
+    tctx.lineWidth = 0.8;
     tctx.stroke(path);
   }
 }

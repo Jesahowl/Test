@@ -161,7 +161,7 @@ function runeEllipse(x, y, rx, ry, owner, rot, alpha = 0.7) {
 // extra fragment (2+), a spinning rune ring (3+), gold runes on the ground (4+), a radiant aura (5).
 function drawTowerSprite(t, x, y, s, now) {
   const lvl = t.level;
-  const r = s * 0.62 * (1 + 0.07 * (lvl - 1));
+  const r = s * 0.72 * (1 + 0.07 * (lvl - 1));
   const flip = t.flipAt ? (now - t.flipAt) / 900 : 1;
   const bounce = flip < 1 ? 1 + 0.3 * Math.sin(flip * Math.PI * 3) * (1 - flip) : 1;
   ctx.save();
@@ -393,7 +393,7 @@ function drawTowerSprite(t, x, y, s, now) {
 // Barracks: a crystal hall. A long stone hall on a rune circle, with crystals growing from the roof
 // ridge, glowing windows and a lit doorway. It flares and pulses when a wave marches out.
 function drawBarracksSprite(t, x, y, s, now) {
-  const r = s * 0.7;
+  const r = s * 0.8;
   const flip = t.flipAt ? (now - t.flipAt) / 900 : 1;
   const bounce = flip < 1 ? 1 + 0.3 * Math.sin(flip * Math.PI * 3) * (1 - flip) : 1;
   const out = t.waveAt ? Math.max(0, 1 - (now - t.waveAt) / 700) : 0;
@@ -500,7 +500,26 @@ function drawBarracksSprite(t, x, y, s, now) {
   ctx.restore();
   if (t.hp / t.maxHp < 0.3) drawSmoke(x, y, r, now, t.id);
   // "+5" tag
-  if (s >= 14) label(`+${C.BARRACKS_TROOPS}`, x - r * 1.0, y - r * 0.85, Math.max(9, Math.round(s * 0.32)), '#ffd54f');
+  if (s >= 12) {
+    // "+5" badge: troops this barracks adds to every wave
+    const bx = x - r * 1.0;
+    const by = y - r * 0.82;
+    const fs = Math.max(11, Math.round(s * 0.36));
+    ctx.font = `800 ${fs}px system-ui, sans-serif`;
+    const txt = `+${C.BARRACKS_TROOPS}`;
+    const w = ctx.measureText(txt).width + fs * 0.7;
+    ctx.fillStyle = 'rgba(13, 17, 23, 0.85)';
+    ctx.strokeStyle = 'rgba(255, 213, 79, 0.8)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(bx - w / 2, by - fs * 0.7, w, fs * 1.4, fs * 0.7);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#ffd54f';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(txt, bx, by + 0.5);
+  }
 }
 
 // A ruin: scattered rubble and a broken stub.
@@ -549,7 +568,7 @@ function drawTowers(dt) {
       }
       continue;
     }
-    const r = s * 0.62 * (1 + 0.07 * (t.level - 1));
+    const r = s * 0.72 * (1 + 0.07 * (t.level - 1));
     if (t.id === S.selectedId) {
       ctx.strokeStyle = 'rgba(255,255,255,0.9)';
       ctx.lineWidth = 2;
@@ -560,6 +579,15 @@ function drawTowers(dt) {
       ctx.stroke();
       ctx.setLineDash([]);
     }
+    // a soft pool of the owner's colour on the ground, so buildings stand out from troops
+    const gy = y + s * 0.4;
+    const gl = ctx.createRadialGradient(x, gy, 0, x, gy, s * 1.4);
+    gl.addColorStop(0, colorOf(t.owner, 60, 0.32));
+    gl.addColorStop(1, colorOf(t.owner, 60, 0));
+    ctx.fillStyle = gl;
+    ctx.beginPath();
+    ctx.ellipse(x, gy, s * 1.4, s * 0.75, 0, 0, Math.PI * 2);
+    ctx.fill();
     if (t.kind === 'barracks') drawBarracksSprite(t, x, y, s, now);
     else drawTowerSprite(t, x, y, s, now);
     structBar(t, x, y - r * (t.kind === 'barracks' ? 1.4 : 2.1), s * 1.0, now, t.id === S.selectedId || t.id === hover, dt);

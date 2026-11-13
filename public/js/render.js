@@ -187,38 +187,74 @@ function drawShape(kind, x, y, r, fill) {
       ctx.fill();
       break;
     }
-    case 'tower':
-      // wizard tower with a floating top: broken stump, crystal, hovering roof
+    case 'tower': {
+      // wizard tower with a floating top: a broken stump, the crystal, and the roof hovering above
+      const w = r * 1.35; // drawn wide and bold so it reads at icon size
       ctx.beginPath();
-      ctx.moveTo(x - r * 0.42, y + r * 0.9);
-      ctx.lineTo(x - r * 0.38, y + r * 0.25);
-      ctx.lineTo(x - r * 0.15, y + r * 0.12);
-      ctx.lineTo(x + r * 0.05, y + r * 0.24);
-      ctx.lineTo(x + r * 0.2, y + r * 0.1);
-      ctx.lineTo(x + r * 0.38, y + r * 0.25);
-      ctx.lineTo(x + r * 0.42, y + r * 0.9);
+      ctx.moveTo(x - w * 0.42, y + r * 0.95);
+      ctx.lineTo(x - w * 0.38, y + r * 0.22);
+      ctx.lineTo(x - w * 0.14, y + r * 0.06);
+      ctx.lineTo(x + w * 0.04, y + r * 0.2);
+      ctx.lineTo(x + w * 0.2, y + r * 0.04);
+      ctx.lineTo(x + w * 0.38, y + r * 0.22);
+      ctx.lineTo(x + w * 0.42, y + r * 0.95);
       ctx.closePath();
       ctx.fill();
       ctx.beginPath();
-      ctx.moveTo(x, y - r * 0.5);
-      ctx.lineTo(x + r * 0.22, y - r * 0.2);
-      ctx.lineTo(x, y + r * 0.02);
-      ctx.lineTo(x - r * 0.22, y - r * 0.2);
+      ctx.moveTo(x, y - r * 0.52);
+      ctx.lineTo(x + w * 0.22, y - r * 0.22);
+      ctx.lineTo(x, y - r * 0.02);
+      ctx.lineTo(x - w * 0.22, y - r * 0.22);
       ctx.closePath();
       ctx.fill();
       ctx.beginPath();
-      ctx.moveTo(x - r * 0.4, y - r * 0.6);
-      ctx.lineTo(x, y - r * 1.0);
-      ctx.lineTo(x + r * 0.4, y - r * 0.6);
+      ctx.moveTo(x - w * 0.42, y - r * 0.6);
+      ctx.lineTo(x, y - r * 1.05);
+      ctx.lineTo(x + w * 0.42, y - r * 0.6);
       ctx.closePath();
       ctx.fill();
       ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.fillRect(x - r * 0.08, y + r * 0.42, r * 0.16, r * 0.26);
+      ctx.beginPath();
+      ctx.moveTo(x - r * 0.12, y + r * 0.78);
+      ctx.lineTo(x - r * 0.12, y + r * 0.45);
+      ctx.arc(x, y + r * 0.45, r * 0.12, Math.PI, 0);
+      ctx.lineTo(x + r * 0.12, y + r * 0.78);
+      ctx.closePath();
+      ctx.fill();
       break;
+    }
     default:
       ctx.arc(x, y, r * 0.8, 0, Math.PI * 2);
       ctx.fill();
   }
 }
 
-export { drawBackground, drawShape, hpBar, label, onScreen, resize };
+// The outline of a troop's token, different for each type so they can be told apart at a glance:
+// soldiers a rounded square, scouts a diamond, medics a circle, archers a triangle.
+// R is the size of the round token the shapes replace.
+function tokenPath(g, kind, x, y, R) {
+  g.beginPath();
+  if (kind === 'soldier') {
+    const h = R * 0.9;
+    g.roundRect(x - h, y - h, h * 2, h * 2, R * 0.32);
+  } else if (kind === 'scout') {
+    const d = R * 1.22;
+    g.moveTo(x, y - d);
+    g.lineTo(x + d, y);
+    g.lineTo(x, y + d);
+    g.lineTo(x - d, y);
+    g.closePath();
+  } else if (kind === 'archer') {
+    const c = R * 1.5;
+    const cy = y + R * 0.18;
+    for (let i = 0; i < 3; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI * 2) / 3;
+      g.lineTo(x + Math.cos(a) * c, cy + Math.sin(a) * c);
+    }
+    g.closePath();
+  } else {
+    g.arc(x, y, R, 0, Math.PI * 2);
+  }
+}
+
+export { drawBackground, drawShape, hpBar, label, onScreen, resize, tokenPath };
