@@ -57,18 +57,39 @@ function traceOutlines() {
       }
       e = next;
     }
-    loops.push({ owner: o, pts });
+    loops.push({ owner: o, pts, pins: pts.map(([x, y]) => isJunction(x, y)) });
   }
   return loops;
 }
 
+// A tile corner where three or more areas meet (or two meet diagonally). These corners stay put
+// while outlines are smoothed, so neighbouring territories always share exactly the same border
+// line - no gaps or overlaps between them.
+function isJunction(x, y) {
+  const W = C.MAP_W;
+  const at = (tx, ty) => (tx < 0 || ty < 0 || tx >= W || ty >= C.MAP_H ? -1 : S.terrView[ty * W + tx]);
+  const a = at(x - 1, y - 1);
+  const b = at(x, y - 1);
+  const c = at(x - 1, y);
+  const d = at(x, y);
+  const distinct = new Set([a, b, c, d]).size;
+  if (distinct >= 3) return true;
+  return distinct === 2 && a === d && b === c; // diagonal (checkerboard) corner
+}
+
 // Moving average along the loop: turns tile staircases into straight diagonals and curves.
-function relax(pts, window, passes) {
+// Pinned corners don't move. Because each point only depends on its neighbours along the border,
+// two territories sharing a border smooth it to exactly the same line.
+function relax(pts, window, passes, pins) {
   const n = pts.length;
-  if (n < 12) return pts;
+  if (n < 4) return pts;
   for (let k = 0; k < passes; k++) {
     const next = new Array(n);
     for (let i = 0; i < n; i++) {
+      if (pins && pins[i]) {
+        next[i] = pts[i];
+        continue;
+      }
       let sx = 0;
       let sy = 0;
       for (let j = -window; j <= window; j++) {
@@ -83,17 +104,26 @@ function relax(pts, window, passes) {
   return pts;
 }
 
-function chaikin(pts, iters) {
+// Chaikin corner cutting. Pinned corners are kept as-is (the curve passes through them), so
+// where three territories meet their borders still touch exactly.
+function chaikin(pts, iters, pins) {
   for (let k = 0; k < iters; k++) {
     const n = pts.length;
-    const next = new Array(n * 2);
+    const next = [];
+    const nextPins = [];
     for (let i = 0; i < n; i++) {
       const p = pts[i];
       const q = pts[(i + 1) % n];
-      next[2 * i] = [p[0] * 0.75 + q[0] * 0.25, p[1] * 0.75 + q[1] * 0.25];
-      next[2 * i + 1] = [p[0] * 0.25 + q[0] * 0.75, p[1] * 0.25 + q[1] * 0.75];
+      if (pins && pins[i]) {
+        next.push(p);
+        nextPins.push(true);
+      }
+      next.push([p[0] * 0.75 + q[0] * 0.25, p[1] * 0.75 + q[1] * 0.25]);
+      next.push([p[0] * 0.25 + q[0] * 0.75, p[1] * 0.25 + q[1] * 0.75]);
+      nextPins.push(false, false);
     }
     pts = next;
+    pins = nextPins;
   }
   return pts;
 }
@@ -104,7 +134,7 @@ function drawTerritory() {
   for (const loop of traceOutlines()) {
     let path = byOwner.get(loop.owner);
     if (!path) byOwner.set(loop.owner, (path = new Path2D()));
-    const pts = chaikin(relax(loop.pts, SMOOTH_WINDOW, SMOOTH_PASSES), 1);
+    const pts = chaikin(relax(loop.pts, SMOOTH_WINDOW, SMOOTH_PASSES, loop.pins), 1, loop.pins);
     path.moveTo(pts[0][0], pts[0][1]);
     for (let i = 1; i < pts.length; i++) path.lineTo(pts[i][0], pts[i][1]);
     path.closePath();

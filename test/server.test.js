@@ -83,9 +83,10 @@ test('rounds: late joiners wait, and everyone joins the next round', async () =>
     b.send(JSON.stringify({ t: 'join', name: 'B' }));
     await waitFor(b, (m) => m.t === 'wait');
 
-    // A's round ends (A is the last core standing).
+    // A's round ends (A is the last core standing). The server's own tick may end it before B has
+    // even connected, so check the scoreboard on A, who is always there for it.
     srv.game.update(0.05);
-    const over = await waitFor(b, (m) => m.t === 'roundover');
+    const over = await waitFor(a, (m) => m.t === 'roundover');
     assert.strictEqual(over.winner.id, wa.id);
     srv.newRound();
     const wb = await waitFor(b, (m) => m.t === 'welcome');
