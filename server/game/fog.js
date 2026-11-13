@@ -6,7 +6,9 @@
 const { C, Vision, dist, round2 } = require('./common');
 
 module.exports = {
-  // What each player can see right now (p.vis), and everywhere they have ever seen (p.explored).
+  // What each player's core, buildings and troops see right now (p.vis), and everywhere they have
+  // ever seen (p.explored). Fog only hides ground nobody has explored: once cleared, an area stays
+  // revealed with live activity.
   updateVision() {
     const n = this.w * this.h;
     const sources = new Map();
@@ -33,11 +35,11 @@ module.exports = {
     }
   },
 
-  // Can player p see world point (x, y)?
+  // Can player p see world point (x, y)? Yes anywhere they have explored.
   sees(p, x, y) {
     const tx = Math.floor(x);
     const ty = Math.floor(y);
-    return !!p.vis && this.inBounds(tx, ty) && p.vis[this.idx(tx, ty)] === 1;
+    return !!p.explored && this.inBounds(tx, ty) && p.explored[this.idx(tx, ty)] === 1;
   },
 
   medicTick(u, def, s, tgt, speed, dt) {

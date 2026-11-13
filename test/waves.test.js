@@ -422,3 +422,19 @@ test('"new waves follow" is an explicit choice on each order', () => {
   assert.strictEqual(g.order(a.id, null, { k: 'u', id: foe.id }, 1, null, true), null);
   assert.deepStrictEqual(a.order, { type: 'defend', anchor: 0 });
 });
+
+test('cleared fog stays clear: explored areas keep showing live activity', () => {
+  const { g, a, b } = duel(25);
+  g.update(0.05);
+  g.update(0.05);
+  const spot = { x: b.core.x + 0.5, y: b.core.y + 0.5 };
+  assert.ok(!g.sees(a, spot.x, spot.y), 'unexplored at first');
+  const [scout] = troops(g, a, 'scout', 1, spot.x, spot.y + 6);
+  g.update(0.05);
+  g.update(0.05);
+  assert.ok(g.sees(a, spot.x, spot.y + 4), 'the scout reveals it');
+  g.units.delete(scout.id); // the scout is gone...
+  g.update(0.05);
+  g.update(0.05);
+  assert.ok(g.sees(a, spot.x, spot.y + 4), '...but the area stays revealed');
+});

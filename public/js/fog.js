@@ -1,9 +1,10 @@
-// Fog of war: what I can see, what I remember, and the fog overlay.
+// Fog of war: only ground nobody on my side has explored is hidden. Once an area has been seen
+// (by my core, buildings, troops or scouts) it stays revealed, with everything happening there.
 
 import { S, C, ctx, explored, fogCanvas, fogCtx, fogImg, NTILES, players, scale, terr, terrSeen, toScreen, vis, Vision } from './state.js';
 import { drawTerritory } from './territory.js';
 
-const seesTile = (x, y) => vis[Math.floor(y) * C.MAP_W + Math.floor(x)] === 1;
+const seesTile = (x, y) => explored[Math.floor(y) * C.MAP_W + Math.floor(x)] === 1;
 
 // Recompute my sight and the remembered map. terrChanged: new territory arrived this update.
 function updateFog(terrChanged) {
@@ -24,8 +25,8 @@ function updateFog(terrChanged) {
   for (const u of S.units.values()) if (u.owner === S.myId) sources.push({ x: u.x, y: u.y, r: C.UNITS[u.kind].sight || 5 });
   Vision.computeVision(vis, C.MAP_W, C.MAP_H, S.myId, terr, sources);
   for (let k = 0; k < NTILES; k++) {
-    if (!vis[k]) continue;
-    explored[k] = 1;
+    if (vis[k]) explored[k] = 1;
+    if (!explored[k]) continue;
     if (terrSeen[k] !== terr[k]) {
       terrSeen[k] = terr[k];
       redraw = true;
@@ -33,7 +34,7 @@ function updateFog(terrChanged) {
   }
   S.terrView = terrSeen;
   if (redraw) drawTerritory();
-  // Buildings, cores and camps: live while in sight, otherwise as last seen.
+  // Buildings, cores and camps: live once their spot has been explored.
   const remember = (seen, live, posOf) => {
     for (const [id, o] of live) {
       const [x, y] = posOf(o);
@@ -48,13 +49,13 @@ function updateFog(terrChanged) {
   S.towersView = remember(S.towersSeen, S.towers, (t) => [t.x, t.y]);
   S.coresView = remember(S.coresSeen, players, (p) => [p.x, p.y]);
   S.campsView = [...remember(S.campsSeen, S.campMap, (c) => [c.x, c.y]).values()];
-  // Fog image: clear where I see, dim where I've been, dark where I've never looked.
+  // Fog image: clear wherever explored, dark where nobody has looked yet.
   const d = fogImg.data;
   for (let k = 0; k < NTILES; k++) {
     d[k * 4] = 8;
     d[k * 4 + 1] = 11;
     d[k * 4 + 2] = 15;
-    d[k * 4 + 3] = vis[k] ? 0 : explored[k] ? 120 : 246;
+    d[k * 4 + 3] = explored[k] ? 0 : 246;
   }
   fogCtx.putImageData(fogImg, 0, 0);
 }
