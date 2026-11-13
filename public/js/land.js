@@ -30,6 +30,9 @@ function canBuy(k, pending) {
     return pending && pending.has(j) ? S.myId : terr[j];
   };
   const me = S.myId;
+  // the ground around someone else's building isn't for sale (mirrors the server)
+  for (const t of S.towers.values()) if (t.owner && t.owner !== me && Math.abs(t.x - x) <= 1 && Math.abs(t.y - y) <= 1) return false;
+  for (const p of players.values()) if (p.id !== me && Math.abs(p.x - x) <= 1 && Math.abs(p.y - y) <= 1) return false;
   if (at(x - 1, y) !== me && at(x + 1, y) !== me && at(x, y - 1) !== me && at(x, y + 1) !== me) return false;
   for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
     const h = at(x + dx, y);

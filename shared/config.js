@@ -35,6 +35,7 @@
     CHEAP_LEVELS: 2,
     LATE_LEVEL_PRICE: 2.5,
     SELL_REFUND: 0.6,
+    SELL_LOCK: 5, // seconds after a building is hit before it can be sold
     RUIN_CAPTURE_COST: 25,
     RUIN_LIFETIME: 120, // seconds before an unclaimed ruin crumbles
 

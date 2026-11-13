@@ -61,6 +61,7 @@ module.exports = {
   damageTower(t, amount, byPid) {
     if (!t.owner || this.isShielded(this.players.get(t.owner))) return;
     t.hp -= amount;
+    t.hitAt = this.time;
     this.fx.push({ k: 'hit', x: t.x + 0.5, y: t.y + 0.5 });
     if (t.hp > 0) return;
     const owner = this.players.get(t.owner);

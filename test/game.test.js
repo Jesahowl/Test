@@ -246,3 +246,28 @@ test('bases spawn at random spots, spread far apart', () => {
   }
   assert.ok(firsts.size >= 5, 'a different layout each game');
 });
+
+test("a building's ground stays its owner's: never released, bought or granted away", () => {
+  const { g, a, b } = duel(5);
+  const t = outpost(g, b);
+  // a second tower of b's right next to the first (on the core's side of it)
+  const t2x = t.x - 2;
+  assert.strictEqual(g.build(b.id, t2x, t.y, 'tower'), null);
+  g.transferTower(t, a.id);
+  assert.strictEqual(g.terr[g.idx(t.x, t.y)], a.id, 'the captor gets the captured tower\'s tile');
+  assert.strictEqual(g.terr[g.idx(t2x, t.y)], b.id, "b's other tower keeps its ground");
+  assert.strictEqual(g.terr[g.idx(t2x - 1, t.y)], b.id, '...and the ring around it');
+  // and nobody can buy the ground around an enemy building
+  const k = g.idx(t2x - 1, t.y + 1);
+  g.terr[k] = 0; g.terrDirty = true;
+  assert.ok(!g.canBuyTile(a.id, k));
+});
+
+test("a building can't be sold while it's under attack", () => {
+  const { g, a, b } = duel(6);
+  const t = outpost(g, b);
+  g.damageTower(t, 10, a.id);
+  assert.match(g.sell(b.id, t.id), /under attack/);
+  for (let i = 0; i < 20 * (C.SELL_LOCK + 0.5); i++) g.update(0.05);
+  assert.strictEqual(g.sell(b.id, t.id), null);
+});

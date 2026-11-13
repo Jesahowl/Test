@@ -23,6 +23,30 @@ module.exports = {
     this.terrVersion++;
   },
 
+  // Who owns the building (core, tower or barracks) standing on or right next to each tile: the
+  // 3x3 under a building always stays its owner's, whatever else happens to the land around it.
+  // 0 = no building there. Rebuilt whenever buildings change.
+  footprints() {
+    const key = `${this.structVersion}:${this.players.size}`;
+    if (this.footKey === key) return this.foot;
+    this.footKey = key;
+    if (!this.foot) this.foot = new Int32Array(this.w * this.h);
+    this.foot.fill(0);
+    const mark = (x, y, owner) => {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (this.inBounds(x + dx, y + dy)) this.foot[this.idx(x + dx, y + dy)] = owner;
+        }
+      }
+    };
+    for (const t of this.towers.values()) if (t.owner) mark(t.x, t.y, t.owner);
+    for (const p of this.players.values()) if (p.alive) mark(p.core.x, p.core.y, p.id);
+    // where two buildings stand side by side, the tile right under each one is still its own
+    for (const t of this.towers.values()) if (t.owner) this.foot[this.idx(t.x, t.y)] = t.owner;
+    for (const p of this.players.values()) if (p.alive) this.foot[this.idx(p.core.x, p.core.y)] = p.id;
+    return this.foot;
+  },
+
   // The land a new core starts with: the empty tiles in a circle around it.
   claimStart(p) {
     const r = C.CORE_CLAIM + 0.25;
@@ -39,10 +63,12 @@ module.exports = {
     this.terrDirty = true;
   },
 
-  // pid's tiles within r of (cx, cy) become empty (r = Infinity: all of them).
+  // pid's tiles within r of (cx, cy) become empty (r = Infinity: all of them), except the ground
+  // under pid's own buildings.
   releaseLand(pid, cx = 0, cy = 0, r = Infinity) {
+    const foot = this.footprints();
     for (let k = 0; k < this.terr.length; k++) {
-      if (this.terr[k] !== pid) continue;
+      if (this.terr[k] !== pid || foot[k] === pid) continue;
       if (r !== Infinity) {
         const x = k % this.w;
         const y = (k - x) / this.w;
@@ -53,11 +79,16 @@ module.exports = {
     this.terrDirty = true;
   },
 
-  // The 3x3 block around (cx, cy) becomes pid's (the ground a captured building stands on).
+  // The 3x3 block around (cx, cy) becomes pid's (the ground a captured building stands on), except
+  // ground under someone else's building.
   grantBlock(pid, cx, cy) {
+    const foot = this.footprints();
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
-        if (this.inBounds(cx + dx, cy + dy)) this.terr[this.idx(cx + dx, cy + dy)] = pid;
+        if (!this.inBounds(cx + dx, cy + dy)) continue;
+        const k = this.idx(cx + dx, cy + dy);
+        if (foot[k] && foot[k] !== pid) continue;
+        this.terr[k] = pid;
       }
     }
     this.terrDirty = true;
@@ -67,6 +98,8 @@ module.exports = {
   // only at a corner (which can't be drawn cleanly)?
   canBuyTile(pid, k) {
     if (k < 0 || k >= this.terr.length || this.terr[k]) return false;
+    const foot = this.footprints()[k];
+    if (foot && foot !== pid) return false; // the ground around someone else's building
     const x = k % this.w;
     const y = (k - x) / this.w;
     const at = (tx, ty) => (this.inBounds(tx, ty) ? this.terr[this.idx(tx, ty)] : -1);
