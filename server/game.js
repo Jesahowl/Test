@@ -136,6 +136,7 @@ class Game {
     this.updateUnits(dt);
     this.updateStructures(dt);
     this.updateCreeps(dt);
+    this.separateUnits();
 
     for (const t of this.towers.values()) {
       if (t.ruin && this.time - t.ruinTime > C.RUIN_LIFETIME) this.removeTower(t);

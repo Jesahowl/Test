@@ -499,9 +499,9 @@ function drawBarracksSprite(t, x, y, s, now) {
   }
   ctx.restore();
   if (t.hp / t.maxHp < 0.3) drawSmoke(x, y, r, now, t.id);
-  // "+5" tag
+  // "+4" tag
   if (s >= 12) {
-    // "+5" badge: troops this barracks adds to every wave
+    // "+4" badge: troops this barracks adds to every wave
     const bx = x - r * 1.0;
     const by = y - r * 0.82;
     const fs = Math.max(11, Math.round(s * 0.36));

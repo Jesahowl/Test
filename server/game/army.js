@@ -277,8 +277,8 @@ module.exports = {
   },
 
   updateWaves() {
-    if (this.time >= (this.pruneAt || 0)) {
-      this.pruneAt = this.time + 1;
+    if (this.time >= (this.squadPruneAt || 0)) {
+      this.squadPruneAt = this.time + 1;
       this.pruneSquads();
     }
     for (const p of this.players.values()) {

@@ -7,13 +7,13 @@ const { Game, seeded, duel, edgeTile, outpost, troops, run } = require('./helper
 
 const mine = (g, p) => [...g.units.values()].filter((u) => u.owner === p.id);
 
-test('the core sends a free wave of 5 every interval', () => {
+test('the core sends a free wave of 4 (one of each type) every interval', () => {
   const { g, a } = duel(1);
   a.nextWaveAt = g.time;
   g.update(0.05);
   const w1 = mine(g, a);
   assert.strictEqual(w1.length, C.BASE_WAVE);
-  assert.deepStrictEqual(w1.map((u) => u.kind).sort(), ['soldier', 'soldier', 'soldier', 'soldier', 'soldier']);
+  assert.deepStrictEqual(w1.map((u) => u.kind).sort(), ['archer', 'medic', 'scout', 'soldier']);
   assert.ok(Math.abs(a.nextWaveAt - (g.time - 0.05 + C.WAVE_INTERVAL)) < 0.1);
   run(g, C.WAVE_INTERVAL);
   assert.strictEqual(mine(g, a).length, C.BASE_WAVE * 2);
@@ -35,7 +35,7 @@ function barracksAt(g, p, dx, dy) {
   return [...g.towers.values()].find((t) => t.x === p.core.x + dx && t.y === p.core.y + dy);
 }
 
-test('each barracks adds 5 troops to every wave, spawning at the barracks', () => {
+test('each barracks adds 4 troops to every wave, spawning at the barracks', () => {
   const { g, a } = duel(16);
   const gold = a.gold;
   const b1 = barracksAt(g, a, 4, 0);
@@ -47,10 +47,10 @@ test('each barracks adds 5 troops to every wave, spawning at the barracks', () =
   a.nextWaveAt = g.time;
   g.update(0.05);
   const wave = mine(g, a);
-  assert.strictEqual(wave.length, 15);
+  assert.strictEqual(wave.length, C.BASE_WAVE + 2 * C.BARRACKS_TROOPS);
   const near = (t) => wave.filter((u) => Math.hypot(u.x - t.x - 0.5, u.y - t.y - 0.5) < 1.6).length;
-  assert.strictEqual(near(b1), 5);
-  assert.strictEqual(near(b2), 5);
+  assert.strictEqual(near(b1), C.BARRACKS_TROOPS);
+  assert.strictEqual(near(b2), C.BARRACKS_TROOPS);
   assert.strictEqual(new Set(wave.map((u) => u.sq)).size, 1, 'the whole wave is one squad');
   // rules: own land only, a maximum count, no upgrades, and they don't shoot
   const out = edgeTile(g, a, 0, 1, 1);
@@ -73,15 +73,15 @@ test('losing a barracks shrinks your waves; the player who takes it gets the tro
 test('the army plan sets the wave mix for free (one slot per troop); levels cost gold', () => {
   const { g, a } = duel(3);
   const gold = a.gold;
+  for (const k of Object.keys(a.army)) a.army[k] = 0; // start from an all-soldier wave
   assert.strictEqual(g.armyAdd(a.id, 'archer'), null);
   assert.strictEqual(g.armyAdd(a.id, 'archer'), null);
   assert.strictEqual(a.gold, gold, 'assigning slots is free');
-  assert.deepStrictEqual(g.waveList(a), ['archer', 'archer', 'soldier', 'soldier', 'soldier']);
+  assert.deepStrictEqual(g.waveList(a), ['archer', 'archer', 'soldier', 'soldier']);
   assert.strictEqual(g.armyAdd(a.id, 'scout'), null);
   assert.strictEqual(g.armyAdd(a.id, 'medic'), null);
-  assert.strictEqual(g.armyAdd(a.id, 'medic'), null);
   assert.match(g.armyAdd(a.id, 'medic'), /barracks/);
-  assert.deepStrictEqual(g.waveList(a), ['scout', 'medic', 'medic', 'archer', 'archer']);
+  assert.deepStrictEqual(g.waveList(a), ['scout', 'medic', 'archer', 'archer']);
   assert.match(g.armyAdd(a.id, 'dragon'), /Invalid/);
   assert.strictEqual(g.armyLevel(a.id, 'archer'), null);
   assert.strictEqual(a.levels.archer, 2);
@@ -415,6 +415,8 @@ test('squads: merging, and moving picked troops between squads', () => {
     g.update(0.05);
     return mine(g, a).filter((u) => !before.has(u));
   };
+  for (const k of Object.keys(a.army)) a.army[k] = 0; // all soldiers: none wander off scouting
+  barracksAt(g, a, 4, 0); // 8 troops a wave
   const w1 = wave();
   const w2 = wave();
   g.order(a.id, null, { k: 't', id: t.id }, [w2[0].sq]);
@@ -460,4 +462,23 @@ test('squads stay together on the march and stand guard together at home', () =>
   g.order(a.id, null, { k: 'c', id: a.id });
   run(g, 25);
   assert.ok(spread(true) < 2.6, `squad stands guard together (spread ${spread(true).toFixed(2)})`);
+});
+
+test('troops keep their personal space: never on top of each other or inside buildings', () => {
+  const { g, a, b } = duel(29);
+  const mx = a.core.x + 0.5;
+  const my = a.core.y + 0.5;
+  // a pile of troops dropped right on the core, plus an enemy in the middle of them
+  const pile = troops(g, a, 'soldier', 8, mx, my);
+  for (const u of pile) { u.x = mx; u.y = my; }
+  const [foe] = troops(g, b, 'soldier', 1, mx, my);
+  foe.hp = foe.maxHp = 1e6;
+  run(g, 1.5);
+  const all = [...pile, foe].filter((u) => g.units.has(u.id));
+  for (const u of all) {
+    assert.ok(Math.hypot(u.x - mx, u.y - my) >= C.CORE_BODY - 0.05, 'pushed out of the core');
+    for (const v of all) {
+      if (v !== u) assert.ok(Math.hypot(u.x - v.x, u.y - v.y) > 0.4, 'troops spread apart');
+    }
+  }
 });

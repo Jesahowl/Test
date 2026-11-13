@@ -28,19 +28,21 @@ function mySquads() {
     q.votes.set(st, (q.votes.get(st) || 0) + 1);
   }
   for (const q of by.values()) {
-    let sx = 0;
-    let sy = 0;
-    let top = Infinity;
-    for (const u of q.units) {
-      const x = u.rx ?? u.x;
-      const y = u.ry ?? u.y;
-      sx += x;
-      sy += y;
-      top = Math.min(top, y);
-    }
-    q.cx = sx / q.units.length;
-    q.cy = sy / q.units.length;
-    q.top = top;
+    // The squad's main group: scouts off exploring (and other strays) don't drag its tag away.
+    const pos = (u) => [u.rx ?? u.x, u.ry ?? u.y];
+    const core = q.units.filter((u) => u.kind !== 'scout' || u.attack);
+    const base = core.length ? core : q.units;
+    let mx = base.reduce((a, u) => a + pos(u)[0], 0) / base.length;
+    let my = base.reduce((a, u) => a + pos(u)[1], 0) / base.length;
+    // the troop nearest that centre, then everyone within 3 tiles of it
+    const mid = base.reduce((b, u) => (Math.hypot(pos(u)[0] - mx, pos(u)[1] - my) < Math.hypot(pos(b)[0] - mx, pos(b)[1] - my) ? u : b));
+    const [ox, oy] = pos(mid);
+    const group = base.filter((u) => Math.hypot(pos(u)[0] - ox, pos(u)[1] - oy) <= 3);
+    mx = group.reduce((a, u) => a + pos(u)[0], 0) / group.length;
+    my = group.reduce((a, u) => a + pos(u)[1], 0) / group.length;
+    q.cx = mx;
+    q.cy = my;
+    q.top = Math.min(...group.map((u) => pos(u)[1]));
     q.status = [...q.votes].sort((a, b) => b[1] - a[1])[0][0];
   }
   cache = [...by.values()].sort((a, b) => a.num - b.num);

@@ -1,12 +1,12 @@
 // First-game tips.
 
-import { S, $, UNIT_KEYS } from './state.js';
+import { S, $, C, UNIT_KEYS } from './state.js';
 
 // ---- first-game tips: one at a time, each ticks off when you do the thing.
 const TIPS = [
   { id: 'attack', text: 'Your core sends troops every 20 seconds. <b>Right-click</b> an enemy tower, core or camp to send them. Press <kbd>H</kbd> to bring everyone home.' },
   { id: 'tower', text: 'Press <kbd>B</kbd>, then click near your border to build a <b>tower</b>. Towers claim land (land = gold) and shoot enemies.' },
-  { id: 'barracks', text: 'Press <kbd>R</kbd> and click your land for a <b>barracks</b>: <b>+5 troops</b> in every wave, marching out from it.' },
+  { id: 'barracks', text: 'Press <kbd>R</kbd> and click your land for a <b>barracks</b>: <b>+4 troops</b> in every wave, marching out from it.' },
   { id: 'mix', text: 'Choose your wave with the <b>+</b> buttons. <b>Scouts</b> explore the fog, <b>archers</b> shoot from range, <b>medics</b> heal.' },
   { id: 'send', text: 'Every wave marches out as a <b>squad</b> (its number floats above it). <b>Click one of its troops</b> or press its number, then right-click to send <b>just that squad</b>. Keep some home to defend.' },
   { id: 'jungle', text: 'Right-click <b>barbarian camps</b> for gold. Beat a <b>Warlord\'s Fort</b> (🔥) to power up your troops for 60s.' },
@@ -33,7 +33,7 @@ function updateTips() {
   const mine = [...S.towers.values()].filter((t) => t.owner === S.myId);
   if (mine.some((t) => t.kind === 'tower')) tipDone('tower');
   if (mine.some((t) => t.kind === 'barracks')) tipDone('barracks');
-  if (UNIT_KEYS.some((k) => S.me.army[k] > 0)) tipDone('mix');
+  if (UNIT_KEYS.some((k) => S.me.army[k] !== (C.START_ARMY[k] || 0))) tipDone('mix');
   const tip = !S.tipsOff && TIPS.find((t) => !S.tipsDone.has(t.id));
   if (!tip || S.buildKind) {
     el.classList.add('hidden');

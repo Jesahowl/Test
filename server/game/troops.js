@@ -261,10 +261,15 @@ module.exports = {
       const dx = tx - u.x;
       const dy = ty - u.y;
       const d = Math.hypot(dx, dy);
-      if (d <= budget) {
-        u.x = tx;
-        u.y = ty;
-        budget -= d;
+      // Close enough counts as there: troops keep UNIT_SPACING apart, so two heading for the same
+      // spot would otherwise never both reach it.
+      const near = u.path.length ? 0.45 : 0.35;
+      if (d <= budget || d < near) {
+        if (d <= budget) {
+          u.x = tx;
+          u.y = ty;
+          budget -= d;
+        } else budget = 0;
         if (u.path.length) u.path.shift();
         else {
           u.dest = null;
@@ -360,6 +365,54 @@ module.exports = {
     const ang = num * 2.39996; // golden angle: squads fan out evenly around the core
     const r = Math.min(a.leash * 0.6, 2.6);
     return { x: a.x + Math.cos(ang) * r, y: a.y + Math.sin(ang) * r };
+  },
+
+  // Push troops apart so none sit on top of each other (friend or foe), and out of buildings and
+  // barbarians. Each overlap is resolved part of the way per tick, so crowds settle smoothly.
+  separateUnits() {
+    const R = C.UNIT_SPACING;
+    for (const u of this.units.values()) {
+      for (const v of this.nearUnits(u.x, u.y, R)) {
+        if (v.id <= u.id) continue;
+        let dx = v.x - u.x;
+        let dy = v.y - u.y;
+        let d = Math.hypot(dx, dy);
+        if (d >= R) continue;
+        if (d < 1e-4) {
+          const a = (u.id * 2.39996 + v.id) % (Math.PI * 2); // exactly on top: split in a fixed direction
+          dx = Math.cos(a);
+          dy = Math.sin(a);
+          d = 1;
+        } else {
+          dx /= d;
+          dy /= d;
+        }
+        const push = (R - Math.min(d, R)) * 0.3;
+        u.x -= dx * push;
+        u.y -= dy * push;
+        v.x += dx * push;
+        v.y += dy * push;
+      }
+    }
+    const solid = []; // buildings and barbarians: troops step out of their way
+    for (const p of this.players.values()) if (p.alive) solid.push({ x: p.core.x + 0.5, y: p.core.y + 0.5, r: C.CORE_BODY });
+    for (const t of this.towers.values()) solid.push({ x: t.x + 0.5, y: t.y + 0.5, r: C.STRUCT_BODY });
+    for (const c of this.creeps.values()) solid.push({ x: c.x, y: c.y, r: C.CREEP_BODY });
+    for (const o of solid) {
+      for (const u of this.nearUnits(o.x, o.y, o.r)) {
+        const dx = u.x - o.x;
+        const dy = u.y - o.y;
+        const d = Math.hypot(dx, dy);
+        if (d >= o.r) continue;
+        const a = d < 1e-4 ? (u.id * 2.39996) % (Math.PI * 2) : Math.atan2(dy, dx);
+        u.x = o.x + Math.cos(a) * o.r;
+        u.y = o.y + Math.sin(a) * o.r;
+      }
+    }
+    for (const u of this.units.values()) {
+      u.x = Math.max(0.3, Math.min(this.w - 0.3, u.x));
+      u.y = Math.max(0.3, Math.min(this.h - 0.3, u.y));
+    }
   },
 
   updateUnits(dt) {

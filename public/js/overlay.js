@@ -127,17 +127,71 @@ function drawTargetMarker(pos, attack, strong, size = 1) {
   ctx.restore();
 }
 
+// Things a squad's number tag must not cover, in screen space: enemy troops, barbarians and
+// buildings (with their name/health bar above). Built once per frame.
+function tagObstacles(s) {
+  const obs = [];
+  const add = (wx, wy, r) => {
+    const [x, y] = toScreen(wx, wy);
+    if (x > -60 && y > -60 && x < canvas.width + 60 && y < canvas.height + 60) obs.push({ x, y, r });
+  };
+  for (const u of S.units.values()) if (u.owner !== S.myId) add(u.rx ?? u.x, u.ry ?? u.y, s * 0.45);
+  for (const c of S.creeps.values()) add(c.rx ?? c.x, c.ry ?? c.y, s * 0.5);
+  for (const t of S.towersView.values()) {
+    add(t.x + 0.5, t.y + 0.5, s * 0.85);
+    add(t.x + 0.5, t.y - 0.5, s * 0.75); // its floating top / health bar
+  }
+  for (const p of S.coresView.values()) {
+    add(p.x + 0.5, p.y + 0.5, s * 1.05);
+    add(p.x + 0.5, p.y - 0.9, s * 1.0); // name and health bar
+  }
+  return obs;
+}
+
+const rectHitsCircle = (r, c) => {
+  const nx = Math.max(r.x, Math.min(c.x, r.x + r.w));
+  const ny = Math.max(r.y, Math.min(c.y, r.y + r.h));
+  return Math.hypot(nx - c.x, ny - c.y) < c.r;
+};
+const rectsHit = (p, q) => p.x < q.x + q.w && q.x < p.x + p.w && p.y < q.y + q.h && q.y < p.y + p.h;
+
 // A squad's number in a little flag above the group, so you can see and click squads at a glance.
-// Gold when it's one of the squads your orders go to.
-function drawSquadTag(q, s) {
-  const [x, y0] = toScreen(q.cx, q.top);
-  const y = y0 - s * 0.75;
+// Gold when it's one of the squads your orders go to. It moves to a free spot nearby (with a thin
+// line back to its squad) rather than cover another tag, an enemy or a building.
+function drawSquadTag(q, s, obs, placed) {
+  const [ax, ay] = toScreen(q.cx, q.top);
   const picked = squadPicked(q.id) && !selUnits.size;
   const fs = Math.max(10, Math.min(15, Math.round(s * 0.36)));
   ctx.font = `800 ${fs}px system-ui, sans-serif`;
   const txt = String(q.num);
   const w = Math.max(fs * 1.35, ctx.measureText(txt).width + fs * 0.7);
   const h = fs * 1.3;
+  const up = s * 0.75;
+  // candidate spots: above, then up-left/up-right, the sides, higher up, and below
+  const cands = [[0, -up], [-w * 1.1, -up], [w * 1.1, -up], [0, -up - h * 1.2], [-w * 1.2, 0], [w * 1.2, 0],
+    [-w * 1.1, -up - h * 1.2], [w * 1.1, -up - h * 1.2], [0, -up - h * 2.4], [0, s * 0.9]];
+  let x = ax;
+  let y = ay - up;
+  let moved = false;
+  for (let i = 0; i < cands.length; i++) {
+    const cx = ax + cands[i][0];
+    const cy = ay + cands[i][1];
+    const r = { x: cx - w / 2 - 2, y: cy - h / 2 - 2, w: w + 4, h: h + 4 };
+    if (placed.some((p) => rectsHit(r, p)) || obs.some((o) => rectHitsCircle(r, o))) continue;
+    x = cx;
+    y = cy;
+    moved = i > 0;
+    break;
+  }
+  placed.push({ x: x - w / 2 - 2, y: y - h / 2 - 2, w: w + 4, h: h + 4 });
+  if (moved) {
+    ctx.strokeStyle = picked ? 'rgba(255, 213, 79, 0.7)' : 'rgba(230, 237, 243, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y + (y < ay ? h / 2 : -h / 2));
+    ctx.lineTo(ax, ay - s * 0.25);
+    ctx.stroke();
+  }
   ctx.fillStyle = picked ? '#ffd54f' : 'rgba(13, 17, 23, 0.85)';
   ctx.strokeStyle = picked ? '#fff3c4' : 'rgba(230, 237, 243, 0.55)';
   ctx.lineWidth = 1.5;
@@ -145,13 +199,15 @@ function drawSquadTag(q, s) {
   ctx.roundRect(x - w / 2, y - h / 2, w, h, h * 0.3);
   ctx.fill();
   ctx.stroke();
-  // a little pointer down to the squad
-  ctx.beginPath();
-  ctx.moveTo(x - fs * 0.25, y + h / 2);
-  ctx.lineTo(x, y + h / 2 + fs * 0.3);
-  ctx.lineTo(x + fs * 0.25, y + h / 2);
-  ctx.closePath();
-  ctx.fill();
+  if (!moved) {
+    // a little pointer down to the squad
+    ctx.beginPath();
+    ctx.moveTo(x - fs * 0.25, y + h / 2);
+    ctx.lineTo(x, y + h / 2 + fs * 0.3);
+    ctx.lineTo(x + fs * 0.25, y + h / 2);
+    ctx.closePath();
+    ctx.fill();
+  }
   ctx.fillStyle = picked ? '#1a1505' : '#e6edf3';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -186,7 +242,12 @@ function drawOverlay() {
       const [mx, my] = toScreen(pos.x, pos.y);
       label(list.map((q) => q.num).join(' '), mx + s * 1.2, my + s * 1.2, 11, picked ? '#ffd54f' : 'rgba(230,237,243,0.7)');
     }
-    if (s >= 12) for (const q of squads) drawSquadTag(q, s);
+    if (s >= 12 && squads.length) {
+      const obs = tagObstacles(s);
+      const placed = [];
+      // picked squads first, so they get the best spots
+      for (const q of [...squads].sort((x, y) => squadPicked(y.id) - squadPicked(x.id))) drawSquadTag(q, s, obs, placed);
+    }
   }
 
   // Selected troops: range and a line to where they're headed.

@@ -45,15 +45,21 @@
     FIRST_WAVE_DELAY: 6,
     // Wave size: BASE_WAVE slots from the core, plus BARRACKS_TROOPS from each barracks you own.
     // The army panel only sets the mix (one slot per troop); unassigned slots become soldiers.
-    BASE_WAVE: 5,
-    BARRACKS_TROOPS: 5,
+    BASE_WAVE: 4,
+    BARRACKS_TROOPS: 4,
     MAX_BARRACKS: 5,
     BARRACKS_COST_STEP: 150, // each extra barracks costs this much more than the last
     // Squads stay together: on the march a squad moves at its slowest troop's pace, and troops
     // more than SQUAD_SPREAD (+ a little per troop) from the squad's centre wait for it or catch up.
     SQUAD_SPREAD: 1.3,
     SQUAD_WAIT_MAX: 5, // seconds a troop waits for a straggling squad before carrying on
-    START_ARMY: {}, // wave slots assigned at the start (the rest are soldiers)
+    // Personal space: troops keep at least UNIT_SPACING apart (friend or foe) and stay this far from
+    // the middle of buildings and barbarians, so they never sit on top of each other.
+    UNIT_SPACING: 0.62,
+    STRUCT_BODY: 0.6,
+    CORE_BODY: 0.85,
+    CREEP_BODY: 0.55,
+    START_ARMY: { scout: 1, medic: 1, archer: 1 }, // the first wave: one of each type (the rest are soldiers)
     // How many troop slots can be alive at once grows with land: one per LAND_PER_UNIT tiles.
     LAND_PER_UNIT: 10,
     MIN_UNITS: 10,
@@ -144,7 +150,7 @@
       },
       barracks: {
         name: 'Barracks', key: 'R', cost: 250, hp: 1600, claim: 2, maxLevel: 1, ownLandOnly: true,
-        color: '#9fb4c7', desc: `+5 troops in every wave, spawning here. Build on your own land`,
+        color: '#9fb4c7', desc: `+4 troops in every wave, spawning here. Build on your own land`,
       },
     },
 

@@ -31,10 +31,10 @@ closes after a minute. **Play** still drops you into the always-running public g
 
 | | |
 |---|---|
-| **Waves** | Every 20s your core sends out a free wave of **5 troops**. |
-| **Barracks** | Build **barracks** (`R`, on your own land) for **+5 troops in every wave**. Each barracks' 5 march out from the barracks itself and guard it while your standing order is "defend home". Up to 5 barracks (30 troops per wave). They cost 250g, then 150g more for each one you own. They don't shoot or level up, and like towers they can be destroyed: whoever destroys one takes it over, with its +5. |
+| **Waves** | Every 20s your core sends out a free wave of **4 troops**: to start with, one of each type (soldier, scout, medic, archer). |
+| **Barracks** | Build **barracks** (`R`, on your own land) for **+4 troops in every wave**. Each barracks' 4 march out from the barracks itself and join that wave's squad. Up to 5 barracks (24 troops per wave). They cost 250g, then 150g more for each one you own. They don't shoot or level up, and like towers they can be destroyed: whoever destroys one takes it over, with its +4. |
 | **Army mix** | The army panel decides **which troops fill your wave slots**, for free (`1`–`4` / `+`). Unassigned slots are filled with soldiers. Gold goes into **levelling troop types** (`Shift`+number), barracks and towers. |
-| **Squads** | **Every wave marches out as a squad of its own**, numbered 1, 2, 3… (the lowest free number; a wiped-out squad's number is reused). A squad **sticks together**: on the march it moves at its slowest troop's pace and troops that run ahead wait for it, and at home each squad stands guard at its own spot around the core. Its number floats above it on the map. **Click any of its troops** (or its chip in the Squads panel, or press its number `1`–`9`) to pick it, `Shift` to pick more, `Q` for all squads, then **right-click** a target. `M` merges the picked squads. New squads **guard home**, or with **F** they **follow your last order**. `H` sends every squad home. |
+| **Squads** | **Every wave marches out as a squad of its own**, numbered 1, 2, 3… (the lowest free number; a wiped-out squad's number is reused). A squad **sticks together**: on the march it moves at its slowest troop's pace and troops that run ahead wait for it, and at home each squad stands guard at its own spot around the core. Its number floats above it on the map, nudged to a free spot so it never covers another squad's number, an enemy or a building. Troops also keep a little **personal space**: they never stand on top of each other (friend or foe) or inside buildings. **Click any of its troops** (or its chip in the Squads panel, or press its number `1`–`9`) to pick it, `Shift` to pick more, `Q` for all squads, then **right-click** a target. `M` merges the picked squads. New squads **guard home**, or with **F** they **follow your last order**. `H` sends every squad home. |
 | **Fog of war** | The map starts dark except your own land and what your core (9 tiles), towers (range + 2), barracks and troops can see; scouts see furthest. **Once an area has been explored, the fog there is cleared for good**: you keep seeing everything that happens there (troops, fights, buildings, camps), even after your troops leave. Enemy troops in unexplored fog aren't even sent to your browser. Spectators see everything. |
 | **Regrouping** | **Ctrl-click** single troops to pick them, then press a squad's number (or click its chip) to move them into it, or `N` to make them a new squad. Right-clicking with troops picked sends them off as a new squad. |
 | **Moving** | **Right-click empty ground** to send the picked squads there. They hold the spot, fight enemies that come within 6 tiles of it, and come back to it afterwards. |
@@ -58,7 +58,7 @@ Each type has its own token shape, so you can tell them apart at a glance: soldi
 
 | Troop | Wave slots | Level 2 | HP | Role |
 |---|---|---|---|---|
-| Soldier | 1 | 120g | 300 | Sword and shield: the backbone of every wave. Unassigned slots are filled with soldiers |
+| Soldier | 1 | 120g | 300 | Sword and shield: the backbone of every wave. Unassigned slots are filled with soldiers. Your first wave has one of each type |
 | Scout | 1 | 100g | 110 | Very fast, sees 11 tiles, **never fights**. While your troops defend, scouts **explore on their own**, heading for ground you haven't seen and staying clear of enemy guns |
 | Medic | 1 | 180g | 150 | Heals nearby troops, never attacks |
 | Archer | 1 | 160g | 170 | **Shoots arrows from range** (5 tiles). Fragile: keep soldiers in front of them |
@@ -82,7 +82,7 @@ and get a turning gold rune ring at level 4 and a radiant aura at level 5.
 | Left-click a tower | Select it |
 | `Esc` | Clear picked troops / selected building |
 | `H` | Every squad defends your core |
-| `R` | Place a barracks (your own land only): +5 troops per wave |
+| `R` | Place a barracks (your own land only): +4 troops per wave |
 | `B` | Place a tower (shows where you can leap, and the land you'd gain or take) |
 | `U` / `Del` | Upgrade / sell the selected tower |
 | `WASD` / arrows / right-drag | Pan. Wheel zooms. `Space` jumps home. Click the minimap to jump. `?` opens the controls & how-to-play window. |
