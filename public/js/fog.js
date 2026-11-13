@@ -35,9 +35,18 @@ function updateFog(terrChanged) {
       const [x, y] = posOf(o);
       if (seesTile(x, y) || o.owner === S.myId || o.id === S.myId) seen.set(id, o);
     }
+    // Forget what we remember at a spot we can see that isn't there any more: gone, or moved away
+    // (a cleared camp comes back somewhere else under the same id).
     for (const [id, o] of seen) {
       const [x, y] = posOf(o);
-      if (!live.has(id) && seesTile(x, y)) seen.delete(id); // gone, and we can see it's gone
+      if (!seesTile(x, y)) continue;
+      const cur = live.get(id);
+      if (!cur) {
+        seen.delete(id);
+        continue;
+      }
+      const [cx, cy] = posOf(cur);
+      if (cx !== x || cy !== y) seen.delete(id);
     }
     return seen;
   };
