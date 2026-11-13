@@ -130,25 +130,33 @@ test('the conqueror takes the gold, all the land, the surviving troops and the c
     assert.strictEqual(u.anchor, newTower.id, 'and garrison the new tower');
     assert.strictEqual(u.attack, null);
   }
-  assert.ok(t.ruin, 'other towers become ruins');
+  assert.strictEqual(t.owner, a.id, 'their other towers become the conqueror\'s');
+  assert.ok(!t.ruin);
   g.update(0.05);
   assert.strictEqual(g.terr[g.idx(site.x, site.y)], a.id, 'the site claims land for the conqueror');
 
-  // Ruins can still be bought back once your land reaches them.
-  g.terr[g.idx(t.x, t.y)] = a.id;
-  assert.strictEqual(g.capture(a.id, t.id), null);
-  assert.strictEqual(t.owner, a.id);
 });
 
-test('a player who leaves takes nothing with them and leaves no spoils', () => {
+test('a player who leaves is replaced by a bot that keeps their base', () => {
   const { g, a, b } = duel(16);
-  troops(g, b, 'soldier', 2, b.core.x + 0.5, b.core.y + 2);
-  const gold = a.gold;
-  g.removePlayer(b.id);
-  assert.ok(!g.players.has(b.id));
-  assert.strictEqual([...g.units.values()].filter((u) => u.owner === b.id).length, 0);
-  assert.strictEqual(g.grid[g.idx(b.core.x, b.core.y)], 0);
-  assert.strictEqual(a.gold, gold);
+  const t = outpost(g, b);
+  const army = troops(g, b, 'soldier', 2, b.core.x + 0.5, b.core.y + 2);
+  const land = b.territory;
+  b.gold = 321;
+  g.playerLeft(b.id);
+  assert.ok(g.players.has(b.id) && b.alive, 'still in the game');
+  assert.ok(b.isBot && b.bot, 'now played by a bot');
+  assert.strictEqual(b.name, 'B', 'under the same name');
+  assert.strictEqual(t.owner, b.id);
+  assert.ok(army.every((u) => g.units.has(u.id) && u.owner === b.id));
+  assert.strictEqual(b.gold, 321);
+  g.update(0.05);
+  assert.strictEqual(b.territory, land);
+  run(g, 5); // and it plays on
+  assert.ok(b.alive);
+  // a player removed outright (not a round in progress) takes nothing with them
+  g.removePlayer(a.id);
+  assert.ok(!g.players.has(a.id));
 });
 
 test('territory RLE encodes the full map', () => {

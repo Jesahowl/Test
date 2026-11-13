@@ -99,7 +99,7 @@ class Room {
 
   remove(client) {
     this.clients.delete(client);
-    if (client.pid && this.game) this.game.removePlayer(client.pid);
+    if (client.pid && this.game) this.game.playerLeft(client.pid); // a bot takes over their base
     client.pid = null;
     client.room = null;
     client.queued = false;

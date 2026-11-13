@@ -37,7 +37,7 @@ function showDeath(info) {
   $('again').textContent = info.priv ? 'Leave room' : info.humansAlive ? 'Join next round' : 'New round';
   $('death-by').textContent = info.killer ? `Destroyed by ${info.killer}` : 'Your core fell';
   $('death-spoils').textContent = info.killer
-    ? `${info.killer} took your ${info.goldTaken}g, all ${info.landTaken || 0} tiles of your land, ${info.troopsTaken} surviving troop${info.troopsTaken === 1 ? '' : 's'}, and turned your core into a tower.`
+    ? `${info.killer} took your ${info.goldTaken}g, all ${info.landTaken || 0} tiles of your land, ${info.towersTaken ? `your ${info.towersTaken} building${info.towersTaken === 1 ? '' : 's'}, ` : ''}${info.troopsTaken} surviving troop${info.troopsTaken === 1 ? '' : 's'}, and turned your core into a tower.`
     : '';
   const mins = Math.floor(info.survived / 60);
   const secs = String(info.survived % 60).padStart(2, '0');

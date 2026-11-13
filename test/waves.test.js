@@ -208,10 +208,13 @@ test('destroying a tower claims it for the attacker', () => {
   }
 });
 
-test('towers still fall to ruins when their owner is wiped out', () => {
+test("a destroyed core's towers go to the conqueror; with nobody to take them they fall to ruins", () => {
   const { g, a, b } = duel(15);
   const t = outpost(g, b);
   g.damageCore(b, 1e9, a.id);
+  assert.strictEqual(t.owner, a.id);
+  assert.ok(!t.ruin);
+  g.killPlayer(a, null); // now a falls with no conqueror
   assert.ok(t.ruin);
   assert.strictEqual(t.owner, 0);
 });

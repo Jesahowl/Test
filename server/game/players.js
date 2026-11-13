@@ -164,6 +164,22 @@ module.exports = {
     if (p) this.killPlayer(p, null, true);
   },
 
+  // A human left mid-round: a bot takes over their base (core, land, gold, buildings and troops)
+  // under the same name and plays on, so nobody's empire just vanishes.
+  playerLeft(id) {
+    const p = this.players.get(id);
+    if (!p || !p.alive) return;
+    if (p.isBot) {
+      this.removePlayer(id);
+      return;
+    }
+    p.isBot = true;
+    p.bot = { next: this.time + 1, nextOrder: this.time + 4 };
+    const r = this.roster.get(id);
+    if (r) r.isBot = true;
+    this.pushFeed(`${p.name} left: a bot takes over their base`);
+  },
+
   // Newly spawned players' cores and towers can't be damaged for SPAWN_SHIELD seconds.
   isShielded(p) {
     return !!p && this.time - p.spawnTime < C.SPAWN_SHIELD;
@@ -171,8 +187,8 @@ module.exports = {
 
   // A core has fallen (or its player left). The player is out of the game. If another player
   // destroyed it, they take the spoils: all the victim's gold (plus a bounty), all of their land,
-  // every troop the victim still had standing, and a new tower where the core stood, garrisoned by
-  // those troops. The victim's other towers become ruins (which the conqueror can buy back).
+  // towers and barracks, every troop the victim still had standing, and a new tower where the core
+  // stood, garrisoned by those troops. Otherwise their land opens up and their towers fall to ruins.
   killPlayer(p, killerId, leftGame = false) {
     if (!p.alive) return;
     this.recordStanding(p, this.players.size, leftGame);
@@ -184,8 +200,17 @@ module.exports = {
     const killer = killerId ? this.players.get(killerId) : null;
     const conquered = !!(killer && killer.alive && killer.id !== p.id);
 
+    // Their towers and barracks: the conqueror's (otherwise they fall to ruins).
+    let towersTaken = 0;
     for (const t of this.towers.values()) {
-      if (t.owner === p.id) this.ruinTower(t, p.name);
+      if (t.owner !== p.id) continue;
+      if (conquered) {
+        t.owner = killer.id;
+        towersTaken++;
+        this.fx.push({ k: 'capture', x: t.x + 0.5, y: t.y + 0.5, o: killer.id });
+      } else {
+        this.ruinTower(t, p.name);
+      }
     }
     // Their land: all of it goes to whoever destroyed the core; otherwise (they left, or nobody
     // in particular brought it down) it opens up, empty, for anyone to buy.
@@ -248,7 +273,7 @@ module.exports = {
       p.gold = 0;
       // Waves that were pushing on this player head home instead of wandering off.
       if (killer.lastOrder.type === 'attack' && !this.orderValid(killer.id, killer.lastOrder)) killer.lastOrder = { type: 'defend', anchor: 0 };
-      this.pushFeed(`${killer.name} destroyed ${p.name}'s core: +${bounty}g, all ${landTaken} tiles of their land, ${troopsTaken} troop${troopsTaken === 1 ? '' : 's'} and a new tower`);
+      this.pushFeed(`${killer.name} destroyed ${p.name}'s core: +${bounty}g, all ${landTaken} tiles of their land, ${towersTaken + 1} building${towersTaken ? 's' : ''} and ${troopsTaken} troop${troopsTaken === 1 ? '' : 's'}`);
     } else if (leftGame) {
       this.pushFeed(`${p.name} left - their base lies in ruins`);
     } else {
@@ -266,6 +291,7 @@ module.exports = {
         troopsTaken,
         goldTaken,
         landTaken,
+        towersTaken,
         survived: Math.round(this.time - p.spawnTime),
         peakTerritory: p.peakTerritory,
         kills: p.kills,
