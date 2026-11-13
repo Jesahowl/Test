@@ -213,13 +213,14 @@ function applyState(msg) {
   updateFog(!!msg.terr);
 
   for (const f of msg.fx) {
-    S.effects.push({ ...f, born: now + INTERP_DELAY }); // shown in step with the delayed troops
+    const fx = { ...f, born: now + INTERP_DELAY }; // shown in step with the delayed troops
+    S.effects.push(fx);
     if (f.k === 'wave') {
       const t = S.towers.get(grid.get(`${Math.floor(f.x)},${Math.floor(f.y)}`));
       if (t) t.waveAt = now + INTERP_DELAY;
     }
     if (f.k === 'tshot') {
-      // turn the shooting tower's turret (or flare the core) toward its target
+      // flare the shooting tower's (or core's) crystal
       const tx = Math.floor(f.x1);
       const ty = Math.floor(f.y1);
       const t = S.towers.get(grid.get(`${tx},${ty}`));
@@ -227,8 +228,10 @@ function applyState(msg) {
       const o = t || p;
       if (o) {
         o.aim = Math.atan2(f.y2 - f.y1, f.x2 - f.x1);
-        o.shotAt = now;
+        o.shotAt = now + INTERP_DELAY; // the crystal flares as the bolt leaves
       }
+      // the bolt leaves from the tip of the crystal, which floats above the building
+      fx.lift = t ? 0.62 + 0.04 * (t.level - 1) : p ? 0.55 : 0;
     }
   }
   for (const text of msg.feed) feed.push({ text, born: now });

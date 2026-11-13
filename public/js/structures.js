@@ -95,168 +95,199 @@ function drawSmoke(x, y, r, now, seed) {
   }
 }
 
-// A defensive tower: stone platform in the owner's colours, a turret that turns toward its
-// last shot and recoils, and extra stonework, a banner and a gold crown as it levels up.
+// A floating crystal in a player's colour (also used by cores): a glow, a two-tone gem and a
+// highlight. flare (0..1) turns it white-hot for a moment when it fires.
+function drawCrystal(x, y, cr, owner, flare = 0, glow = 0) {
+  if (glow > 0) {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, cr * 2.6);
+    g.addColorStop(0, colorOf(owner, 65, 0.45 + 0.4 * flare));
+    g.addColorStop(1, colorOf(owner, 65, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, cr * 2.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = flare > 0.3 ? '#ffffff' : colorOf(owner, 82);
+  ctx.beginPath();
+  ctx.moveTo(x, y - cr * 1.45);
+  ctx.lineTo(x + cr * 0.75, y - cr * 0.1);
+  ctx.lineTo(x, y + cr);
+  ctx.lineTo(x - cr * 0.75, y - cr * 0.1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = flare > 0.3 ? colorOf(owner, 90) : colorOf(owner, 52);
+  ctx.beginPath();
+  ctx.moveTo(x, y - cr * 1.45);
+  ctx.lineTo(x + cr * 0.75, y - cr * 0.1);
+  ctx.lineTo(x, y + cr);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.beginPath();
+  ctx.moveTo(x, y - cr * 1.45);
+  ctx.lineTo(x - cr * 0.75, y - cr * 0.1);
+  ctx.lineTo(x - cr * 0.3, y - cr * 0.25);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// A rune circle on the ground (seen at an angle): a solid ring, a dashed inner ring and four
+// small glowing runes, turning with `rot`.
+function runeEllipse(x, y, rx, ry, owner, rot, alpha = 0.7) {
+  ctx.save();
+  ctx.strokeStyle = colorOf(owner, 65, alpha);
+  ctx.lineWidth = Math.max(1.5, rx * 0.06);
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = Math.max(1, rx * 0.04);
+  ctx.setLineDash([rx * 0.12, rx * 0.16]);
+  ctx.lineDashOffset = rot * rx;
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx * 0.78, ry * 0.78, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = colorOf(owner, 80, alpha);
+  for (let i = 0; i < 4; i++) {
+    const a = rot + (Math.PI / 2) * i;
+    polygon(x + Math.cos(a) * rx, y + Math.sin(a) * ry, Math.max(1.5, rx * 0.08), 4, 0);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// Tower: a stone pillar on a rune circle with a crystal floating above it, which zaps enemy
+// troops with lightning. Higher levels: bigger crystal, orbiting shards (2+), a spinning ring (3+),
+// gold runes (4+) and a radiant aura (5).
 function drawTowerSprite(t, x, y, s, now) {
   const lvl = t.level;
-  const r = s * 0.5 * (1 + 0.1 * (lvl - 1));
+  const r = s * 0.62 * (1 + 0.07 * (lvl - 1));
   const flip = t.flipAt ? (now - t.flipAt) / 900 : 1;
   const bounce = flip < 1 ? 1 + 0.3 * Math.sin(flip * Math.PI * 3) * (1 - flip) : 1;
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(bounce, bounce);
 
+  const by = r * 0.55; // ground level: the base of the pillar
+  const owner = t.owner;
   // shadow
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
   ctx.beginPath();
-  ctx.ellipse(r * 0.12, r * 0.3, r * 1.2, r * 0.95, 0, 0, Math.PI * 2);
+  ctx.ellipse(r * 0.1, by + r * 0.05, r * 0.95, r * 0.36, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // level 5: radiant aura in the owner's colour
+  // level 5: radiant aura in the owner's colour, around the crystal
   if (lvl >= 5) {
     const pulse = 0.5 + 0.5 * Math.sin(now / 400 + t.id);
-    const ag = ctx.createRadialGradient(0, 0, r * 0.6, 0, 0, r * 2);
-    ag.addColorStop(0, colorOf(t.owner, 65, 0.45 + 0.2 * pulse));
-    ag.addColorStop(1, colorOf(t.owner, 65, 0));
+    const ag = ctx.createRadialGradient(0, -r * 0.6, r * 0.4, 0, -r * 0.6, r * 2);
+    ag.addColorStop(0, colorOf(owner, 65, 0.4 + 0.2 * pulse));
+    ag.addColorStop(1, colorOf(owner, 65, 0));
     ctx.fillStyle = ag;
     ctx.beginPath();
-    ctx.arc(0, 0, r * 2, 0, Math.PI * 2);
+    ctx.arc(0, -r * 0.6, r * 2, 0, Math.PI * 2);
     ctx.fill();
   }
-  // level 4+: a ring of gold runes turning around the base
+
+  // rune circle on the ground, slowly turning
+  runeEllipse(0, by, r * 1.05, r * 0.42, owner, now / 3000 + t.id, 0.75);
+  // level 4+: an outer ring of gold runes
   if (lvl >= 4) {
     ctx.save();
-    ctx.rotate(-now / 2500);
     ctx.strokeStyle = 'rgba(255, 213, 79, 0.75)';
-    ctx.lineWidth = Math.max(1.5, s * 0.05);
+    ctx.lineWidth = Math.max(1.5, s * 0.045);
     ctx.setLineDash([s * 0.12, s * 0.1]);
+    ctx.lineDashOffset = -now / 60;
     ctx.beginPath();
-    ctx.arc(0, 0, r * 1.45, 0, Math.PI * 2);
+    ctx.ellipse(0, by, r * 1.4, r * 0.56, 0, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
     for (let i = 0; i < 3; i++) {
-      const a = (Math.PI * 2 * i) / 3;
+      const a = (Math.PI * 2 * i) / 3 - now / 2500;
       ctx.fillStyle = '#ffd54f';
-      polygon(Math.cos(a) * r * 1.45, Math.sin(a) * r * 1.45, Math.max(2, s * 0.08), 4, a);
+      polygon(Math.cos(a) * r * 1.4, by + Math.sin(a) * r * 0.56, Math.max(2, s * 0.07), 4, 0);
       ctx.fill();
     }
     ctx.restore();
   }
 
-  // buttresses (level 2+)
-  if (lvl >= 2) {
-    ctx.fillStyle = '#6e6658';
-    ctx.strokeStyle = colorOf(t.owner, 60);
-    ctx.lineWidth = Math.max(1, s * 0.04);
-    for (let i = 0; i < 4; i++) {
-      const a = Math.PI / 4 + (Math.PI / 2) * i;
-      const bx = Math.cos(a) * r * 0.95;
-      const by = Math.sin(a) * r * 0.95;
-      polygon(bx, by, r * 0.32, 4, a);
-      ctx.fill();
-      ctx.stroke();
-    }
-  }
-
-  // platform
-  polygon(0, 0, r * 1.1, 8, Math.PI / 8);
-  ctx.fillStyle = colorOf(t.owner, 26);
-  ctx.fill();
-  ctx.strokeStyle = colorOf(t.owner, 62);
-  ctx.lineWidth = Math.max(1.5, s * 0.08);
-  ctx.stroke();
-  polygon(0, 0, r * 0.82, 8, Math.PI / 8);
-  ctx.fillStyle = '#8a8070';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  // plinth and pillar
+  const pTop = -r * 0.5;
+  const stone = '#4c535c';
   ctx.lineWidth = Math.max(1, s * 0.03);
-  ctx.stroke();
-  // stone joints
+  ctx.strokeStyle = '#22272d';
+  ctx.fillStyle = '#3a4048';
   ctx.beginPath();
-  for (let i = 0; i < 8; i++) {
-    const a = (Math.PI / 4) * i;
-    ctx.moveTo(Math.cos(a) * r * 0.5, Math.sin(a) * r * 0.5);
-    ctx.lineTo(Math.cos(a) * r * 0.8, Math.sin(a) * r * 0.8);
-  }
+  ctx.moveTo(-r * 0.58, by);
+  ctx.lineTo(-r * 0.44, by - r * 0.26);
+  ctx.lineTo(r * 0.44, by - r * 0.26);
+  ctx.lineTo(r * 0.58, by);
+  ctx.closePath();
+  ctx.fill();
   ctx.stroke();
-  drawCracks(0, 0, r * 0.8, 1 - t.hp / t.maxHp, t.id);
+  ctx.fillStyle = stone;
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.3, by - r * 0.26);
+  ctx.lineTo(-r * 0.18, pTop);
+  ctx.lineTo(r * 0.18, pTop);
+  ctx.lineTo(r * 0.3, by - r * 0.26);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(0,0,0,0.22)'; // shaded side
+  ctx.beginPath();
+  ctx.moveTo(r * 0.06, by - r * 0.26);
+  ctx.lineTo(r * 0.04, pTop);
+  ctx.lineTo(r * 0.18, pTop);
+  ctx.lineTo(r * 0.3, by - r * 0.26);
+  ctx.closePath();
+  ctx.fill();
+  // cap stone
+  ctx.fillStyle = '#5c646e';
+  ctx.fillRect(-r * 0.26, pTop - r * 0.1, r * 0.52, r * 0.12);
+  ctx.strokeRect(-r * 0.26, pTop - r * 0.1, r * 0.52, r * 0.12);
+  // glowing rune channel up the pillar; brightens when it fires
+  const flare = t.shotAt && now >= t.shotAt ? Math.max(0, 1 - (now - t.shotAt) / 220) : 0;
+  ctx.strokeStyle = colorOf(owner, 70 + 20 * flare, 0.75 + 0.25 * flare);
+  ctx.lineWidth = Math.max(1.5, s * 0.05);
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.04, by - r * 0.3);
+  ctx.lineTo(-r * 0.02, pTop + r * 0.04);
+  ctx.stroke();
+  drawCracks(0, (by + pTop) / 2, r * 0.3, 1 - t.hp / t.maxHp, t.id);
 
-  // gold crown ring (level 3)
-  if (lvl >= 3) {
-    ctx.strokeStyle = '#ffd54f';
-    ctx.lineWidth = Math.max(1.5, s * 0.06);
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 0.62, 0, Math.PI * 2);
-    ctx.stroke();
-    for (let i = 0; i < 6; i++) {
-      const a = (Math.PI / 3) * i + now / 3000;
-      ctx.fillStyle = '#ffe082';
-      ctx.beginPath();
-      ctx.arc(Math.cos(a) * r * 0.62, Math.sin(a) * r * 0.62, Math.max(1.2, s * 0.045), 0, Math.PI * 2);
-      ctx.fill();
+  // floating crystal (bigger with level), with orbiting shards from level 2
+  const bob = Math.sin(now / 520 + t.id) * r * 0.06;
+  const cy = -r * 1.0 + bob;
+  const cr = r * (0.3 + 0.045 * Math.min(lvl, 3));
+  const shards = lvl >= 3 ? 3 : lvl >= 2 ? 2 : 0;
+  const orbit = (front) => {
+    for (let i = 0; i < shards; i++) {
+      const a = now / 900 + (Math.PI * 2 * i) / shards + t.id;
+      if ((Math.sin(a) > 0) !== front) continue;
+      drawCrystal(Math.cos(a) * r * 0.62, cy + Math.sin(a) * r * 0.2, r * 0.09, owner, 0);
     }
-  }
-
-  // turret: barrel toward the last target, kicking back when it fires
-  const recoil = t.shotAt ? Math.max(0, 1 - (now - t.shotAt) / 180) : 0;
-  ctx.rotate(t.aim ?? -Math.PI / 2);
-  ctx.fillStyle = '#2b2722';
-  ctx.strokeStyle = colorOf(t.owner, 62);
-  ctx.lineWidth = Math.max(1, s * 0.03);
-  const bl = r * (0.95 + 0.1 * (lvl - 1));
-  roundRect(r * (0.1 - 0.2 * recoil), -r * 0.15, bl, r * 0.3, r * 0.08);
-  ctx.fill();
-  ctx.stroke();
+  };
+  orbit(false);
   if (lvl >= 3) {
-    // twin barrels
-    roundRect(r * (0.1 - 0.2 * recoil), -r * 0.38, bl * 0.8, r * 0.16, r * 0.05);
-    ctx.fill();
-    ctx.stroke();
-  }
-  ctx.fillStyle = '#c9bca3';
-  ctx.beginPath();
-  ctx.arc(0, 0, r * 0.42, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-  ctx.lineWidth = Math.max(1, s * 0.035);
-  ctx.stroke();
-  ctx.rotate(-(t.aim ?? -Math.PI / 2));
-  // gem in the owner's colour, flaring on each shot
-  ctx.fillStyle = recoil > 0 || lvl >= 5 ? '#fff' : colorOf(t.owner, 62);
-  polygon(0, 0, r * (0.17 + 0.06 * recoil), 4, 0);
-  ctx.fill();
-  if (lvl >= 3) {
-    ctx.shadowColor = colorOf(t.owner, 60);
-    ctx.shadowBlur = s * 0.4 * (0.7 + 0.3 * Math.sin(now / 300));
-    ctx.fill();
-    ctx.shadowBlur = 0;
-  }
-
-  // banner (level 2+)
-  if (lvl >= 2) {
-    const px = -r * 0.85;
-    const py = -r * 0.85;
-    ctx.strokeStyle = '#3b3630';
-    ctx.lineWidth = Math.max(1, s * 0.04);
+    ctx.save();
+    ctx.strokeStyle = colorOf(owner, 70, 0.55);
+    ctx.lineWidth = Math.max(1, s * 0.03);
+    ctx.setLineDash([s * 0.08, s * 0.08]);
+    ctx.lineDashOffset = now / 50;
     ctx.beginPath();
-    ctx.moveTo(px, py + r * 0.5);
-    ctx.lineTo(px, py - r * 0.55);
+    ctx.ellipse(0, cy, r * 0.62, r * 0.2, 0, 0, Math.PI * 2);
     ctx.stroke();
-    const wave = Math.sin(now / 220 + t.id) * r * 0.08;
-    ctx.fillStyle = colorOf(t.owner, 55);
-    ctx.beginPath();
-    ctx.moveTo(px, py - r * 0.55);
-    ctx.quadraticCurveTo(px + r * 0.3, py - r * 0.55 + wave, px + r * 0.55, py - r * 0.42 + wave);
-    ctx.lineTo(px, py - r * 0.2);
-    ctx.closePath();
-    ctx.fill();
+    ctx.restore();
   }
+  drawCrystal(0, cy, cr, owner, flare, s * (0.25 + (lvl >= 3 ? 0.15 * (0.5 + 0.5 * Math.sin(now / 300)) : 0)));
+  orbit(true);
 
   // capture / claim flash
   if (flip < 1) {
     ctx.globalAlpha = (1 - flip) * 0.8;
     ctx.fillStyle = '#fff';
-    polygon(0, 0, r * 1.1, 8, Math.PI / 8);
+    ctx.beginPath();
+    ctx.ellipse(0, -r * 0.2, r * 0.8, r * 1.1, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
   }
@@ -419,7 +450,7 @@ function drawTowers(dt) {
       }
       continue;
     }
-    const r = s * 0.5 * (1 + 0.1 * (t.level - 1));
+    const r = s * 0.62 * (1 + 0.07 * (t.level - 1));
     if (t.id === S.selectedId) {
       ctx.strokeStyle = 'rgba(255,255,255,0.9)';
       ctx.lineWidth = 2;
@@ -436,4 +467,4 @@ function drawTowers(dt) {
   }
 }
 
-export { drawCracks, drawSmoke, drawTowers, polygon, roundRect, structBar };
+export { drawCracks, drawCrystal, drawSmoke, drawTowers, polygon, roundRect, runeEllipse, structBar };

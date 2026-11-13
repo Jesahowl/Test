@@ -4,24 +4,96 @@ import { drawFlame } from './camps.js';
 import { label } from './render.js';
 import { S, colorOf, ctx, scale, toScreen } from './state.js';
 
+// Lightning: a jagged line that re-rolls every frame so it crackles, with a glow in the owner's
+// colour, a white-hot core, a fork or two, and a spark burst where it hits.
+function jagged(x1, y1, x2, y2, rough, n) {
+  const pts = [[x1, y1]];
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len;
+  const ny = dx / len;
+  for (let i = 1; i < n; i++) {
+    const t = i / n;
+    const off = (Math.random() - 0.5) * 2 * rough * Math.sin(t * Math.PI);
+    pts.push([x1 + dx * t + nx * off, y1 + dy * t + ny * off]);
+  }
+  pts.push([x2, y2]);
+  return pts;
+}
+
+function strokePts(pts) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.stroke();
+}
+
+function drawZap(f, p, s) {
+  const [x1, y0] = toScreen(f.x1, f.y1);
+  const y1 = y0 - (f.lift || 0) * s;
+  const [x2, y2] = toScreen(f.x2, f.y2);
+  const len = Math.hypot(x2 - x1, y2 - y1);
+  const n = Math.max(4, Math.round(len / Math.max(8, s * 0.35)));
+  const fade = 1 - p;
+  const main = jagged(x1, y1, x2, y2, Math.max(4, s * 0.22), n);
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.shadowColor = colorOf(f.o, 65);
+  ctx.shadowBlur = s * 0.4;
+  ctx.strokeStyle = colorOf(f.o, 65, 0.55 * fade);
+  ctx.lineWidth = Math.max(4, s * 0.16);
+  strokePts(main);
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = colorOf(f.o, 92, fade);
+  ctx.lineWidth = Math.max(1.5, s * 0.05);
+  strokePts(main);
+  // forks off the main bolt
+  ctx.strokeStyle = colorOf(f.o, 80, 0.7 * fade);
+  ctx.lineWidth = Math.max(1, s * 0.035);
+  for (let k = 0; k < 2; k++) {
+    const i = 1 + Math.floor(Math.random() * (main.length - 2));
+    const [bx, by] = main[i];
+    const a = Math.atan2(y2 - y1, x2 - x1) + (Math.random() - 0.5) * 2.2;
+    const bl = s * (0.3 + Math.random() * 0.4);
+    strokePts(jagged(bx, by, bx + Math.cos(a) * bl, by + Math.sin(a) * bl, s * 0.08, 3));
+  }
+  // impact: a bright flash and sparks
+  const ig = ctx.createRadialGradient(x2, y2, 0, x2, y2, s * 0.5);
+  ig.addColorStop(0, `rgba(255, 255, 255, ${0.9 * fade})`);
+  ig.addColorStop(0.4, colorOf(f.o, 70, 0.5 * fade));
+  ig.addColorStop(1, colorOf(f.o, 70, 0));
+  ctx.fillStyle = ig;
+  ctx.beginPath();
+  ctx.arc(x2, y2, s * 0.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = `rgba(255, 255, 255, ${fade})`;
+  ctx.lineWidth = Math.max(1, s * 0.03);
+  for (let k = 0; k < 5; k++) {
+    const a = Math.random() * Math.PI * 2;
+    const d0 = s * 0.12;
+    const d1 = s * (0.25 + 0.3 * p);
+    ctx.beginPath();
+    ctx.moveTo(x2 + Math.cos(a) * d0, y2 + Math.sin(a) * d0);
+    ctx.lineTo(x2 + Math.cos(a) * d1, y2 + Math.sin(a) * d1);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawEffects(now) {
   const s = scale();
-  S.effects = S.effects.filter((f) => now - f.born < (f.k === 'coreDown' || f.k === 'buff' ? 1200 : f.k === 'arrow' ? 250 : f.k === 'ping' ? 600 : f.k === 'campSpawn' ? 1000 : f.k === 'wave' ? 700 : f.k === 'gold' ? 1100 : 450));
+  S.effects = S.effects.filter((f) => now - f.born < (f.k === 'coreDown' || f.k === 'buff' ? 1200 : f.k === 'arrow' ? 250 : f.k === 'tshot' ? 260 : f.k === 'ping' ? 600 : f.k === 'campSpawn' ? 1000 : f.k === 'wave' ? 700 : f.k === 'gold' ? 1100 : 450));
   for (const f of S.effects) {
     const age = (now - f.born) / 1000;
     if (age < 0) continue; // not due yet (effects are delayed to match troop interpolation)
     switch (f.k) {
       case 'tshot': {
-        const life = 0.16;
+        // a crackling lightning bolt from the crystal to the target
+        const life = 0.22;
         if (age > life) break;
-        const [x1, y1] = toScreen(f.x1, f.y1);
-        const [x2, y2] = toScreen(f.x2, f.y2);
-        ctx.strokeStyle = colorOf(f.o, 70, 1 - age / life);
-        ctx.lineWidth = 3.5;
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
+        drawZap(f, age / life, s);
         break;
       }
       case 'slash': {
