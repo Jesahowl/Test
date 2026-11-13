@@ -1,6 +1,6 @@
 // Territory layer: tracing, smoothing and drawing land borders.
 
-import { S, C, colorOf, ctx, SMOOTH_PASSES, SMOOTH_WINDOW, tctx, terrCanvas, TPX } from './state.js';
+import { S, C, colorOf, ctx, players, SMOOTH_PASSES, SMOOTH_WINDOW, tctx, terrCanvas, TPX } from './state.js';
 
 // ------------------------------------------------------------------ territory layer
 // Territory is a tile grid, but drawing it tile by tile looks like a staircase. Instead we trace
@@ -140,6 +140,7 @@ function drawTerritory() {
     path.closePath();
   }
   S.terrShapes = [...byOwner].map(([owner, path]) => ({ owner, path }));
+  S.terrLabels = findLabelSpots();
 
   // Low-res copy for the minimap.
   tctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -190,7 +191,7 @@ function drawTerritoryShapes(ox, oy, s) {
     const mine = owner === S.myId;
     ctx.fillStyle = colorOf(owner, 50, mine ? 0.07 : 0.04); // faint tint so land reads at a glance
     ctx.fill(path);
-    const pat = stripePattern(colorOf(owner, 55, mine ? 0.42 : 0.3));
+    const pat = stripePattern(colorOf(owner, 55, mine ? 0.22 : 0.15));
     pat.setTransform(unscale);
     ctx.fillStyle = pat;
     ctx.fill(path);
@@ -203,6 +204,113 @@ function drawTerritoryShapes(ox, oy, s) {
     ctx.stroke(path);
   }
   ctx.setLineDash([]);
+  ctx.restore();
+  drawTerritoryLabels(ox, oy, s);
+}
+
+// ---- owner names written across their land
+const LABEL_MIN_TILES = 25; // regions smaller than this get no label
+
+// For every connected region of land, the spot deepest inside it (furthest from its edge) that is
+// not right next to a core or tower, so the name sits in open land rather than on a building.
+function findLabelSpots() {
+  const W = C.MAP_W;
+  const H = C.MAP_H;
+  const N = W * H;
+  const terr = S.terrView;
+  // distance (in tiles) from each owned tile to the edge of its region
+  const depth = new Int16Array(N).fill(-1);
+  const queue = new Int32Array(N);
+  let qh = 0;
+  let qt = 0;
+  for (let k = 0; k < N; k++) {
+    const o = terr[k];
+    if (!o) continue;
+    const x = k % W;
+    const y = (k - x) / W;
+    if (x === 0 || y === 0 || x === W - 1 || y === H - 1 || terr[k - 1] !== o || terr[k + 1] !== o || terr[k - W] !== o || terr[k + W] !== o) {
+      depth[k] = 0;
+      queue[qt++] = k;
+    }
+  }
+  while (qh < qt) {
+    const k = queue[qh++];
+    for (const n of [k - 1, k + 1, k - W, k + W]) {
+      if (n < 0 || n >= N || depth[n] !== -1 || terr[n] !== terr[k]) continue;
+      depth[n] = depth[k] + 1;
+      queue[qt++] = n;
+    }
+  }
+  // keep labels off buildings: block a small disc around every core and tower
+  const blocked = new Uint8Array(N);
+  const block = (cx, cy) => {
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const x = cx + dx;
+      const y = cy + dy;
+      if (x >= 0 && y >= 0 && x < W && y < H && dx * dx + dy * dy <= 6) blocked[y * W + x] = 1;
+    }
+  };
+  for (const p of players.values()) block(p.x, p.y);
+  for (const t of S.towers.values()) block(t.x, t.y);
+  // flood-fill regions, remembering each one's best spot
+  const region = new Int32Array(N);
+  const labels = [];
+  let id = 0;
+  for (let start = 0; start < N; start++) {
+    const o = terr[start];
+    if (!o || region[start]) continue;
+    id++;
+    let size = 0;
+    let best = -1;
+    let bestScore = -Infinity;
+    qh = 0;
+    qt = 0;
+    queue[qt++] = start;
+    region[start] = id;
+    while (qh < qt) {
+      const k = queue[qh++];
+      size++;
+      const score = depth[k] - (blocked[k] ? 100 : 0);
+      if (score > bestScore) {
+        bestScore = score;
+        best = k;
+      }
+      const x = k % W;
+      for (const n of [x > 0 ? k - 1 : -1, x < W - 1 ? k + 1 : -1, k - W, k + W]) {
+        if (n < 0 || n >= N || region[n] || terr[n] !== o) continue;
+        region[n] = id;
+        queue[qt++] = n;
+      }
+    }
+    if (size < LABEL_MIN_TILES || best < 0) continue;
+    const bx = best % W;
+    labels.push({ owner: o, x: bx + 0.5, y: (best - bx) / W + 0.5, depth: Math.max(1, depth[best]) });
+  }
+  return labels;
+}
+
+function drawTerritoryLabels(ox, oy, s) {
+  if (!S.terrLabels) return;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const l of S.terrLabels) {
+    const p = players.get(l.owner);
+    if (!p) continue;
+    // size: grows with how much room the region has, within limits, and with zoom
+    const px = Math.min(Math.max(0.55, Math.min(l.depth * 0.45, 1.3)) * s, 46);
+    if (px < 9) continue;
+    const text = (l.owner === S.myId ? `${p.name} (you)` : p.name).toUpperCase();
+    ctx.font = `800 ${Math.round(px)}px system-ui, sans-serif`;
+    if ('letterSpacing' in ctx) ctx.letterSpacing = `${Math.round(px * 0.12)}px`;
+    const x = ox + l.x * s;
+    const y = oy + l.y * s;
+    ctx.lineWidth = Math.max(2, px * 0.12);
+    ctx.strokeStyle = 'rgba(8, 11, 15, 0.55)';
+    ctx.strokeText(text, x, y);
+    ctx.fillStyle = colorOf(l.owner, 72, l.owner === S.myId ? 0.5 : 0.42);
+    ctx.fillText(text, x, y);
+  }
   ctx.restore();
 }
 
