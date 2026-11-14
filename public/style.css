@@ -367,4 +367,3 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 .pause-btns kbd { font-size: 10px; }
 .card button.danger { background: #b62324; }
 .card button.danger:hover { background: #da3633; }
-#pause-note { margin: 14px 0 0; font-size: 13px; line-height: 1.5; }
