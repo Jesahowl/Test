@@ -4,7 +4,7 @@ import { closePause, openPause, pauseOpen } from './pause.js';
 import { edgeNear, pickWall, wallAtEdge, wallDown, wallMove, wallUp } from './walls.js';
 import { closeConfirm, confirmOpen, isAlly } from './diplomacy.js';
 import { expandAll, landDown, landMove, landUp } from './land.js';
-import { cycleStance, orderAt, pickSquadOf, selectAllSquads, squadKey, toggleBuild } from './bar.js';
+import { cycleStance, orderAt, pickSquadOf, selectAllSquads, squadKey, toggleBuild, toggleFormation } from './bar.js';
 import { sendMsg } from './net.js';
 import { clearSelection } from './overlay.js';
 import { resize } from './render.js';
@@ -267,6 +267,7 @@ window.addEventListener('keydown', (e) => {
   }
   if (k === 'h') orderAt({ k: 'c', id: S.myId }, { everyone: true });
   if (k === 'g') cycleStance();
+  if (k === 'f') toggleFormation();
   if (k === ' ') {
     e.preventDefault();
     const p = players.get(S.myId);

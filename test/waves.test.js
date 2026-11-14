@@ -812,3 +812,40 @@ test('pillage: with no camp in sight the squad searches the fog until it finds o
   assert.ok(found, 'it searched, discovered a camp, and went for it');
   assert.ok(seen(g.camps[q.order.target.id]), 'one it has now seen');
 });
+
+test('standing squads settle still on evenly spaced spots; F puts a squad in a rectangle', () => {
+  const { g, a } = duel(31);
+  setMix(g, a, 0, { soldier: 10, archer: 6, healer: 2 });
+  Object.assign(a.squads[1].mix, { soldier: 20 });
+  respawn(g, a);
+  run(g, 40);
+  const still = () => {
+    const before = new Map(mine(g, a).map((u) => [u.id, [u.x, u.y]]));
+    run(g, 5);
+    return mine(g, a).every((u) => Math.hypot(u.x - before.get(u.id)[0], u.y - before.get(u.id)[1]) < 0.05);
+  };
+  const minGap = () => {
+    const us = mine(g, a);
+    let m = Infinity;
+    for (const u of us) for (const v of us) if (u.id < v.id) m = Math.min(m, Math.hypot(u.x - v.x, u.y - v.y));
+    return m;
+  };
+  assert.ok(still(), 'spread out: nobody wiggles');
+  assert.ok(minGap() >= C.UNIT_SPACING - 0.02, `no overlaps (${minGap().toFixed(2)})`);
+
+  assert.match(g.squadFormation(a.id, a.squads[0].id, 'wedge'), /Invalid/);
+  assert.strictEqual(g.squadFormation(a.id, a.squads[0].id, 'rect'), null);
+  run(g, 20);
+  assert.ok(still(), 'in a rectangle: nobody wiggles');
+  assert.ok(minGap() >= C.UNIT_SPACING - 0.02, `no overlaps (${minGap().toFixed(2)})`);
+  // the squad stands in straight rows (square to the map), RECT_SPACING apart
+  const sq = mine(g, a).filter((u) => u.sq === a.squads[0].id);
+  const xs = new Set(sq.map((u) => Math.round(u.x)));
+  const ys = new Set(sq.map((u) => Math.round(u.y)));
+  assert.ok(Math.min(xs.size, ys.size) <= 4, `a few rows (${xs.size} x ${ys.size})`);
+  // melee in front of ranged: the soldiers are all further from the core than the archers on average
+  const fromCore = (u) => Math.hypot(u.x - a.core.x - 0.5, u.y - a.core.y - 0.5);
+  const avg = (k) => { const l = sq.filter((u) => u.kind === k); return l.reduce((s, u) => s + fromCore(u), 0) / l.length; };
+  assert.ok(avg('soldier') > avg('archer'), 'soldiers in front');
+  assert.strictEqual(g.personal(a).squads[0][6], 'rect', 'the client hears about it');
+});

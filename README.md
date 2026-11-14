@@ -115,6 +115,7 @@ and get a turning gold rune ring at level 4 and a radiant aura at level 5.
 | `1`–`4` | Pick that squad (press twice to find it) |
 | `Q` | Orders go to all squads |
 | `G` | Next stance for the picked squads (aggressive / defensive / hold / pillage) |
+| `F` | Rectangle formation for the picked squads (or all): standing troops line up in an evenly spaced rectangle facing out, melee in front; press again to spread out. Also on each squad card |
 | Left-click a tower | Select it |
 | `Esc` | Clear picked troops / selected building / build mode; with nothing to clear, open the menu (Resume, How to play, Leave game). The ☰ button opens it too. The game keeps running while it is open. |
 | `H` | Every squad defends your core |

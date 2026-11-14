@@ -196,6 +196,12 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
   font: inherit; font-size: 10.5px; font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sq-stance button:hover { border-color: var(--accent); color: var(--text); }
 .sq-stance button.on { flex: 1; border-color: var(--gold); color: var(--gold); background: #2a2612; }
+.sq-form { display: flex; align-items: center; gap: 3px; margin-top: 3px; }
+.sq-form span { flex: 0 0 auto; margin-right: 2px; color: var(--muted); font-size: 10px; }
+.sq-form button { flex: 1; min-width: 0; height: 20px; padding: 0 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--raise-2); color: var(--muted);
+  font: inherit; font-size: 10.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.sq-form button:hover { border-color: var(--accent); color: var(--text); }
+.sq-form button.on { border-color: var(--gold); color: var(--gold); background: #2a2612; }
 .squad-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .squad-foot .squad-btns { width: 260px; }
 .squad-btns { display: flex; gap: 4px; }

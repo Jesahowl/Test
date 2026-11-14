@@ -141,6 +141,21 @@ function cycleStance() {
   toast(`${S.allSquads ? 'All squads' : squadsLabel()}: ${STANCES.find(([k]) => k === next)[2].toLowerCase()} stance`, true);
 }
 
+const FORMATIONS = [
+  ['spread', '⬡', 'Spread', 'Standing troops spread out evenly over their hex'],
+  ['rect', '▦', 'Rectangle', 'Standing troops line up in an evenly spaced rectangle facing out, melee in front and ranged troops and medics behind'],
+];
+
+// F: the picked squads (or all) switch between the rectangle formation and spreading out. If any of
+// them isn't in a rectangle, they all form one.
+function toggleFormation() {
+  const list = allSquads().filter((q) => S.allSquads || S.selSquads.has(q.id));
+  if (!list.length) return;
+  const next = list.some((q) => q.formation !== 'rect') ? 'rect' : 'spread';
+  for (const q of list) sendMsg({ t: 'squad', op: 'formation', sq: q.id, formation: next });
+  toast(`${S.allSquads ? 'All squads' : squadsLabel()}: ${next === 'rect' ? 'rectangle formation' : 'spread out'}`, true);
+}
+
 const STATUS_ICON = { defend: '🛡', attack: '⚔', hold: '🚩' };
 
 // A squad's order for its card: [kind, short text, long text]
@@ -167,6 +182,7 @@ function bindSquadCards() {
       sendMsg({ t: 'squad', op: 'mix', sq: id, kind: el.dataset.kind, d: act === 'add' ? 1 : -1 });
       tipDone('mix');
     } else if (act === 'stance') sendMsg({ t: 'squad', op: 'stance', sq: id, stance: el.dataset.stance });
+    else if (act === 'formation') sendMsg({ t: 'squad', op: 'formation', sq: id, formation: el.dataset.formation });
   });
 }
 
@@ -177,7 +193,7 @@ function updateSquadsUi() {
   if (!S.allSquads && !S.selSquads.size) S.allSquads = true;
   const free = squads.reduce((n, q) => n + Math.max(0, q.cap - q.slots), 0);
   const box = $('squads');
-  const key = squads.map((q) => `${q.id}:${q.stance}:${q.cap}:${UNIT_KEYS.map((k) => `${q.mix[k]}/${q.kinds[k] || 0}`).join(',')}:${q.status}:${squadPicked(q.id) ? 1 : 0}:${Math.round(10 * hpFrac(q))}`).join('|') + `|${S.allSquads}`;
+  const key = squads.map((q) => `${q.id}:${q.stance}:${q.formation}:${q.cap}:${UNIT_KEYS.map((k) => `${q.mix[k]}/${q.kinds[k] || 0}`).join(',')}:${q.status}:${squadPicked(q.id) ? 1 : 0}:${Math.round(10 * hpFrac(q))}`).join('|') + `|${S.allSquads}`;
   if (box.dataset.key !== key) {
     box.dataset.key = key;
     box.innerHTML = squads.map((q) => {
@@ -195,6 +211,7 @@ function updateSquadsUi() {
           + `<span class="pm"><button data-act="add" data-kind="${k}"${canAdd(k) ? '' : ' disabled'} data-tip="${!q.cap ? `Build a barracks to raise squad ${q.num}` : room >= C.slotsOf(k) ? `One more ${C.UNITS[k].name.toLowerCase()} (it arrives at the next respawn)` : `Swap ${C.slotsOf(k) > 1 ? 'soldiers' : 'a soldier'} for a ${C.UNITS[k].name.toLowerCase()} (the squad is full)`}">+</button><button data-act="rem" data-kind="${k}"${n ? '' : ' disabled'} data-tip="One fewer ${C.UNITS[k].name.toLowerCase()} (frees a slot for another squad)">−</button></span></div>`;
       }).join('');
       const stances = STANCES.map(([k, ic, name, what]) => `<button data-act="stance" data-stance="${k}" class="${q.stance === k ? 'on' : ''}" data-tip="<span class='t'>${name} <kbd>G</kbd></span>${what}">${ic}${q.stance === k ? ` ${name}` : ''}</button>`).join('');
+      const forms = FORMATIONS.map(([k, ic, name, what]) => `<button data-act="formation" data-formation="${k}" class="${q.formation === k ? 'on' : ''}" data-tip="<span class='t'>${name} formation <kbd>F</kbd></span>${what}">${ic} ${name}</button>`).join('');
       const lv = q.cap / C.BARRACKS_TROOPS;
       const cap = q.cap
         ? `<div class="sq-cap" data-tip="Squad ${q.num}'s barracks gives it ${q.cap} troop slots. Upgrade the barracks for +${C.BARRACKS_TROOPS} (up to ${C.SQUAD_MAX_TROOPS}).">Barracks Lv ${lv} · <b>${q.slots}/${q.cap}</b> slots${room > 0 ? ` · <span class="free">${room} free</span>` : ''}</div>`
@@ -207,6 +224,7 @@ function updateSquadsUi() {
         ${cap}
         <div class="sq-mix">${mixHtml}</div>
         <div class="sq-stance">${stances}</div>
+        <div class="sq-form"><span>Formation</span>${forms}</div>
       </div>`;
     }).join('');
   }
@@ -255,4 +273,4 @@ function sendOrder(tg, opts) {
   S.pendingOrder = (n) => `${who} (${n} troop${n === 1 ? '' : 's'}): ${verb}${what}`;
 }
 
-export { buildBar, cycleStance, orderAt, pickSquadOf, selectAllSquads, squadKey, squadsLabel, toggleBuild, updateSquadsUi };
+export { buildBar, cycleStance, orderAt, toggleFormation, pickSquadOf, selectAllSquads, squadKey, squadsLabel, toggleBuild, updateSquadsUi };

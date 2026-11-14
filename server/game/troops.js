@@ -604,22 +604,44 @@ module.exports = {
 
   // Give every standing troop its spot (u.slotPos) in its hex's formation. Squads fill their own
   // hex first, then spill into the nearest hexes round it; each spot holds one troop of a side.
+  // Squads in 'rect' formation (F) stand in an evenly spaced rectangle instead (see rectSlots); the
+  // others then fill the grid spots that don't clash with those rectangles.
   assignSlots() {
+    const rectSq = new Set();
+    for (const p of this.players.values()) for (const q of p.squads || []) if (q.formation === 'rect') rectSq.add(q.id);
     const byHex = new Map();
     for (const u of this.units.values()) {
       u.slotPos = null;
       if ((C.UNITS[u.kind].scout && !u.attack) || u.trade || u.worker) continue; // scouts off exploring; caravans; workers
       const h = this.postHex(u);
       if (h < 0) continue;
-      const key = `${u.owner}:${h}`;
-      if (!byHex.has(key)) byHex.set(key, { h, owner: u.owner, first: u.sq, home: !u.attack, list: [] });
+      const rect = rectSq.has(u.sq);
+      const key = `${u.owner}:${h}:${rect ? 'r' : 's'}`;
+      if (!byHex.has(key)) byHex.set(key, { h, owner: u.owner, first: u.sq, home: !u.attack, rect, list: [] });
       const grp = byHex.get(key);
       grp.list.push(u);
       grp.first = Math.min(grp.first, u.sq);
     }
-    const taken = new Map(); // owner -> Set of spots in use
-    const groups = [...byHex.values()].sort((a, b) => a.owner - b.owner || a.first - b.first || a.h - b.h);
-    for (const { h, owner, home, list } of groups) {
+    const taken = new Map(); // owner -> Set of grid spots in use
+    const rects = new Map(); // owner -> spots taken by rectangles, by tile (grid spots near them are off limits)
+    const groups = [...byHex.values()].sort((a, b) => a.owner - b.owner || b.rect - a.rect || a.first - b.first || a.h - b.h);
+    for (const grp of groups) {
+      if (!grp.rect) continue;
+      if (!rects.has(grp.owner)) rects.set(grp.owner, new Map());
+      // troops the rectangle has no room for form up the usual way nearby
+      const left = this.rectSlots(grp, rects.get(grp.owner));
+      if (left.length) groups.push({ ...grp, rect: false, list: left });
+    }
+    const nearRect = (owner, x, y) => {
+      const m = rects.get(owner);
+      if (!m) return false;
+      for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
+        for (const q of m.get(`${Math.floor(x) + ox},${Math.floor(y) + oy}`) || []) if (Math.hypot(q[0] - x, q[1] - y) < C.SLOT_SPACING) return true;
+      }
+      return false;
+    };
+    for (const { h, owner, home, list, rect } of groups) {
+      if (rect) continue;
       if (!taken.has(owner)) taken.set(owner, new Set());
       const used = taken.get(owner);
       list.sort((a, b) => a.sq - b.sq || a.id - b.id);
@@ -633,7 +655,7 @@ module.exports = {
         for (const j of ring) {
           for (const sp of this.freeSlots(j)) {
             if (k >= list.length) break;
-            if (used.has(sp) || (home && this.terr[this.idx(Math.floor(sp[0]), Math.floor(sp[1]))] !== owner)) continue;
+            if (used.has(sp) || (home && this.terr[this.idx(Math.floor(sp[0]), Math.floor(sp[1]))] !== owner) || nearRect(owner, sp[0], sp[1])) continue;
             used.add(sp);
             list[k++].slotPos = { x: sp[0], y: sp[1] };
           }
@@ -645,6 +667,82 @@ module.exports = {
       // no spot left nearby: stand where it is rather than shove into the crowd
       for (; k < list.length; k++) list[k].slotPos = { x: list[k].x, y: list[k].y, loose: true };
     }
+  },
+
+  // A rectangle formation for the troops of grp (one or more 'rect' squads sharing a post): rows of
+  // RECT_SPACING-spaced troops, wider than deep, centred on the post hex, square to the map and
+  // facing away from the owner's core (toward where it was sent). Melee troops stand in the front rows, ranged and
+  // medics behind. Spots inside buildings, off home land (for home guards) or too close to another
+  // rectangle are skipped, and extra rows are added for the troops they leave out. `placed` holds
+  // the owner's rectangle spots so far, by tile, and gets these added. Returns the troops left over.
+  rectSlots(grp, placed) {
+    const { h, owner, home, list } = grp;
+    const hx = this.hex.hexes[h];
+    const p = this.players.get(owner);
+    let fx = hx.cx - (p.core.x + 0.5);
+    let fy = hx.cy - (p.core.y + 0.5);
+    const fl = Math.hypot(fx, fy);
+    // (square to the map, facing whichever of up/down/left/right is nearest: neat rows on screen)
+    if (fl < 0.5) {
+      fx = 0;
+      fy = -1;
+    } else if (Math.abs(fx) > Math.abs(fy)) {
+      fx = Math.sign(fx);
+      fy = 0;
+    } else {
+      fy = Math.sign(fy);
+      fx = 0;
+    }
+    const rx = -fy; // along the rows
+    const ry = fx;
+    const n = list.length;
+    const S = C.RECT_SPACING;
+    const cols = Math.max(1, Math.min(n, Math.ceil(Math.sqrt(n * 2.2))));
+    const rows = Math.ceil(n / cols);
+    const solid = [];
+    for (const t of this.towers.values()) if (Math.hypot(t.x + 0.5 - hx.cx, t.y + 0.5 - hx.cy) < 12) solid.push([t.x + 0.5, t.y + 0.5, C.STRUCT_BODY]);
+    for (const o of this.players.values()) if (o.alive && Math.hypot(o.core.x + 0.5 - hx.cx, o.core.y + 0.5 - hx.cy) < 12) solid.push([o.core.x + 0.5, o.core.y + 0.5, C.CORE_BODY]);
+    const clash = (x, y) => {
+      for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
+        for (const q of placed.get(`${Math.floor(x) + ox},${Math.floor(y) + oy}`) || []) if (Math.hypot(q[0] - x, q[1] - y) < C.SLOT_SPACING) return true;
+      }
+      return false;
+    };
+    const ok = (x, y) => x > 0.4 && y > 0.4 && x < this.w - 0.4 && y < this.h - 0.4
+      && (!home || this.terr[this.idx(Math.floor(x), Math.floor(y))] === owner)
+      && solid.every(([sx, sy, r]) => Math.hypot(x - sx, y - sy) > r + 0.45) && !clash(x, y);
+    // rows centred on the hex (front = +), then extra rows behind and in front, in turn
+    const offs = [];
+    for (let i = 0; i < rows; i++) offs.push(i - (rows - 1) / 2);
+    for (let j = 0; j < rows + 10; j++) offs.push(j % 2 ? -((rows - 1) / 2 + 1 + (j >> 1)) : (rows - 1) / 2 + 1 + (j >> 1));
+    let spots = [];
+    for (const r of offs) {
+      for (let c = 0; c < cols; c++) {
+        const co = c - (cols - 1) / 2;
+        const x = hx.cx + (rx * co + fx * r) * S;
+        const y = hx.cy + (ry * co + fy * r) * S;
+        if (ok(x, y)) spots.push([x, y, r, co]);
+      }
+      if (spots.length >= n) break;
+    }
+    // front row first, each row from the middle out: a part-filled row is the back one, centred
+    spots.sort((a, b) => b[2] - a[2] || Math.abs(a[3]) - Math.abs(b[3]) || a[3] - b[3]);
+    spots = spots.slice(0, n);
+    const rank = (u) => (C.UNITS[u.kind].heal ? 3 : C.UNITS[u.kind].melee || C.UNITS[u.kind].breaker ? 0 : 1);
+    list.sort((a, b) => rank(a) - rank(b) || a.sq - b.sq || a.id - b.id);
+    const left = [];
+    list.forEach((u, k) => {
+      const sp = spots[k];
+      if (!sp) {
+        left.push(u);
+        return;
+      }
+      u.slotPos = { x: sp[0], y: sp[1] };
+      const key = `${Math.floor(sp[0])},${Math.floor(sp[1])}`;
+      if (!placed.has(key)) placed.set(key, []);
+      placed.get(key).push(sp);
+    });
+    return left; // the troops it had no room for
   },
 
   // Push troops apart so none sit on top of each other (friend or foe), and out of buildings and

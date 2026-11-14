@@ -250,6 +250,7 @@ class Room {
       case 'squad':
         if (msg.op === 'mix') return game.squadMix(client.pid, Number(msg.sq), String(msg.kind), msg.d === -1 ? -1 : 1);
         if (msg.op === 'stance') return game.squadStance(client.pid, Number(msg.sq), String(msg.stance));
+        if (msg.op === 'formation') return game.squadFormation(client.pid, Number(msg.sq), String(msg.formation));
         return null;
       default:
         return null;

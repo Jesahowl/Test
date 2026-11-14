@@ -216,9 +216,9 @@ class Game {
 
   // Personal state for one player (sent only to them).
   personal(p) {
-    // My squads: [id, number, stance, mix (per UNIT_KEYS), order ("attack t:12", "defend c:5"), troop slots]. Their troops carry the id.
+    // My squads: [id, number, stance, mix (per UNIT_KEYS), order ("attack t:12", "defend c:5"), troop slots, formation]. Their troops carry the id.
     const okey = (o) => (o.type === 'defend' ? `defend ${o.anchor ? `t:${o.anchor}` : `c:${p.id}`}` : `attack ${o.target.k}:${o.target.id}`);
-    const squads = p.squads.map((q) => [q.id, q.num, q.stance, UNIT_KEYS.map((k) => q.mix[k] || 0), okey(q.order), this.squadCap(p, q)]);
+    const squads = p.squads.map((q) => [q.id, q.num, q.stance, UNIT_KEYS.map((k) => q.mix[k] || 0), okey(q.order), this.squadCap(p, q), q.formation || 'spread']);
     return {
       id: p.id,
       gold: Math.floor(p.gold),

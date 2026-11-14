@@ -58,7 +58,7 @@ module.exports = {
       const id = this.nextId++;
       const mix = {};
       for (const k of UNIT_KEYS) mix[k] = 0;
-      p.squads.push({ id, num, mix, stance: 'defensive', order: HOME(), capSeen: 0 });
+      p.squads.push({ id, num, mix, stance: 'defensive', formation: 'spread', order: HOME(), capSeen: 0 });
       p.squadNum.set(id, num);
     }
   },
@@ -133,6 +133,18 @@ module.exports = {
     if (!C.STANCES.includes(stance)) return 'Invalid stance';
     q.stance = stance;
     for (const u of this.units.values()) if (u.owner === pid && u.sq === sq) u.stance = stance;
+    return null;
+  },
+
+  // A squad's formation when it stands: 'spread' (filling its hex evenly) or 'rect' (an evenly
+  // spaced rectangle facing out).
+  squadFormation(pid, sq, formation) {
+    const p = this.players.get(pid);
+    if (!p || !p.alive) return 'Invalid order';
+    const q = this.squadOf(p, sq);
+    if (!q) return 'Invalid squad';
+    if (!C.FORMATIONS.includes(formation)) return 'Invalid formation';
+    q.formation = formation;
     return null;
   },
 
