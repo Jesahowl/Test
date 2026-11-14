@@ -235,7 +235,7 @@ function sendOrder(tg, opts) {
   if (!isMineTarget(tg)) tipDone('attack');
   if (tg.k === 'j') tipDone('jungle');
   if (!ids && !everyone) tipDone('send');
-  const verb = isMineTarget(tg) ? 'defending' : tg.k === 'j' ? 'clearing' : tg.k === 'u' ? 'hunting' : tg.k === 'p' ? 'holding a spot' : 'attacking';
+  const verb = isMineTarget(tg) ? 'defending' : tg.k === 'j' ? (S.camps[tg.id]?.alive === false ? 'waiting to clear' : 'clearing') : tg.k === 'u' ? 'hunting' : tg.k === 'p' ? 'holding a spot' : 'attacking';
   const what = tg.k === 'p' ? '' : ` ${targetName(`${tg.k}:${tg.id}`)}`;
   const who = ids ? 'New squad' : opts.everyone ? 'All squads' : squadsLabel();
   S.pendingOrder = (n) => `${who} (${n} troop${n === 1 ? '' : 's'}): ${verb}${what}`;

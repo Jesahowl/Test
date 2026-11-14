@@ -68,7 +68,7 @@ function orderTargetAt(wx, wy) {
   if (t && t.owner) return { k: 't', id: t.id };
   for (const c of S.campsView) {
     const sp = hexSpot(c.x, c.y);
-    if (c.alive && Math.hypot(sp.x - wx, sp.y - wy) < 1.8) return { k: 'j', id: c.id };
+    if (Math.hypot(sp.x - wx, sp.y - wy) < 1.8) return { k: 'j', id: c.id }; // waiting camps too
   }
   return null;
 }
@@ -77,6 +77,7 @@ function orderTargetAt(wx, wy) {
 function campVerb(id) {
   const c = S.campsView.find((o) => o.id === id);
   if (!c) return 'clear';
+  if (!c.alive) return `wait for the ${C.CAMP_INFO[c.type].name} (back in ${c.respawn}s), then clear it`;
   return `clear the ${C.CAMP_INFO[c.type].name} (${C.campBounty(c.type)}g${C.BUFF_CAMPS.includes(c.type) ? ' + buff' : ''})`;
 }
 

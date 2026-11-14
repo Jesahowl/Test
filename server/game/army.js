@@ -85,8 +85,9 @@ module.exports = {
     }
     if (k === 'j') {
       const camp = this.camps[id];
-      if (!camp || !camp.alive) return 'That camp is empty';
-      return { type: 'attack', target: { k: 'j', id } };
+      if (!camp) return 'No such camp';
+      // A camp waiting to come back: go there and wait, then attack when it's back (wait).
+      return { type: 'attack', target: camp.alive ? { k: 'j', id } : { k: 'j', id, wait: 1 } };
     }
     if (k === 'p') {
       // Move to a spot on the map and hold it (id = tile index).
@@ -273,7 +274,7 @@ module.exports = {
     if (ord.type === 'defend') return !ord.anchor || this.towers.get(ord.anchor)?.owner === pid;
     const t = ord.target;
     if (t.k === 'c') return !!this.players.get(t.id)?.alive;
-    if (t.k === 'j') return !!this.camps[t.id]?.alive;
+    if (t.k === 'j') return !!this.camps[t.id] && (this.camps[t.id].alive || !!t.wait);
     if (t.k === 'u') return this.units.has(t.id);
     if (t.k === 'p') return true;
     return !!this.players.get(t.owner)?.alive; // tower orders roll on to that player's next structure

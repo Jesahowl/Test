@@ -38,7 +38,7 @@ test('clearing a camp pays out, angry monsters fight back, and the camp respawns
   assert.ok(!camp.alive, 'the warlord\'s fort takes longer to come back');
   run(g, C.BUFF_CAMP_RESPAWN - C.CAMP_RESPAWN);
   assert.ok(camp.alive, 'camp respawns');
-  assert.match(g.order(a.id, null, { k: 'j', id: 999 }), /empty/);
+  assert.match(g.order(a.id, null, { k: 'j', id: 999 }), /No such camp/);
 });
 
 test('monsters give up when dragged away from their camp', () => {
@@ -90,4 +90,30 @@ test('camps keep well apart, at the start and as they move', () => {
     g.update(0.05);
     assert.ok(minGap() >= C.CAMP_SPACING, `after a move: ${minGap()}`);
   }
+});
+
+test('troops sent to a camp that is still respawning wait there, then clear it when it comes back', () => {
+  const { g, a } = duel(37);
+  const camp = g.camps.slice().sort((c1, c2) => Math.hypot(c1.x - a.core.x, c1.y - a.core.y) - Math.hypot(c2.x - a.core.x, c2.y - a.core.y))[0];
+  // clear it out
+  for (const c of g.creeps.values()) if (c.camp === camp.id) c.dead = true;
+  g.update(0.05);
+  assert.ok(!camp.alive && camp.respawnAt > g.time);
+  camp.respawnAt = g.time + 40;
+  const squad = troops(g, a, 'soldier', 6, a.core.x + 0.5, a.core.y + 2.5, 3);
+  assert.strictEqual(g.order(a.id, squad.map((u) => u.id), { k: 'j', id: camp.id }), null);
+  run(g, 38);
+  assert.ok(squad.every((u) => u.attack && u.attack.k === 'j'), 'still waiting for the camp');
+  const near = squad.filter((u) => Math.hypot(u.x - camp.x - 0.5, u.y - camp.y - 0.5) < 4.5).length;
+  assert.ok(near >= 4, `waiting next to the camp (${near} close)`);
+  const gold = a.gold;
+  let back = false;
+  const cleared = run(g, 30, () => {
+    if (camp.alive) back = true;
+    return back && !camp.alive;
+  });
+  assert.ok(cleared, 'cleared it once it came back');
+  assert.ok(a.gold > gold, 'and got the bounty');
+  run(g, 1);
+  assert.ok(squad.filter((u) => g.units.has(u.id)).every((u) => !u.attack), 'then the order is done (no waiting for the next respawn)');
 });

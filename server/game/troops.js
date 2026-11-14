@@ -84,8 +84,10 @@ module.exports = {
     }
     if (a.k === 'j') {
       const camp = this.camps[a.id];
-      if (!camp || !camp.alive) return null;
-      return { x: camp.x + 0.5, y: camp.y + 0.5, goal: this.idx(camp.x, camp.y), struct: false };
+      if (!camp) return null;
+      if (camp.alive) a.wait = 0; // it's back: once it's cleared, the order is done
+      else if (!a.wait) return null; // cleared
+      return { x: camp.x + 0.5, y: camp.y + 0.5, goal: this.idx(camp.x, camp.y), struct: false, campWait: !camp.alive };
     }
     if (a.k === 'c') {
       const p = this.players.get(a.id);
@@ -660,7 +662,8 @@ module.exports = {
             continue;
           }
         }
-        const stop = tgt.struct ? Math.max(0.6, s.range * 0.85) : tgt.hold ? 0.05 : 1;
+        // (waiting for a camp to come back: stand round its edge, ready to pounce)
+        const stop = tgt.struct ? Math.max(0.6, s.range * 0.85) : tgt.hold ? 0.05 : tgt.campWait ? 2.5 : 1;
         // holding a hex: each troop heads for its own spot in the formation
         const gx = tgt.hold && u.slotPos ? u.slotPos.x : tgt.x;
         const gy = tgt.hold && u.slotPos ? u.slotPos.y : tgt.y;
