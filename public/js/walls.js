@@ -140,7 +140,7 @@ function chainsOf(items) {
 // ONE line through the whole run,
 // so the run reads as a single wall. A gate is a gap in the wall: the top line stops either side of
 // it, the walls there end in a lit edge, and a soft light rises from the gap (no line along its foot).
-function drawRun(run, s, now, ghost) {
+function drawRun(run, s, now, g = ctx) {
   if (!run.length) return;
   const owner = run[0].w.owner;
   const P = run.map(({ A, B, w }) => {
@@ -150,92 +150,113 @@ function drawRun(run, s, now, ghost) {
     const pulse = 1;
     return { a, b, h, w, pulse, dmg: w.maxHp ? 1 - w.hp / w.maxHp : 0 };
   });
-  ctx.save();
-  if (ghost) ctx.globalAlpha = 0.55;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
+  g.save();
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
   // faces: glass for walls; a gate is a gap with soft light rising out of it
   for (const { a, b, h, w, pulse } of P) {
-    const g = ctx.createLinearGradient(0, Math.max(a[1], b[1]), 0, Math.min(a[1], b[1]) - h);
+    const grad = g.createLinearGradient(0, Math.max(a[1], b[1]), 0, Math.min(a[1], b[1]) - h);
     if (w.gate) {
-      g.addColorStop(0, colorOf(owner, 75, 0.35));
-      g.addColorStop(1, colorOf(owner, 75, 0));
+      grad.addColorStop(0, colorOf(owner, 75, 0.35));
+      grad.addColorStop(1, colorOf(owner, 75, 0));
     } else {
-      g.addColorStop(0, colorOf(owner, 60, 0.3 * pulse));
-      g.addColorStop(1, colorOf(owner, 70, 0.12 * pulse));
+      grad.addColorStop(0, colorOf(owner, 60, 0.3 * pulse));
+      grad.addColorStop(1, colorOf(owner, 70, 0.12 * pulse));
     }
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.moveTo(a[0], a[1]);
-    ctx.lineTo(b[0], b[1]);
-    ctx.lineTo(b[0], b[1] - h);
-    ctx.lineTo(a[0], a[1] - h);
-    ctx.closePath();
-    ctx.fill();
+    g.fillStyle = grad;
+    g.beginPath();
+    g.moveTo(a[0], a[1]);
+    g.lineTo(b[0], b[1]);
+    g.lineTo(b[0], b[1] - h);
+    g.lineTo(a[0], a[1] - h);
+    g.closePath();
+    g.fill();
   }
   // the foot along the ground under walls
-  ctx.strokeStyle = colorOf(owner, 70, 0.8);
-  ctx.lineWidth = Math.max(1, s * 0.05);
-  ctx.beginPath();
+  g.strokeStyle = colorOf(owner, 70, 0.8);
+  g.lineWidth = Math.max(1, s * 0.05);
+  g.beginPath();
   for (const { a, b, w } of P) {
     if (w.gate) continue;
-    ctx.moveTo(a[0], a[1]);
-    ctx.lineTo(b[0], b[1]);
+    g.moveTo(a[0], a[1]);
+    g.lineTo(b[0], b[1]);
   }
-  ctx.stroke();
+  g.stroke();
   // the top: one path through each stretch of wall between gates
   const first = P[0];
   const last = P[P.length - 1];
   const loop = !P.some((p) => p.w.gate) && P.length > 2 && Math.hypot(first.a[0] - last.b[0], first.a[1] - last.b[1]) < 0.5;
   const topPath = () => {
-    ctx.beginPath();
+    g.beginPath();
     let open = false;
     for (const { a, b, h, w } of P) {
       if (w.gate) {
         open = false;
         continue;
       }
-      if (!open) ctx.moveTo(a[0], a[1] - h);
-      else ctx.lineTo(a[0], a[1] - h);
-      ctx.lineTo(b[0], b[1] - h);
+      if (!open) g.moveTo(a[0], a[1] - h);
+      else g.lineTo(a[0], a[1] - h);
+      g.lineTo(b[0], b[1] - h);
       open = true;
     }
-    if (loop) ctx.lineTo(first.a[0], first.a[1] - first.h);
+    if (loop) g.lineTo(first.a[0], first.a[1] - first.h);
     // the gates' side edges, ground to top, in the same path: each glow layer is painted once over
     // the whole run, so where an edge meets a wall top nothing doubles up
     for (const { a, b, h, w } of P) {
       if (!w.gate) continue;
       for (const [x, y] of [a, b]) {
-        ctx.moveTo(x, y);
-        ctx.lineTo(x, y - h);
+        g.moveTo(x, y);
+        g.lineTo(x, y - h);
       }
     }
   };
-  ctx.strokeStyle = colorOf(owner, 70, 0.25);
-  ctx.lineWidth = Math.max(5, s * 0.36);
+  g.strokeStyle = colorOf(owner, 70, 0.25);
+  g.lineWidth = Math.max(5, s * 0.36);
   topPath();
-  ctx.stroke();
-  ctx.strokeStyle = colorOf(owner, 80, 0.75);
-  ctx.lineWidth = Math.max(2.5, s * 0.17);
+  g.stroke();
+  g.strokeStyle = colorOf(owner, 80, 0.75);
+  g.lineWidth = Math.max(2.5, s * 0.17);
   topPath();
-  ctx.stroke();
-  ctx.strokeStyle = colorOf(owner, 90);
-  ctx.lineWidth = Math.max(1, s * 0.05);
+  g.stroke();
+  g.strokeStyle = colorOf(owner, 90);
+  g.lineWidth = Math.max(1, s * 0.05);
   topPath();
-  ctx.stroke();
+  g.stroke();
   // per segment: battered walls flicker dark along their top
   for (const { a, b, h, w, dmg } of P) {
     if (dmg > 0.5 && !w.gate) {
-      ctx.strokeStyle = `rgba(13, 17, 23, ${0.55 * Math.abs(Math.sin(now / 90 + w.id))})`;
-      ctx.lineWidth = Math.max(2.5, s * 0.17);
-      ctx.setLineDash([s * 0.12, s * 0.3]);
-      ctx.beginPath();
-      ctx.moveTo(a[0], a[1] - h);
-      ctx.lineTo(b[0], b[1] - h);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      g.strokeStyle = `rgba(13, 17, 23, ${0.55 * Math.abs(Math.sin(now / 90 + w.id))})`;
+      g.lineWidth = Math.max(2.5, s * 0.17);
+      g.setLineDash([s * 0.12, s * 0.3]);
+      g.beginPath();
+      g.moveTo(a[0], a[1] - h);
+      g.lineTo(b[0], b[1] - h);
+      g.stroke();
+      g.setLineDash([]);
     }
   }
+  g.restore();
+}
+
+// Wall previews (while placing): drawn at full strength on a layer of their own, then laid over the
+// map see-through in one go, so their glow layers don't show through each other.
+let ghostLayer = null;
+function drawGhostWalls(items, s, now) {
+  if (!items.length) return;
+  if (!ghostLayer) ghostLayer = document.createElement('canvas');
+  if (ghostLayer.width !== ctx.canvas.width || ghostLayer.height !== ctx.canvas.height) {
+    ghostLayer.width = ctx.canvas.width;
+    ghostLayer.height = ctx.canvas.height;
+  }
+  const g = ghostLayer.getContext('2d');
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, ghostLayer.width, ghostLayer.height);
+  g.setTransform(ctx.getTransform());
+  for (const run of chainsOf(items)) drawRun(run, s, now, g);
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 0.6;
+  ctx.drawImage(ghostLayer, 0, 0);
   ctx.restore();
 }
 
@@ -258,7 +279,7 @@ function drawWalls() {
   const runs = chainsOf(list.map((w) => ({ A: w.ends[0], B: w.ends[1], w })));
   // farther runs first (by their lowest point) so nearer walls overlap them
   runs.sort((p, q) => Math.max(...p.map((x) => Math.max(x.A[1], x.B[1]))) - Math.max(...q.map((x) => Math.max(x.A[1], x.B[1]))));
-  for (const run of runs) drawRun(run, s, now, false);
+  for (const run of runs) drawRun(run, s, now);
   for (const w of list) {
     const [mx, my] = toScreen(w.x, w.y);
     if (mx < -s * 4 || my < -s * 4 || mx > ctx.canvas.width + s * 4 || my > ctx.canvas.height + s * 4) continue;
@@ -303,6 +324,7 @@ function drawWallMode() {
       if (dd > 3 || ownerOfHex(h.i) !== S.myId) continue;
       for (const j of h.n) {
         if (!canWall(h.i, j, pending)) continue;
+        if (near && ((near.a === h.i && near.b === j) || (near.a === j && near.b === h.i)) && canWall(near.a, near.b, pending)) continue;
         const e = edgeEnds(h.i, j);
         if (!e) continue;
         const [x1, y1] = toScreen(e[0][0], e[0][1]);
@@ -317,11 +339,10 @@ function drawWallMode() {
     ctx.restore();
   }
   const now = performance.now();
-  if (d && d.list.length) {
-    const ghost = { id: 0, owner: S.myId, hp: 1, maxHp: 1 };
-    const items = d.list.map(([a, b]) => edgeEnds(a, b)).filter(Boolean).map((e) => ({ A: e[0], B: e[1], w: ghost }));
-    for (const run of chainsOf(items)) drawRun(run, s, now, true);
-  }
+  const ghost = { id: 0, owner: S.myId, hp: 1, maxHp: 1 };
+  const edges = d ? [...d.list] : [];
+  if (near && canWall(near.a, near.b, pending)) edges.push([near.a, near.b]);
+  drawGhostWalls(edges.map(([a, b]) => edgeEnds(a, b)).filter(Boolean).map((e) => ({ A: e[0], B: e[1], w: ghost })), s, now);
   const gold = S.me ? S.me.gold : 0;
   let text;
   let color = '#7ee787';
@@ -331,8 +352,6 @@ function drawWallMode() {
   } else if (near && canWall(near.a, near.b, pending)) {
     text = gold < C.WALL_COST ? `${C.WALL_COST}g (not enough gold)` : `Wall: ${C.WALL_COST}g (drag along your border)`;
     if (gold < C.WALL_COST) color = '#ffa198';
-    const e = edgeEnds(near.a, near.b);
-    if (e) drawRun([{ A: e[0], B: e[1], w: { id: 0, owner: S.myId, hp: 1, maxHp: 1 } }], s, now, true);
   } else if (hh >= 0) {
     text = 'Walls go on your border: drag along its edge';
     color = '#8b949e';
