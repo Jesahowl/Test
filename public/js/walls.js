@@ -138,8 +138,8 @@ function chainsOf(items) {
 // One run of wall: the border lifted up into a see-through band of light in its owner's colour,
 // all one height. The face is filled segment by segment (they meet edge to edge), and the top is
 // ONE line through the whole run,
-// so the run reads as a single wall. A gate is part of the same line: its face is left almost clear,
-// the ground under it dashed, with a bright post at each end.
+// so the run reads as a single wall. A gate is a gap in the wall: the top line stops either side of
+// it, its ground line glows brighter and a soft light rises from it.
 function drawRun(run, s, now, ghost) {
   if (!run.length) return;
   const owner = run[0].w.owner;
@@ -154,11 +154,16 @@ function drawRun(run, s, now, ghost) {
   if (ghost) ctx.globalAlpha = 0.55;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  // faces
+  // faces: glass for walls; a gate is a gap with soft light rising out of it
   for (const { a, b, h, w, pulse } of P) {
     const g = ctx.createLinearGradient(0, Math.max(a[1], b[1]), 0, Math.min(a[1], b[1]) - h);
-    g.addColorStop(0, colorOf(owner, 60, (w.gate ? 0.05 : 0.3) * pulse));
-    g.addColorStop(1, colorOf(owner, 70, (w.gate ? 0.02 : 0.12) * pulse));
+    if (w.gate) {
+      g.addColorStop(0, colorOf(owner, 75, 0.35));
+      g.addColorStop(1, colorOf(owner, 75, 0));
+    } else {
+      g.addColorStop(0, colorOf(owner, 60, 0.3 * pulse));
+      g.addColorStop(1, colorOf(owner, 70, 0.12 * pulse));
+    }
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.moveTo(a[0], a[1]);
@@ -168,31 +173,45 @@ function drawRun(run, s, now, ghost) {
     ctx.closePath();
     ctx.fill();
   }
-  // the foot along the ground: solid under walls, dashed through gates
+  // the foot along the ground under walls
   ctx.strokeStyle = colorOf(owner, 70, 0.8);
   ctx.lineWidth = Math.max(1, s * 0.05);
-  for (const gate of [false, true]) {
-    ctx.setLineDash(gate ? [s * 0.2, s * 0.18] : []);
+  ctx.beginPath();
+  for (const { a, b, w } of P) {
+    if (w.gate) continue;
+    ctx.moveTo(a[0], a[1]);
+    ctx.lineTo(b[0], b[1]);
+  }
+  ctx.stroke();
+  // a gate's ground line glows brighter
+  for (const [width, color] of [[Math.max(6, s * 0.3), colorOf(owner, 80, 0.3)], [Math.max(2.5, s * 0.11), colorOf(owner, 88)]]) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
     ctx.beginPath();
     for (const { a, b, w } of P) {
-      if (!!w.gate !== gate) continue;
+      if (!w.gate) continue;
       ctx.moveTo(a[0], a[1]);
       ctx.lineTo(b[0], b[1]);
     }
     ctx.stroke();
   }
-  ctx.setLineDash([]);
-  // the top: one path through the run (a step where the height changes)
+  // the top: one path through each stretch of wall between gates
+  const first = P[0];
+  const last = P[P.length - 1];
+  const loop = !P.some((p) => p.w.gate) && P.length > 2 && Math.hypot(first.a[0] - last.b[0], first.a[1] - last.b[1]) < 0.5;
   const topPath = () => {
     ctx.beginPath();
-    P.forEach(({ a, b, h }, k) => {
-      if (k === 0) ctx.moveTo(a[0], a[1] - h);
+    let open = false;
+    for (const { a, b, h, w } of P) {
+      if (w.gate) {
+        open = false;
+        continue;
+      }
+      if (!open) ctx.moveTo(a[0], a[1] - h);
       else ctx.lineTo(a[0], a[1] - h);
       ctx.lineTo(b[0], b[1] - h);
-    });
-    const first = P[0];
-    const last = P[P.length - 1];
-    const loop = P.length > 2 && Math.hypot(first.a[0] - last.b[0], first.a[1] - last.b[1]) < 0.5;
+      open = true;
+    }
     if (loop) ctx.lineTo(first.a[0], first.a[1] - first.h);
   };
   ctx.strokeStyle = colorOf(owner, 70, 0.25);
@@ -208,8 +227,8 @@ function drawRun(run, s, now, ghost) {
   topPath();
   ctx.stroke();
   // per segment: battered walls flicker dark along their top
-  for (const { a, b, h, w, pulse, dmg } of P) {
-    if (dmg > 0.5) {
+  for (const { a, b, h, w, dmg } of P) {
+    if (dmg > 0.5 && !w.gate) {
       ctx.strokeStyle = `rgba(13, 17, 23, ${0.55 * Math.abs(Math.sin(now / 90 + w.id))})`;
       ctx.lineWidth = Math.max(2.5, s * 0.17);
       ctx.setLineDash([s * 0.12, s * 0.3]);
@@ -220,23 +239,19 @@ function drawRun(run, s, now, ghost) {
       ctx.setLineDash([]);
     }
   }
-  // gate posts, as tall as the taller wall beside them, so the walls run straight into them
-  P.forEach(({ a, b, h, w }, k) => {
+  // where a wall meets a gate, its end is lit edge to edge (ground to top)
+  P.forEach(({ a, b, w }, k) => {
     if (!w.gate) return;
-    const hPrev = k > 0 ? P[k - 1].h : h;
-    const hNext = k < P.length - 1 ? P[k + 1].h : h;
-    for (const [x, y, hh] of [[a[0], a[1], Math.max(h, hPrev)], [b[0], b[1], Math.max(h, hNext)]]) {
-      ctx.strokeStyle = colorOf(owner, 70, 0.35);
-      ctx.lineWidth = Math.max(5, s * 0.3);
+    const ends = [];
+    if (k > 0 && !P[k - 1].w.gate) ends.push([a, P[k - 1].h]);
+    else if (k === 0 && loop) ends.push([a, P[P.length - 1].h]);
+    if (k < P.length - 1 && !P[k + 1].w.gate) ends.push([b, P[k + 1].h]);
+    for (const [[x, y], hh] of ends) {
+      ctx.strokeStyle = colorOf(owner, 85);
+      ctx.lineWidth = Math.max(1.5, s * 0.06);
       ctx.beginPath();
       ctx.moveTo(x, y);
-      ctx.lineTo(x, y - hh - s * 0.1);
-      ctx.stroke();
-      ctx.strokeStyle = colorOf(owner, 88);
-      ctx.lineWidth = Math.max(2.5, s * 0.13);
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x, y - hh - s * 0.1);
+      ctx.lineTo(x, y - hh);
       ctx.stroke();
     }
   });
