@@ -4,7 +4,7 @@
 // - Each player has BASE_WORKERS plus WORKSHOP_WORKERS per finished Workshop. They're units (kind
 //   'worker', no squad) that never fight; enemies can kill them for a bounty (and the wood they
 //   carried). Fallen workers respawn with the troops, at the core and workshops.
-// - Jobs have priorities (p.jobs: 0 off, 1 low, 2 high). About once a second each worker without a
+// - Jobs have priorities (p.jobs: 0 off, 1 low, 2 medium, 3 high). About once a second each worker without a
 //   manual job takes the highest-priority job that has work, workers sharing out jobs of equal
 //   priority. A worker sent somewhere by hand (sendWorker) sticks to that until it's done.
 // - build: buildings and walls are sites that rise as workers work on them (BUILD_TIME worker-
@@ -78,7 +78,7 @@ module.exports = {
     const p = this.players.get(pid);
     if (!p || !p.alive) return 'Invalid order';
     if (!C.WORKER_JOBS.includes(job)) return 'Invalid job';
-    if (![0, 1, 2].includes(level)) return 'Invalid priority';
+    if (![0, 1, 2, 3].includes(level)) return 'Invalid priority';
     p.jobs[job] = level;
     for (const u of this.workersOf(p)) if (!u.manual) u.thinkAt = 0; // rethink now
     return null;
@@ -209,7 +209,7 @@ module.exports = {
     const taken = new Map();
     for (const u of workers) if (u.job) taken.set(`${u.job.k}:${u.job.id}`, (taken.get(`${u.job.k}:${u.job.id}`) || 0) + 1);
     // job types by priority (high first); ties share workers out
-    const levels = [2, 1].map((lv) => C.WORKER_JOBS.filter((j) => p.jobs[j] === lv)).filter((l) => l.length);
+    const levels = [3, 2, 1].map((lv) => C.WORKER_JOBS.filter((j) => p.jobs[j] === lv)).filter((l) => l.length);
     const sorted = [...workers].sort((a, b) => a.id - b.id);
     sorted.forEach((u, n) => {
       if (u.manual) {

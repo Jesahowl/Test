@@ -25,14 +25,16 @@ module.exports = {
   // Flow field to a goal tile. At most PATH_FIELDS_PER_TICK new fields are built per tick (each
   // costs ~2 ms); past that, a stale field is reused, or null is returned and the troop walks
   // straight for now (the map has no walls, so that's always safe).
-  getFieldTo(goal, owner = 0) {
+  // mode 'troop': hostile walls can be broken through (at a cost); 'solid' (workers): no wall can,
+  // only gates of their own side let them through.
+  getFieldTo(goal, owner = 0, mode = 'troop') {
     // with walls about, each player gets their own fields (gates and walls differ per side)
-    const key = this.walls.size && owner ? `${goal}:${owner}` : goal;
+    const key = this.walls.size && owner ? `${goal}:${owner}:${mode}` : goal;
     let f = this.fields.get(key);
     const stale = !f || (f.version !== this.structVersion && this.time - f.at >= C.PATH_RECOMPUTE_INTERVAL);
     if (stale && this.fieldBudget > 0) {
       this.fieldBudget--;
-      const edge = this.walls.size && owner ? this.wallCostFn(owner) : null;
+      const edge = this.walls.size && owner ? this.wallCostFn(owner, true, mode === 'solid') : null;
       f = { dist: Path.computeField(this.w, this.h, this.getExtra(), goal, edge), goal, edge, version: this.structVersion, at: this.time };
       this.fields.set(key, f);
     } else {
@@ -330,9 +332,30 @@ module.exports = {
 
   // Step toward (x, y), stopping `stop` short of it: straight, unless a wall u can't pass is in the
   // way, in which case it follows a short detour (round the wall, or through a gate).
+  // A wall too long for a short detour: follow the flow field instead, which finds the way round
+  // (an opening or a gate of its side) however far it is.
   stepToward(u, x, y, stop, speed, dt) {
-    if (this.walls.size && dist(u.x, u.y, x, y) > stop && this.lineBlocked(u.owner, u.x, u.y, x, y, u) && this.detourStep(u, x, y, speed, dt)) return;
+    if (this.walls.size && dist(u.x, u.y, x, y) > stop && this.lineBlocked(u.owner, u.x, u.y, x, y, u)) {
+      if (this.detourStep(u, x, y, speed, dt)) return;
+      if (this.fieldStep(u, x, y, speed, dt)) return;
+    }
     this.stepRaw(u, x, y, stop, speed, dt);
+  },
+
+  // One step along the flow field toward (x, y): the long way round walls. False when there's no
+  // field this tick, or no way there at all.
+  fieldStep(u, x, y, speed, dt) {
+    const gx = Math.max(0, Math.min(this.w - 1, Math.floor(x)));
+    const gy = Math.max(0, Math.min(this.h - 1, Math.floor(y)));
+    const goal = this.idx(gx, gy);
+    const f = this.getFieldTo(goal, u.owner, u.worker ? 'solid' : 'troop');
+    if (!f) return false;
+    const here = this.idx(Math.max(0, Math.min(this.w - 1, Math.floor(u.x))), Math.max(0, Math.min(this.h - 1, Math.floor(u.y))));
+    if (f.dist[here] >= Path.INF) return false; // walled off: nothing to do but wait
+    const next = Path.nextStep(f.dist, this.w, this.h, this.extra, here, goal, f.edge);
+    if (next < 0) return false;
+    this.stepRaw(u, (next % this.w) + 0.5, Math.floor(next / this.w) + 0.5, 0, speed, dt);
+    return true;
   },
 
   // Is there a wall `owner` can't pass on the straight line between two points?
@@ -419,7 +442,8 @@ module.exports = {
         if (!this.inBounds(nx, ny) || Math.abs(nx - sx) > R || Math.abs(ny - sy) > R) continue;
         const n = this.idx(nx, ny);
         if (stamp[n] === gen || blocked(k, n)) continue;
-        if (dx && dy && (blocked(k, this.idx(x + dx, y)) || blocked(k, this.idx(x, y + dy)))) continue;
+        if (dx && dy && (blocked(k, this.idx(x + dx, y)) || blocked(k, this.idx(x, y + dy))
+          || blocked(this.idx(x + dx, y), n) || blocked(this.idx(x, y + dy), n))) continue;
         stamp[n] = gen;
         parent[n] = k;
         queue[tail++] = n;
@@ -591,11 +615,12 @@ module.exports = {
     for (const u of this.units.values()) {
       for (const v of this.nearUnits(u.x, u.y, C.UNIT_SPACING)) {
         if (v.id <= u.id) continue;
-        // caravans roll straight through friendly and allied troops (and each other): only enemies
-        // can block their way
-        if ((u.trade || v.trade) && !this.hostile(u.owner, v.owner)) continue;
-        // friends keep their full spacing; enemies may close in, so front lines meet
-        const R = this.hostile(u.owner, v.owner) ? C.ENEMY_SPACING : C.UNIT_SPACING;
+        // Friendly and allied units (troops, workers, caravans) walk straight through each other,
+        // so nobody blocks anybody's way; only standing troops spread out a little (a squad at its
+        // post keeps its formation). Enemies can't pass: front lines meet.
+        const foes = this.hostile(u.owner, v.owner);
+        if (!foes && (u.trade || v.trade || u.worker || v.worker || u.moving || v.moving)) continue;
+        const R = foes ? C.ENEMY_SPACING : C.UNIT_SPACING;
         let dx = v.x - u.x;
         let dy = v.y - u.y;
         let d = Math.hypot(dx, dy);

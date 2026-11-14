@@ -16,13 +16,13 @@
 
     // ---- Workers: they build, repair, chop wood and farm. Separate from the army (no squad, no army
     // slots). You have BASE_WORKERS plus WORKSHOP_WORKERS per Workshop; fallen ones respawn with the
-    // troops. Each job has a priority (0 off, 1 low, 2 high): workers take the highest-priority job
+    // troops. Each job has a priority (0 off, 1 low, 2 medium, 3 high): workers take the highest-priority job
     // that has work, sharing out jobs of equal priority.
     BASE_WORKERS: 3,
     WORKSHOP_WORKERS: 2,
     MAX_WORKSHOPS: 3,
     WORKER_JOBS: ['build', 'repair', 'gather', 'farm', 'scout'],
-    START_JOBS: { build: 2, repair: 2, gather: 2, farm: 1, scout: 1 }, // (with nothing to build, they chop wood)
+    START_JOBS: { build: 3, repair: 3, gather: 2, farm: 1, scout: 1 }, // (with nothing to build or repair, they chop wood)
     SCOUT_WORKERS: 2, // at most this many workers out scouting
     SCOUT_SPEED: 4.2, // scouting workers run fast...
     SCOUT_SIGHT: 11, // ...and see far (they never fight: they explore, staying clear of enemy guns)

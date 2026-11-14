@@ -536,7 +536,7 @@ test('squads stay together on the march and stand guard together at home', () =>
   assert.ok(spread(true) < 2.6, `squad stands guard together (spread ${spread(true).toFixed(2)})`);
 });
 
-test('troops keep their personal space: never on top of each other or inside buildings', () => {
+test('troops never stand inside buildings; enemies don\'t overlap; friends walk through each other', () => {
   const { g, a, b } = duel(29);
   const mx = a.core.x + 0.5;
   const my = a.core.y + 0.5;
@@ -549,10 +549,25 @@ test('troops keep their personal space: never on top of each other or inside bui
   const all = [...pile, foe].filter((u) => g.units.has(u.id));
   for (const u of all) {
     assert.ok(Math.hypot(u.x - mx, u.y - my) >= C.CORE_BODY - 0.05, 'pushed out of the core');
-    for (const v of all) {
-      if (v !== u) assert.ok(Math.hypot(u.x - v.x, u.y - v.y) > 0.4, 'troops spread apart');
-    }
+    if (u !== foe) assert.ok(Math.hypot(u.x - foe.x, u.y - foe.y) > 0.3, 'enemies don\'t stand on top of each other');
   }
+  // two friendly troops walking straight at each other pass through, without pushing
+  for (const u of [...g.units.values()]) g.units.delete(u.id); // (a clear field)
+  const [p, q] = troops(g, a, 'soldier', 2, mx, my + 6);
+  p.x = mx - 3; p.y = my + 6; q.x = mx + 3; q.y = my + 6;
+  q.sq = a.squads[1].id; // (two squads: one squad would wait for itself)
+  p.attack = { k: 'p', id: g.idx(Math.floor(mx + 3), Math.floor(my + 6)) };
+  q.attack = { k: 'p', id: g.idx(Math.floor(mx - 3), Math.floor(my + 6)) };
+  g.buildUnitGrid();
+  let minGap = Infinity;
+  let sideways = 0;
+  run(g, 3, () => {
+    minGap = Math.min(minGap, Math.hypot(p.x - q.x, p.y - q.y));
+    if (Math.abs(p.x - q.x) < 1.5) sideways = Math.max(sideways, Math.abs(p.y - (my + 6)), Math.abs(q.y - (my + 6))); // (as they pass)
+    return false;
+  });
+  assert.ok(minGap < 0.4, `they passed through each other (closest ${minGap.toFixed(2)})`);
+  assert.ok(sideways < 0.5, 'without being shoved aside');
 });
 
 test('standing troops fill their hex in an even formation', () => {

@@ -191,3 +191,31 @@ test('a gate keeps being a gate when it moves out', () => {
   assert.strictEqual([...g.walls.values()].filter((w) => w.gate).length, gates);
   assert.ok(g.hex.hexes[i].n.some((n) => g.hexOwner[n] !== a.id && g.wallBetween(i, n)?.gate), 'the gate is on the new hex\'s border');
 });
+
+test('troops and workers find their way round walls to a gate, however far, and never wedge in corners', () => {
+  for (const seed of [51, 53]) {
+    const { g, a } = duel(seed);
+    // wall a's whole border, with one gate on the far (east) side
+    const edges = [];
+    for (const h of g.hex.hexes) if (g.hexOwner[h.i] === a.id) for (const j of h.n) if (g.canWallEdge(a.id, h.i, j)) edges.push([h.i, j]);
+    g.buildWalls(a.id, edges);
+    const ws = [...g.walls.values()].filter((w) => w.owner === a.id);
+    g.toggleGate(a.id, ws.reduce((x, y) => (x.x > y.x ? x : y)).id);
+    const west = ws.reduce((x, y) => (x.x < y.x ? x : y));
+    const tx = Math.floor(west.x - 4);
+    const ty = Math.floor(west.y);
+    const [t] = troops(g, a, 'soldier', 1, a.core.x + 0.5, a.core.y + 1.5);
+    g.order(a.id, null, { k: 'p', id: g.idx(tx, ty) }, [t.sq]);
+    assert.ok(run(g, 40, () => Math.hypot(t.x - tx - 0.5, t.y - ty - 0.5) < 2.5), `seed ${seed}: the troop went out the gate and round to the far side`);
+    // a worker sent to a forest just outside the west wall
+    let best = -1;
+    let bd = Infinity;
+    for (const h of g.hex.hexes) if (h.full && !g.hexOwner[h.i]) { const d = Math.hypot(h.cx - (west.x - 4), h.cy - west.y); if (d < bd) { bd = d; best = h.i; } }
+    g.forest.set(best, 200);
+    a.nextWaveAt = g.time; g.update(0.05); a.nextWaveAt = Infinity;
+    const w = g.workersOf(a)[0];
+    for (const j of C.WORKER_JOBS) a.jobs[j] = 0;
+    assert.strictEqual(g.sendWorker(a.id, w.id, { k: 'h', id: best }), null);
+    assert.ok(run(g, 60, () => w.working), `seed ${seed}: the worker got there too`);
+  }
+});

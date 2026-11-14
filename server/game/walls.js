@@ -251,19 +251,39 @@ module.exports = {
   // Only steps between two hexes can cross a wall. Hostile walls cost by their strength (troops
   // break through the weakest point); own and allied walls are solid unless they're gates.
   // breakable = false (caravans): hostile walls are solid too.
-  wallCostFn(owner, breakable = true) {
+  wallCostFn(owner, breakable = true, solid = false) {
     if (!this.walls.size) return null;
     const th = this.hex.tileHex;
-    return (u, v) => {
+    const W = this.w;
+    const step = (u, v) => {
       const ha = th[u];
       const hb = th[v];
       if (ha === hb) return 0;
       const w = this.wallAt.get(this.edgeKey(ha, hb));
       if (!w) return 0;
       if (this.wallOpenFor(w, owner)) return 0;
+      if (solid) return -1; // (workers: only their side's gates)
       if (!breakable) return this.hostile(owner, w.owner) ? -1 : 0; // caravans: friendly walls are open
       if (!this.hostile(owner, w.owner)) return -1;
       return Path.structureCost(C, w.maxHp);
+    };
+    return (u, v) => {
+      const c = step(u, v);
+      if (c < 0) return c;
+      const dx = (v % W) - (u % W);
+      const dy = Math.floor(v / W) - Math.floor(u / W);
+      if (!dx || !dy) return c;
+      // A diagonal step clips the corners of the two tiles beside it: if a wall it can't pass runs
+      // along either corner, the step is blocked (or costs that wall), so troops never get wedged
+      // in the corner of a wall.
+      const a = u + dx;
+      const b = u + dy * W;
+      const ca = step(u, a);
+      const cb = step(u, b);
+      const ca2 = step(a, v);
+      const cb2 = step(b, v);
+      if (ca < 0 || cb < 0 || ca2 < 0 || cb2 < 0) return -1;
+      return Math.max(c, ca + ca2, cb + cb2);
     };
   },
 

@@ -146,6 +146,7 @@ class Game {
     this.buildUnitGrid();
     this.updateBots();
     for (const u of this.units.values()) {
+      u.moving = u.px !== undefined && Math.hypot(u.x - u.px, u.y - u.py) > 0.01; // (moved last tick)
       u.px = u.x; // where everyone stood, so walls can stop anyone stepping through them
       u.py = u.y;
     }

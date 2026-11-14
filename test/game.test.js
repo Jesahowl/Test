@@ -107,7 +107,7 @@ test('spawn protection keeps a new core and its towers from taking damage', () =
   assert.strictEqual(b.core.hp, C.CORE_HP - 500);
 });
 
-test('the conqueror takes the gold, all the land, the surviving troops and the core site', () => {
+test('the conqueror takes the gold, all the land and the core site; the loser\'s troops vanish', () => {
   const { g, a, b } = duel(6);
   const t = outpost(g, b);
   const loyal = troops(g, b, 'soldier', 3, b.core.x + 0.5, b.core.y + 2);
@@ -124,7 +124,6 @@ test('the conqueror takes the gold, all the land, the surviving troops and the c
   assert.ok(death);
   assert.strictEqual(death.info.killer, 'A');
   assert.strictEqual(death.info.killerId, a.id);
-  assert.strictEqual(death.info.troopsTaken, 3);
   assert.strictEqual(death.info.goldTaken, 777);
   assert.ok(!g.players.has(b.id), 'the victim is out of the game');
   assert.strictEqual(a.gold, gold + C.CORE_KILL_BOUNTY + 777, 'all of their gold plus the bounty');
@@ -133,12 +132,8 @@ test('the conqueror takes the gold, all the land, the surviving troops and the c
   assert.ok(newTower, 'the core site is now a tower');
   assert.strictEqual(newTower.owner, a.id);
   assert.ok(!newTower.ruin);
-  for (const u of loyal) {
-    assert.ok(g.units.has(u.id));
-    assert.strictEqual(u.owner, a.id, 'troops defect');
-    assert.strictEqual(u.anchor, newTower.id, 'and garrison the new tower');
-    assert.strictEqual(u.attack, null);
-  }
+  assert.ok(loyal.every((u) => !g.units.has(u.id)), 'their troops vanish (they don\'t defect)');
+  assert.ok(![...g.units.values()].some((u) => u.owner === b.id), 'every unit of theirs is gone');
   assert.strictEqual(t.owner, a.id, 'their other towers become the conqueror\'s');
   assert.ok(!t.ruin);
   g.update(0.05);

@@ -252,26 +252,8 @@ module.exports = {
       this.grantBlock(killer.id, p.core.x, p.core.y); // the ground the new tower stands on
     }
 
-    // Surviving troops defect to the conqueror and garrison the new tower; otherwise they vanish.
-    let troopsTaken = 0;
-    const defectors = conquered ? this.smallestSquad(killer) : null; // the squad they join
-    for (const u of this.units.values()) {
-      if (u.owner !== p.id) continue;
-      if (!conquered || u.trade || u.worker) {
-        this.units.delete(u.id);
-        continue;
-      }
-      u.owner = killer.id;
-      u.sq = defectors.id;
-      u.stance = defectors.stance;
-      u.attack = null;
-      u.anchor = site.id;
-      u.path = [];
-      u.dest = null;
-      u.repathAt = 0;
-      u.idleUntil = 0;
-      troopsTaken++;
-    }
+    // Their troops, workers and caravans all vanish with the core (nobody takes them over).
+    for (const u of this.units.values()) if (u.owner === p.id) this.units.delete(u.id);
     for (const c of this.creeps.values()) {
       if (c.angry === p.id) c.angry = 0;
     }
@@ -285,7 +267,7 @@ module.exports = {
       p.gold = 0;
       // Waves that were pushing on this player head home instead of wandering off.
       this.tidySquadOrders(killer);
-      this.pushFeed(`${killer.name} destroyed ${p.name}'s core: +${bounty}g, all ${landTaken} tiles of their land, ${towersTaken + 1} building${towersTaken ? 's' : ''} and ${troopsTaken} troop${troopsTaken === 1 ? '' : 's'}`);
+      this.pushFeed(`${killer.name} destroyed ${p.name}'s core: +${bounty}g, all ${landTaken} tiles of their land and ${towersTaken + 1} building${towersTaken ? 's' : ''}`);
     } else if (leftGame) {
       this.pushFeed(`${p.name} left - their base lies in ruins`);
     } else {
@@ -300,7 +282,6 @@ module.exports = {
       this.onDeath(p, {
         killer: conquered ? killer.name : null,
         killerId: conquered ? killer.id : 0,
-        troopsTaken,
         goldTaken,
         landTaken,
         towersTaken,

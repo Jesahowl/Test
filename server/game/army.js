@@ -418,13 +418,6 @@ module.exports = {
     }
   },
 
-  // The squad with the fewest living troops (where extra troops are put).
-  smallestSquad(p) {
-    const n = new Map(p.squads.map((q) => [q.id, 0]));
-    for (const u of this.units.values()) if (u.owner === p.id && n.has(u.sq)) n.set(u.sq, n.get(u.sq) + 1);
-    return p.squads.reduce((a, b) => (n.get(b.id) < n.get(a.id) ? b : a));
-  },
-
   // Spawn one troop at the core, or at barracks `from`, into squad `sq` (default: squad 1).
   spawnTroop(p, kind, from = null, sq = 0, ord = null) {
     const id = this.nextId++;

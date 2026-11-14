@@ -109,7 +109,7 @@ module.exports = {
 
     // Workers: chop wood first when short of it, and put up a workshop or two for more workers.
     // (short of wood: chopping comes first; plenty of it: farming gold does)
-    const gather = p.wood < 90 ? 2 : p.wood > 300 ? 0 : 1;
+    const gather = p.wood < 90 ? 3 : p.wood > 300 ? 0 : 2;
     const farm = p.wood > 300 ? 2 : 1;
     if (p.jobs.gather !== gather) this.setJobPriority(p.id, 'gather', gather);
     if (p.jobs.farm !== farm) this.setJobPriority(p.id, 'farm', farm);

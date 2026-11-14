@@ -233,7 +233,7 @@ const JOBS = [
   ['farm', '🌾', 'Farm', `Work open hexes of your land: +${C.FARM_GOLD}g/s each`],
   ['scout', '🔭', 'Scout', `Run off exploring the fog: fast, seeing ${C.SCOUT_SIGHT} tiles, keeping clear of enemy guns (at most ${C.SCOUT_WORKERS})`],
 ];
-const LEVELS = ['Off', 'Low', 'High'];
+const LEVELS = ['Off', 'Low', 'Med', 'High'];
 let jobsBound = false;
 function updateWorkersUi() {
   const [cap, prio] = S.me.workers || [0, [0, 0, 0, 0, 0]];
