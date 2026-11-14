@@ -18,7 +18,7 @@
     INCOME_LATE_SHARE: 0.4, // this share of it (so a huge empire doesn't snowball out of reach)
 
     // The core: your base. It shoots like a tower; if it falls, you're out.
-    CORE_HP: 2500,
+    CORE_HP: 5000,
     CORE_RANGE: 5,
     CORE_DAMAGE: 60,
     CORE_RATE: 1,
