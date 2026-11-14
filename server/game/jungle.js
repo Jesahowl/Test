@@ -99,6 +99,7 @@ module.exports = {
       }
     }
     camp.alive = true;
+    camp.spawnedAt = this.time; // (pillaging squads go for camps that come back nearer home first)
   },
 
   updateCreeps(dt) {

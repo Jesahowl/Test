@@ -661,6 +661,7 @@ test('pillage: a squad hunts the camps on its own, nearest first, then the next'
   for (const l of [1, 2, 3]) a.levels.soldier = a.levels.archer = l + 1; // strong enough to clear camps
   respawn(g, a);
   const q = a.squads[0];
+  a.explored.fill(1); // (it only goes for camps it has discovered: see the next test)
   assert.strictEqual(g.squadStance(a.id, q.id, 'pillage'), null);
   run(g, 1.5);
   assert.strictEqual(q.order.type, 'attack');
@@ -695,4 +696,41 @@ test('barbarians attack anyone who comes within a tile of their camp', () => {
   g.buildUnitGrid();
   g.update(0.05);
   assert.ok(monsters.every((c) => c.angry === a.id), 'within a tile: the whole camp turns on them');
+});
+
+test('pillage: only camps that have been discovered; a camp back nearer home comes first', () => {
+  const { g, a } = duel(42);
+  setMix(g, a, 0, { soldier: 6 });
+  respawn(g, a);
+  const q = a.squads[0];
+  const near = (c) => Math.hypot(c.x - a.core.x, c.y - a.core.y);
+  const camps = g.camps.filter((c) => c.alive).sort((x, y) => near(x) - near(y));
+  // nothing discovered: the squad stays home
+  a.explored.fill(0);
+  g.squadStance(a.id, q.id, 'pillage');
+  run(g, 1.5);
+  a.explored.fill(0);
+  g.updatePillage(a);
+  assert.strictEqual(q.order.type, 'defend', 'no camp in sight: it waits at home');
+  // discover only the second-nearest: it goes there, not to the (unseen) nearest
+  const [first, second] = camps;
+  a.explored.fill(0);
+  a.explored[g.idx(second.x, second.y)] = 1;
+  a.pillageAt = 0;
+  g.updatePillage(a);
+  assert.deepStrictEqual([q.order.target.k, q.order.target.id], ['j', second.id], 'only a discovered camp');
+  // the nearest is cleared and comes back (discovered, nearer home): the squad goes there first
+  for (const m of g.creeps.values()) if (m.camp === first.id) m.dead = true;
+  g.updateCreeps(0.05);
+  g.time += 1; // (a little later)
+  first.respawnAt = g.time;
+  first.x = Math.round(a.core.x + Math.sign(second.x - a.core.x) * 3) || a.core.x + 3; // somewhere near home
+  g.updateCreeps(0.05);
+  assert.ok(first.alive);
+  a.explored[g.idx(first.x, first.y)] = 1;
+  if (near(first) < near(second)) {
+    a.pillageAt = 0;
+    g.updatePillage(a);
+    assert.strictEqual(q.order.target.id, first.id, 'a camp back nearer home comes first');
+  }
 });

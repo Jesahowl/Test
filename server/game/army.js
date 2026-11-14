@@ -300,32 +300,59 @@ module.exports = {
   // ---- reinforcements
 
   // Pillaging squads: about once a second, one that isn't already after a live camp heads for the
-  // nearest live camp (from where the squad is), or if none is up, the nearest one coming back.
+  // nearest live camp it has discovered (from where the squad is), or if none is up, the nearest
+  // discovered one coming back (it waits there). Camps hidden in fog don't count until they've been
+  // seen. And when a camp comes back nearer home than the one a squad is heading for, the squad
+  // goes there first (unless it's already fighting at its camp).
   updatePillage(p) {
     if (this.time < (p.pillageAt || 0)) return;
     p.pillageAt = this.time + 1;
+    const seen = (c) => !!p.explored[this.idx(c.x, c.y)];
+    const home = (c) => dist(p.core.x, p.core.y, c.x, c.y);
     for (const q of p.squads) {
       if (q.stance !== 'pillage') continue;
       const o = q.order;
-      if (o.type === 'attack' && o.target.k === 'j' && this.camps[o.target.id]?.alive) continue;
+      const cur = o.type === 'attack' && o.target.k === 'j' ? this.camps[o.target.id] : null;
+      if (cur && cur.alive && seen(cur)) {
+        const fighting = [...this.creeps.values()].some((m) => m.camp === cur.id && m.angry === p.id);
+        const back = !fighting && this.camps.find((c) => c !== cur && c.alive && seen(c) && (c.spawnedAt || 0) > (q.pillageSince || 0) && home(c) < home(cur));
+        if (!back) continue;
+        this.pillageTo(p, q, back);
+        continue;
+      }
       const mine = [...this.units.values()].filter((u) => u.owner === p.id && u.sq === q.id);
       const fx = mine.length ? mine.reduce((a, u) => a + u.x, 0) / mine.length : p.core.x + 0.5;
       const fy = mine.length ? mine.reduce((a, u) => a + u.y, 0) / mine.length : p.core.y + 0.5;
       let best = null;
       let bestScore = Infinity;
       for (const c of this.camps) {
+        if (!seen(c)) continue;
         const score = dist(fx, fy, c.x + 0.5, c.y + 0.5) + (c.alive ? 0 : 1e4);
         if (score < bestScore) {
           bestScore = score;
           best = c;
         }
       }
-      if (!best || (o.type === 'attack' && o.target.k === 'j' && o.target.id === best.id)) continue;
-      const ord = this.makeOrder(p.id, { k: 'j', id: best.id });
-      if (typeof ord === 'string') continue;
-      q.order = ord;
-      for (const u of mine) this.applyOrder(u, ord);
+      if (!best) {
+        // no camp discovered yet: wait at home
+        if (o.type !== 'defend') {
+          q.order = { type: 'defend', anchor: 0 };
+          for (const u of mine) this.applyOrder(u, q.order);
+        }
+        continue;
+      }
+      if (cur === best) continue;
+      this.pillageTo(p, q, best);
     }
+  },
+
+  // Send pillaging squad q at camp c.
+  pillageTo(p, q, c) {
+    const ord = this.makeOrder(p.id, { k: 'j', id: c.id });
+    if (typeof ord === 'string') return;
+    q.order = ord;
+    q.pillageSince = this.time;
+    for (const u of this.units.values()) if (u.owner === p.id && u.sq === q.id) this.applyOrder(u, ord);
   },
 
   updateWaves() {
