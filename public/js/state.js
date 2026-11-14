@@ -149,6 +149,7 @@ const BASE_SCALE = 28;
 
 S.buildKind = null; // 'tower' while placing
 S.selectedId = null; // selected tower / ruin
+S.selCaravan = null; // selected caravan (shows its trade road)
 const selUnits = new Set(); // selected troop ids
 S.centerOnMe = false;
 

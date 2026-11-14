@@ -193,6 +193,7 @@ function applyState(msg) {
   grid.clear();
   for (const t of S.towers.values()) grid.set(`${t.x},${t.y}`, t.id);
   if (S.selectedId && !S.towers.has(S.selectedId)) S.selectedId = null;
+  if (S.selCaravan && !S.units.has(S.selCaravan)) S.selCaravan = null;
 
   // Troops and monsters: positions come in tenths of a tile. Ones that didn't change still get a
   // sample at this snapshot's time, so interpolation knows they stood still.
@@ -202,7 +203,7 @@ function applyState(msg) {
     const kind = ALL_UNIT_KEYS[a[1]];
     const x = a[2] / 10;
     const y = a[3] / 10;
-    return { id: a[0], kind, x, y, owner: a[4], level: a[5], hp: a[6], maxHp: C.towerStats(kind, a[5]).hp, anchor: a[7], attack: a[8] || '', sq: a[9] || 0,
+    return { id: a[0], kind, x, y, owner: a[4], level: a[5], hp: a[6], maxHp: C.towerStats(kind, a[5]).hp, anchor: a[7], attack: a[8] || '', sq: a[9] || 0, from: a[10] || 0,
       rx: old ? old.rx : x, ry: old ? old.ry : y, samples: addSample(old, x, y) };
   });
   for (const u of S.units.values()) if (!moved.has(u.id)) addSample(u, u.x, u.y);

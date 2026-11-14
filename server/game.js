@@ -175,7 +175,7 @@ class Game {
       const a = u.attack;
       // positions in tenths of a tile; max HP follows from kind + level on the client
       units.push([u.id, ALL_UNIT_KEYS.indexOf(u.kind), Math.round(u.x * 10), Math.round(u.y * 10), u.owner, u.level, Math.ceil(u.hp), u.anchor,
-        a ? `${a.k}:${a.id}` : 0, u.sq || 0]);
+        a ? `${a.k}:${a.id}` : 0, u.sq || 0, u.trade ? u.trade.from : 0]);
     }
     const creeps = [];
     for (const c of this.creeps.values()) {

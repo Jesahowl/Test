@@ -1,6 +1,6 @@
 // Input: mouse, keyboard, minimap and help window.
 
-import { closeConfirm, confirmOpen } from './diplomacy.js';
+import { closeConfirm, confirmOpen, isAlly } from './diplomacy.js';
 import { expandAll, landDown, landMove, landUp } from './land.js';
 import { newSquadFromPicked, orderAt, pickSquadOf, selectAllSquads, squadKey, toggleBuild, toggleNewWaves } from './bar.js';
 import { sendMsg } from './net.js';
@@ -70,6 +70,7 @@ canvas.addEventListener('mousedown', (e) => {
   }
   if (hit) {
     S.selectedId = null;
+    S.selCaravan = null;
     if (e.ctrlKey || e.metaKey || e.altKey) {
       // pick single troops (to split them off or move them to another squad)
       if (selUnits.has(hit.id)) selUnits.delete(hit.id);
@@ -77,6 +78,23 @@ canvas.addEventListener('mousedown', (e) => {
     } else {
       pickSquadOf(hit, e.shiftKey);
     }
+    return;
+  }
+  // A caravan (mine or an ally's): select it to see its trade road.
+  let cart = null;
+  let cartD = 1.0;
+  for (const u of S.units.values()) {
+    if (u.kind !== 'caravan' || (u.owner !== S.myId && !isAlly(u.owner))) continue;
+    const d = Math.hypot(u.rx - mouse.wx, u.ry - mouse.wy);
+    if (d < cartD) {
+      cartD = d;
+      cart = u;
+    }
+  }
+  S.selCaravan = cart ? cart.id : null;
+  if (cart) {
+    selUnits.clear();
+    S.selectedId = null;
     return;
   }
   const ht = towerInHex(mouse.wx, mouse.wy);

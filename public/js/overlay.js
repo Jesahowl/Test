@@ -46,6 +46,7 @@ function drawRange(wx, wy, range, color) {
 
 function clearSelection() {
   S.selectedId = null;
+  S.selCaravan = null;
   selUnits.clear();
 }
 

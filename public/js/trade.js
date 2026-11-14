@@ -263,6 +263,17 @@ function drawCaravan(u, x, y, s, now) {
   const moving = u.moving ? 1 : 0;
   ctx.save();
   ctx.translate(x, y);
+  if (S.selCaravan === u.id) {
+    // selected: a turning dashed ring
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]);
+    ctx.lineDashOffset = -now / 60;
+    ctx.beginPath();
+    ctx.ellipse(0, sz * 0.1, sz * 1.15, sz * 0.75, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
   ctx.save();
   ctx.scale(u.face || 1, 1);
   ctx.fillStyle = 'rgba(0,0,0,0.32)';
@@ -307,14 +318,19 @@ function drawCaravan(u, x, y, s, now) {
   ctx.restore();
 }
 
-// ---- trade roads: the road each of my (and my allies') trade posts sends its caravans along.
+// ---- trade roads: shown for the selected trade post or caravan (mine or an ally's).
 function drawTradeRoads() {
   if (!S.myId) return;
   const s = scale();
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+  // only the road of the selected trade post, or of the selected caravan's post
+  const cart = S.selCaravan ? S.units.get(S.selCaravan) : null;
+  const showId = cart ? cart.from : S.selectedId;
+  if (!showId) return;
   for (const t of S.towersView.values()) {
+    if (t.id !== showId) continue;
     if (t.kind !== 'trade' || !t.partner || !t.owner || !t.road || !t.road.length) continue;
     if (t.owner !== S.myId && !isAlly(t.owner)) continue;
     const o = S.towersView.get(t.partner);
