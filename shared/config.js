@@ -72,6 +72,9 @@
     HOLD_LEASH: 6, // troops holding a spot fight enemies within this distance of it
     HUNT_ROLL_RANGE: 6, // when a hunted troop dies, hunters go after its squadmates within this range
     TROOP_AGGRO: 2,
+    // Troops sent somewhere don't stop to fight on the way (they shoot what they pass); they fight
+    // normally once within this many tiles of their target.
+    MARCH_ENGAGE: 7,
     // Home defence: troops at home go after enemy troops (and angry barbarians) within HOME_ALERT tiles
     // of them that are on their land or within HOME_EDGE tiles of its border, fighting from their own
     // side of the border.

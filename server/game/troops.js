@@ -595,6 +595,21 @@ module.exports = {
         continue;
       }
 
+      // Marching to a far-off target: don't get pulled into fights on the way. Troops keep walking
+      // and only shoot at enemy troops (or angry barbarians) in reach as they pass; once they're
+      // within MARCH_ENGAGE of the target they fight everything there as usual.
+      if (tgt && !def.heal && dist(u.x, u.y, tgt.x, tgt.y) > C.MARCH_ENGAGE) {
+        if (u.cd <= 0) {
+          const near = this.pickTarget(u, def, s.range, false);
+          if (near) this.unitFire(u, near, s, def);
+        }
+        const gx = tgt.hold && u.slotPos ? u.slotPos.x : tgt.x;
+        const gy = tgt.hold && u.slotPos ? u.slotPos.y : tgt.y;
+        const pace = this.squadPace(u, gx, gy, speed);
+        if (pace > 0) this.marchTo(u, tgt.goal, gx, gy, 1, pace, dt);
+        continue;
+      }
+
       if (def.heal) {
         if (this.medicTick(u, def, s, tgt, speed, dt)) continue;
       } else {

@@ -578,3 +578,20 @@ test('home troops react to enemies within 1 tile of their border, not further ou
   const [fx, fy] = edge(3);
   assert.ok(!g.nearHome(a.id, fx, fy), 'two and a half tiles out does not');
 });
+
+test('troops sent somewhere march past enemies on the way instead of stopping to fight them', () => {
+  const { g, a, b } = duel(36);
+  const squad = troops(g, a, 'soldier', 4, a.core.x + 0.5, a.core.y + 2.5);
+  assert.strictEqual(g.order(a.id, squad.map((u) => u.id), { k: 'c', id: b.id }), null);
+  // a group of b's soldiers holding a spot halfway along
+  const mx = (a.core.x + b.core.x) / 2;
+  const my = (a.core.y + b.core.y) / 2;
+  const guards = troops(g, b, 'soldier', 6, mx, my);
+  const spot = g.idx(Math.floor(mx), Math.floor(my));
+  g.order(b.id, guards.map((u) => u.id), { k: 'p', id: spot });
+  const far = Math.hypot(a.core.x - b.core.x, a.core.y - b.core.y);
+  const arrived = run(g, (far / C.UNITS.soldier.speed) * 1.8 + 5,
+    () => squad.some((u) => g.units.has(u.id) && Math.hypot(u.x - b.core.x - 0.5, u.y - b.core.y - 0.5) <= 7));
+  assert.ok(arrived, 'the squad got to the target without getting bogged down');
+  assert.ok(squad.filter((u) => g.units.has(u.id)).length >= 3, 'and most of it is still standing');
+});
