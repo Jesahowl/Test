@@ -72,7 +72,7 @@ function breakWith(id) {
     'Break alliance', () => sendMsg({ t: 'ally', op: 'break', id }));
 }
 
-// The diplomacy button on a leaderboard row for player q.
+// The alliance button on a Diplomacy drawer row for player q.
 function allyButton(q) {
   if (!S.me || S.spectating || q.id === S.myId) return '';
   const inOffer = (S.me.offersIn || []).includes(q.id);
@@ -84,7 +84,7 @@ function allyButton(q) {
   return `<button class="dip" data-act="propose" data-id="${q.id}"${full ? ' disabled' : ''} data-tip="${full ? `At most ${C.MAX_ALLIES} allies` : `Offer ${escapeHtml(q.name)} an alliance: you stop fighting each other and can see each other's bases`}">+🤝</button>`;
 }
 
-// Incoming offers, shown under the player list.
+// Incoming offers, shown at the top of the Diplomacy drawer.
 function offersHtml() {
   if (!S.me || S.spectating) return '';
   const list = (S.me.offersIn || []).map((id) => players.get(id)).filter(Boolean);
@@ -93,9 +93,9 @@ function offersHtml() {
     <span><button class="dip offer" data-act="accept" data-id="${q.id}">Accept</button><button class="dip" data-act="decline" data-id="${q.id}">No</button></span></div>`).join('')}</div>`;
 }
 
-// One listener for the whole player list (its HTML is rebuilt every update, so act on press).
+// One listener for the whole Diplomacy drawer (its HTML is rebuilt every update, so act on press).
 function initDiplomacy() {
-  $('leaderboard').addEventListener('pointerdown', (e) => {
+  $('diplo').addEventListener('pointerdown', (e) => {
     const b = e.target.closest('button.dip');
     if (!b || b.disabled || !b.dataset.act) return;
     e.preventDefault();
@@ -114,7 +114,7 @@ function newOffers(toast) {
     if (seenOffers.has(id)) continue;
     seenOffers.add(id);
     const q = players.get(id);
-    if (q) toast(`🤝 ${q.name} offers an alliance: accept in the player list`, true);
+    if (q) toast(`🤝 ${q.name} offers an alliance: open Diplomacy (P) to answer`, true);
   }
   for (const id of [...seenOffers]) if (!(S.me.offersIn || []).includes(id)) seenOffers.delete(id);
 }

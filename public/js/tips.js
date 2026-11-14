@@ -6,9 +6,9 @@ import { S, $, C, UNIT_KEYS } from './state.js';
 const TIPS = [
   { id: 'attack', text: 'Your core sends troops every 20 seconds. <b>Right-click</b> an enemy tower, core or camp to send them. Press <kbd>H</kbd> to bring everyone home.' },
   { id: 'land', text: '<b>Double-click</b> outside your land to grow it all round, or press <kbd>L</kbd> and <b>drag along your border</b> to claim just the hexes you want. Land means more gold and a bigger army. Each tile costs a little more the more you own.' },
-  { id: 'tower', text: 'Press <kbd>B</kbd> and click your land to build a <b>tower</b>. Towers zap enemies and hold your land: lose one and the land around it opens up.' },
+  { id: 'tower', text: 'Open <b>Build</b> (<kbd>Z</kbd>) or press <kbd>B</kbd>, and click your land to build a <b>tower</b>. Towers zap enemies and hold your land: lose one and the land around it opens up.' },
   { id: 'barracks', text: 'Press <kbd>R</kbd> and click your land for a <b>barracks</b>: <b>+4 troops</b> in every wave, marching out from it.' },
-  { id: 'mix', text: 'Choose your wave with the <b>+</b> buttons. <b>Scouts</b> explore the fog, <b>archers</b> shoot from range, <b>medics</b> heal.' },
+  { id: 'mix', text: 'Open <b>Army</b> (<kbd>X</kbd>) and choose your wave with the <b>+</b> buttons. <b>Scouts</b> explore the fog, <b>archers</b> shoot from range, <b>medics</b> heal.' },
   { id: 'send', text: 'Every wave marches out as a <b>squad</b> (its number floats above it). <b>Click one of its troops</b> or press its number, then right-click to send <b>just that squad</b>. Keep some home to defend.' },
   { id: 'jungle', text: 'Right-click <b>barbarian camps</b> for gold. Beat a <b>Warlord\'s Fort</b> (🔥) to power up your troops for 60s.' },
 ];

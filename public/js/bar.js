@@ -1,4 +1,4 @@
-// Command bar: build tiles, wave/troop cards and the squads.
+// The drawers' contents: build tiles, wave/troop cards and the squads.
 
 import { checkAllyOrder } from './diplomacy.js';
 import { buildStats } from './hud.js';

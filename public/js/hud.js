@@ -10,6 +10,8 @@ import { S, $, C, colorOf, feed, players, selUnits, terr, UNIT_KEYS } from './st
 import { targetName } from './targets.js';
 import { updateTips } from './tips.js';
 import { iconURL, refreshTip } from './ui.js';
+import { updateDock } from './dock.js';
+import { mySquads } from './squads.js';
 
 S.hudTimer = 0;
 
@@ -45,8 +47,8 @@ function updateHud() {
   // wave: size, countdown ring, and the next wave's lineup
   $('wave-size').textContent = `${perWave} troops every ${C.WAVE_INTERVAL}s`;
   const frac = Math.max(0, Math.min(1, S.me.nextWave / C.WAVE_INTERVAL));
-  $('wave-timer').innerHTML = `<svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="11" fill="none" stroke="#273041" stroke-width="3"/>
-    <circle cx="13" cy="13" r="11" fill="none" stroke="#ffd54f" stroke-width="3" stroke-linecap="round" stroke-dasharray="${(69.1 * (1 - frac)).toFixed(1)} 69.1"/></svg><span>${S.me.nextWave}</span>`;
+  $('wave-timer').innerHTML = `<svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="11" fill="none" stroke="#273041" stroke-width="2.4"/>
+    <circle cx="13" cy="13" r="11" fill="none" stroke="#ffd54f" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="${(69.1 * (1 - frac)).toFixed(1)} 69.1"/></svg><span>${S.me.nextWave}s</span>`;
   $('wave-timer').dataset.tip = `<span class="t">Next wave in ${S.me.nextWave}s</span>Every ${C.WAVE_INTERVAL} seconds your core (and each barracks) sends out a free wave.`;
   // The next wave at a glance: a chip per troop type with how many are coming (auto-filled
   // soldiers counted separately). A chip glows briefly when its number changes.
@@ -81,6 +83,7 @@ function updateHud() {
   }
 
   updateBoards();
+  updateDock(mySquads().length, (S.me.offersIn || []).length);
   updateTowerAndArmy(gold, perWave);
   updateSelectionPanel(gold);
   updateTips();
@@ -90,16 +93,14 @@ function updateHud() {
 // The player card (built once; numbers updated in place so tooltips keep working).
 function buildStats() {
   $('stats').innerHTML = `
-    <div class="who"><span class="dot"></span><span class="name"></span><span class="rank" data-tip="Your place on the land leaderboard"></span></div>
-    <div class="gold-row" data-tip="<span class='t'>Gold</span>Earned from land (a trickle) and mostly from fighting: troop kills, jungle camps, towers and cores. Spend it on towers, barracks and troop levels.">
-      <span class="coin"></span><span class="gold"></span><span class="income"></span></div>
-    <div class="chips">
-      <span class="chip land" data-tip="Tiles you own. More land = more income and room for more troops.">🗺 <b></b> land</span>
-      <span class="chip kills" data-tip="Enemy troops and monsters your side has killed">⚔ <b></b> kills</span>
-      <span class="chip shield hidden" data-tip="Spawn protection: your core and buildings can't be damaged yet">🛡 <b></b></span>
-      <span class="chip buff hidden" data-tip="Buff from defeating a barbarian Warlord: your troops deal +${Math.round(C.JUNGLE_BUFF_DAMAGE * 100)}% damage and take ${Math.round(C.JUNGLE_BUFF_ARMOR * 100)}% less">🔥 <b></b></span>
-    </div>
-    <div class="meter" data-tip="Your core. If it falls, you're out of the round and whoever broke it takes your gold and troops."><i></i><span></span></div>`;
+    <span class="who"><span class="dot"></span><span class="name"></span><span class="rank" data-tip="Your place on the land leaderboard"></span></span>
+    <span class="gold-row" data-tip="<span class='t'>Gold</span>Earned from land (a trickle) and mostly from fighting: troop kills, jungle camps, towers and cores. Spend it on towers, barracks and troop levels.">
+      <span class="coin"></span><span class="gold"></span><span class="income"></span></span>
+    <span class="chip land" data-tip="Tiles you own. More land = more income and room for more troops.">🗺 <b></b> land</span>
+    <span class="chip kills" data-tip="Enemy troops and monsters your side has killed">⚔ <b></b> kills</span>
+    <span class="meter" data-tip="Your core. If it falls, you're out of the round and whoever broke it takes your gold and troops."><i></i><span></span></span>
+    <span class="chip shield hidden" data-tip="Spawn protection: your core and buildings can't be damaged yet">🛡 <b></b></span>
+    <span class="chip buff hidden" data-tip="Buff from defeating a barbarian Warlord: your troops deal +${Math.round(C.JUNGLE_BUFF_DAMAGE * 100)}% damage and take ${Math.round(C.JUNGLE_BUFF_ARMOR * 100)}% less">🔥 <b></b></span>`;
 }
 
 function updateStats(p, gold, rank, n) {
@@ -113,15 +114,16 @@ function updateStats(p, gold, rank, n) {
   el.querySelector('.chip.kills b').textContent = p.kills;
   const sh = el.querySelector('.chip.shield');
   sh.classList.toggle('hidden', !p.shield);
-  sh.querySelector('b').textContent = `Protected ${p.shield}s`;
+  sh.querySelector('b').textContent = `${p.shield}s`;
   const bf = el.querySelector('.chip.buff');
   bf.classList.toggle('hidden', !p.buff);
-  bf.querySelector('b').textContent = `Empowered ${p.buff}s`;
+  bf.querySelector('b').textContent = `${p.buff}s`;
   const frac = p.hp / p.maxHp;
   const bar = el.querySelector('.meter i');
   bar.style.width = `${100 * frac}%`;
   bar.className = frac > 0.5 ? '' : frac > 0.25 ? 'mid' : 'low';
-  el.querySelector('.meter span').textContent = `Core ${p.hp.toLocaleString()} / ${p.maxHp.toLocaleString()}`;
+  el.querySelector('.meter span').textContent = `Core ${Math.round(100 * frac)}%`;
+  el.querySelector('.meter').dataset.tip = `<span class='t'>Core ${p.hp.toLocaleString()} / ${p.maxHp.toLocaleString()}</span>If it falls, you're out of the round and whoever broke it takes your gold and troops.`;
 }
 
 // Who q is allied with, as coloured dots (everyone can see alliances).
@@ -130,19 +132,47 @@ function allyMarks(q) {
   return ` <span class="allied" data-tip="Allied with ${escapeHtml(q.allies.map((id) => players.get(id)?.name || '?').join(', '))}">🤝${q.allies.map((id) => `<i style="background:${colorOf(id, 55)}"></i>`).join('')}</span>`;
 }
 
-// Leaderboard and kill feed (shown to players and spectators).
+// Player list (in the top bar), the Diplomacy drawer and the kill feed (shown to players and spectators).
+const TOP_PLAYERS = 8;
 function updateBoards() {
   const sorted = [...players.values()].sort((a, b) => b.territory - a.territory);
   const focus = S.spectating ? S.specTarget : S.myId;
-  const top = Math.max(1, ...sorted.map((q) => q.territory));
-  $('leaderboard').innerHTML = `<h3><span>Players</span><span>land</span></h3>` + sorted.slice(0, 10).map((q, i) =>
-    `<div class="row${q.id === focus ? ' me' : ''}"><span class="bg" style="width:${(100 * q.territory) / top}%;background:${colorOf(q.id, 55)}"></span>`
-    + `<span class="pos">${i + 1}</span><span class="dot" style="background:${colorOf(q.id, 55)}"></span>`
-    + `<span class="n">${escapeHtml(q.name)}${q.isBot ? ' <span class="muted">· bot</span>' : ''}${q.buff ? ' 🔥' : ''}${q.shield ? ' 🛡' : ''}${allyMarks(q)}</span>${allyButton(q)}<span class="v">${q.territory}</span></div>`).join('')
-    + offersHtml();
+  const shown = sorted.slice(0, TOP_PLAYERS);
+  if (focus && !shown.some((q) => q.id === focus)) {
+    const f = sorted.find((q) => q.id === focus);
+    if (f) shown[shown.length - 1] = f;
+  }
+  const lb = shown.map((q) => {
+    const pos = sorted.indexOf(q) + 1;
+    const tip = `<span class='t'>#${pos} ${escapeHtml(q.name)}${q.isBot ? ' (bot)' : ''}</span>${q.territory} land${q.allies && q.allies.length ? ` · allied with ${escapeHtml(q.allies.map((id) => players.get(id)?.name || '?').join(', '))}` : ''}${q.buff ? ' · 🔥 empowered' : ''}${q.shield ? ' · 🛡 protected' : ''}`;
+    return `<span class="pl${q.id === focus ? ' me' : ''}${isAlly(q.id) ? ' ally' : ''}" data-tip="${tip}"><span class="dot" style="background:${colorOf(q.id, 55)}"></span>`
+      + `<span class="n">${q.id === S.myId ? 'You' : escapeHtml(q.name)}</span>${isAlly(q.id) ? '<span class="hs">🤝</span>' : ''}${q.buff ? '🔥' : ''}<span class="v">${q.territory}</span></span>`;
+  }).join('') + (sorted.length > shown.length ? `<span class="pl more">+${sorted.length - shown.length}</span>` : '');
+  const lbEl = $('leaderboard');
+  if (lbEl.dataset.html !== lb) {
+    lbEl.dataset.html = lb;
+    lbEl.innerHTML = lb;
+  }
+  if (S.drawer === 'diplo') updateDiplomacy(sorted);
   const now = performance.now();
   $('feed').innerHTML = feed.filter((f) => now - f.born < 9000).map((f) =>
     `<div style="opacity:${Math.min(1, (9000 - (now - f.born)) / 1500)}">${escapeHtml(f.text)}</div>`).join('');
+}
+
+// The Diplomacy drawer: every player with their alliance button, and offers waiting for an answer.
+function updateDiplomacy(sorted) {
+  const top = Math.max(1, ...sorted.map((q) => q.territory));
+  const mine = (players.get(S.myId)?.allies || []).length;
+  $('diplo-hint').textContent = `${mine} of ${C.MAX_ALLIES} allies · allies don't fight and see each other's bases`;
+  const html = offersHtml() + '<div class="rows">' + sorted.map((q, i) =>
+    `<div class="row${q.id === S.myId ? ' me' : ''}"><span class="bg" style="width:${(100 * q.territory) / top}%;background:${colorOf(q.id, 55)}"></span>`
+    + `<span class="pos">${i + 1}</span><span class="dot" style="background:${colorOf(q.id, 55)}"></span>`
+    + `<span class="n">${escapeHtml(q.name)}${q.isBot ? ' <span class="muted">· bot</span>' : ''}${q.buff ? ' 🔥' : ''}${q.shield ? ' 🛡' : ''}${allyMarks(q)}</span>${allyButton(q)}<span class="v">${q.territory}</span></div>`).join('') + '</div>';
+  const el = $('diplo');
+  if (el.dataset.html !== html) {
+    el.dataset.html = html;
+    el.innerHTML = html;
+  }
 }
 
 // Same as the server's waveList: assigned slots, then guards/archers.

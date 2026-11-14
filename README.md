@@ -66,7 +66,7 @@ closes after a minute. **Play** still drops you into the always-running public g
 |---|---|
 | **Waves** | Every 20s your core sends out a free wave of **4 troops**: to start with, one of each type (soldier, scout, medic, archer). |
 | **Barracks** | Build **barracks** (`R`, on your own land) for **+4 troops in every wave**. Each barracks' 4 march out from the barracks itself and join that wave's squad. Up to 5 barracks (24 troops per wave). They cost 250g, then 150g more for each one you own. They don't shoot or level up, and like towers they can be destroyed: whoever destroys one gets the bounty and the barracks is gone. |
-| **Alliances** | Offer an alliance with the **+🤝** button in the player list; the other player accepts (bots weigh it up). Allies don't fight each other and can see each other's bases. Attacking an ally asks first and breaks the alliance. At most 2 allies; every alliance ends when sudden death starts. |
+| **Alliances** | Offer an alliance with the **+🤝** button in the **Diplomacy** drawer (`P`); the other player accepts (bots weigh it up). Allies don't fight each other and can see each other's bases. Attacking an ally asks first and breaks the alliance. At most 2 allies; every alliance ends when sudden death starts. |
 | **Trade** | Build a **Trade Post** (`T`, 220g, up to 2) and, with an ally who has one too, a **caravan** sets off for their post every 30s along a road that steers round hostile towers. When it arrives you **both** get its cargo (more for longer routes and higher post levels). Two guards ride with it and fight back; enemies who destroy it take half the cargo. Click a trade post or caravan to see its road; right-click your caravan to send a squad as **escort**. If the alliance ends, caravans on the road vanish. |
 | **Walls** | Press `V` and **drag along your border** to wall it (15g a segment, on the edges between your hexes and land that isn't yours). Walls block **every** troop and caravan, yours too: click one and make it a **gate** (40g) to let your troops, caravans and allies through. Walls are your border lifted up into a see-through band of light in your colour, 600 HP each (no upgrades). Gates are the same band opened into a doorway. Attackers path round walls when they can and otherwise hack through the weakest point; soldiers hit walls twice as hard. A broken wall can't be rebuilt for 45s, and you can't build with enemies right at it. Buying a hex beyond your walls moves them out with you: the walls it touched (1, 2 or 3) move onto its outer edges, joining up with the rest of the wall, gates staying gates. Losing the hex behind a wall makes it crumble. Bots wall the side facing their nearest enemy, with two gates. |
 | **Army mix** | The army panel decides **which troops fill your wave slots**, for free (`1`–`4` / `+`). Unassigned slots are filled with soldiers. Gold goes into **levelling troop types** (`Shift`+number), barracks and towers. |
@@ -130,8 +130,9 @@ and get a turning gold rune ring at level 4 and a radiant aura at level 5.
 
 ### Interface
 
-- **Player card** (top left): gold and income, land, kills, spawn protection / jungle buff, and your core's health.
-- **Command bar** (bottom): *Build* (tower, barracks), *Your wave* (countdown ring, a **Next wave** lineup with a chip per troop type showing how many are coming, auto-filled soldiers marked *auto*, and one card per troop type with +/− and level-up; types in the wave get a coloured border), and *Squads* (a chip per squad with its number, order and size; All, Merge, Home, the new-squads setting, troops alive).
+- **Top bar**: you (name, rank, gold and income, land, kills, core health, spawn protection / jungle buff), the round in the middle (with what's coming next just under it), and the players by land on the right (you highlighted, allies marked 🤝; hover one for details), then `?` and the menu.
+- **Minimap** (bottom left), with the first-game tips above it. The selected building's panel sits bottom right.
+- **Dock** (bottom centre): **Build** `Z`, **Army** `X`, the next-wave countdown, **Squads** `C` and **Diplomacy** `P`. Each opens its drawer above the dock (the same button or `Esc` closes it), so the map stays clear: *Build* has the tower, barracks, trade post, wall and land tiles; *Army* the next-wave lineup and one card per troop type with +/− and level-up; *Squads* a chip per squad (number, order, size) with All, Merge, Home, the new-squads setting and troops alive; *Diplomacy* every player with offer / accept / break alliance buttons and offers waiting for you. Squads and Diplomacy show a badge with your squad count and new offers.
 - **Hover anything** for a tooltip explaining it, with costs and what an upgrade would change.
 - **First-game tips** walk you through attacking, towers, barracks, the wave mix, squads and the jungle; each ticks off when you do it. `?` shows the controls and can bring the tips back.
 
@@ -162,7 +163,7 @@ public/js/*.js          the browser client as ES modules (entry: main.js):
                           state (shared data; values several modules reassign live on S) · net
                           (WebSocket, interpolation) · fog · targets · territory · render · structures ·
                           troops · camps · cores · effects · overlay (build preview, markers, minimap) ·
-                          ui (icons, tooltips) · bar (command bar) · hud · tips · screens · input · main
+                          ui (icons, tooltips) · bar (drawer contents) · dock (dock and drawers) · hud · tips · screens · input · main
 test/                   node:test suite (game rules, waves & orders, jungle, rounds, pathfinding, server)
 ```
 

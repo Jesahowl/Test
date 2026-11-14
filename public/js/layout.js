@@ -1,7 +1,7 @@
-// Keeps the HUD panels from overlapping on any window size. The bar sits bottom centre; the
-// leaderboard top right; the minimap bottom right (lifted above the bar when they'd collide).
-// The building panel goes above the minimap when there's room, else bottom left (where the tip
-// box is, which steps aside while it's open). The event feed is cut short above whatever is below it.
+// Keeps the HUD panels from overlapping on any window size. The top bar runs across the top; the
+// dock (and its open drawer) sits bottom centre; the minimap bottom left with the tips above it;
+// the selected building's panel bottom right (lifted above the dock when they'd collide). The event
+// feed is cut short above whatever is below it.
 
 import { $ } from './state.js';
 
@@ -10,48 +10,25 @@ const GAP = 8;
 
 function layoutHud() {
   if ($('hud').classList.contains('hidden')) return;
-  const W = window.innerWidth;
   const H = window.innerHeight;
-  const bar = $('bar').getBoundingClientRect();
-  const barShown = bar.height > 0;
-  const lb = $('leaderboard').getBoundingClientRect();
+  const bottom = $('bottom').getBoundingClientRect();
+  const mm = $('minimap-wrap').getBoundingClientRect();
 
-  // minimap
-  const mm = $('minimap-wrap');
-  const mmW = mm.offsetWidth;
-  const mmH = mm.offsetHeight;
-  const mmBottom = !barShown || W - EDGE - mmW >= bar.right + GAP ? EDGE : H - bar.top + GAP;
-  mm.style.bottom = `${mmBottom}px`;
-  const mmTop = H - mmBottom - mmH;
-
-  // bottom-left slot (tips, or the building panel when it doesn't fit on the right)
+  // the tips sit just above the minimap
   const tips = $('tips');
-  const slotBottom = !barShown || EDGE + Math.max(tips.offsetWidth, 268) + GAP <= bar.left ? EDGE : H - bar.top + GAP;
+  tips.style.bottom = `${H - mm.top + GAP}px`;
 
+  // the selection panel: bottom right, unless the dock/drawer reaches under it
   const sel = $('selection');
-  let selLeft = false;
   if (!sel.classList.contains('hidden')) {
-    const sh = sel.offsetHeight;
-    if (mmTop - GAP - sh >= lb.bottom + GAP) {
-      sel.style.left = 'auto';
-      sel.style.right = `${EDGE}px`;
-      sel.style.bottom = `${H - mmTop + GAP}px`;
-    } else {
-      selLeft = true;
-      sel.style.right = 'auto';
-      sel.style.left = `${EDGE}px`;
-      sel.style.bottom = `${slotBottom}px`;
-    }
+    const left = window.innerWidth - EDGE - sel.offsetWidth;
+    sel.style.bottom = `${bottom.height && left < bottom.right + GAP ? H - bottom.top + GAP : EDGE}px`;
   }
-  tips.style.bottom = `${slotBottom}px`;
-  tips.style.visibility = selLeft ? 'hidden' : '';
 
-  // the feed stops above the bottom-left panel (or the bar)
+  // the feed stops above the tips (or the minimap)
   const feed = $('feed');
   const feedTop = feed.getBoundingClientRect().top;
-  let limit = H - slotBottom;
-  if (selLeft) limit = H - slotBottom - sel.offsetHeight - GAP;
-  else if (!tips.classList.contains('hidden')) limit = H - slotBottom - tips.offsetHeight - GAP;
+  const limit = tips.classList.contains('hidden') ? mm.top - GAP : tips.getBoundingClientRect().top - GAP;
   feed.style.maxHeight = `${Math.max(0, limit - feedTop)}px`;
 }
 

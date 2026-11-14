@@ -12,6 +12,7 @@ import { join, specNext, startSpectating } from './screens.js';
 import { S, $, C, cam, canvas, keys, towerInHex, mini, mouse, players, scale, selUnits, terr, toWorld } from './state.js';
 import { orderTargetAt } from './targets.js';
 import { hideTip } from './ui.js';
+import { setDrawer } from './dock.js';
 
 // ------------------------------------------------------------------ input
 function updateMouseWorld() {
@@ -212,12 +213,18 @@ window.addEventListener('keydown', (e) => {
   if (k === 't') toggleBuild('trade');
   if (k === 'v') toggleBuild('wall');
   if (k === 'l') toggleBuild('land');
+  // the dock's drawers
+  if (k === 'z') setDrawer('build');
+  if (k === 'x') setDrawer('army');
+  if (k === 'c') setDrawer('squads');
+  if (k === 'p') setDrawer('diplo');
   if (k === 'escape') {
-    // Esc cancels what's going on; with nothing to cancel it opens the menu
+    // Esc cancels what's going on; with nothing to cancel it closes the open drawer, then opens the menu
     const busy = S.buildKind || S.selectedId || selUnits.size || S.selCaravan || S.selWall || S.landDrag || S.wallDrag;
     S.buildKind = null;
     clearSelection();
-    if (!busy && !helpOpen) openPause();
+    if (!busy && S.drawer) setDrawer(null);
+    else if (!busy && !helpOpen) openPause();
   }
   if (k === 'q') {
     S.buildKind = null;

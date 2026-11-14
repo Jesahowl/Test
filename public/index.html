@@ -10,30 +10,28 @@
   <canvas id="game"></canvas>
 
   <div id="hud" class="hidden">
-    <!-- top left: you -->
-    <div id="stats" class="panel"></div>
+    <!-- top: one bar with you, the round and the players -->
+    <div id="topbar">
+      <div id="stats"></div>
+      <div id="round" class="hidden"></div>
+      <div id="leaderboard"></div>
+      <button id="help-toggle" class="round-btn" data-tip="Controls and how to play <kbd>?</kbd>">?</button>
+      <button id="menu-toggle" class="round-btn" data-tip="Menu <kbd>Esc</kbd>" aria-label="Menu">☰</button>
+    </div>
     <div id="feed"></div>
-
-    <!-- top centre: the round -->
-    <div id="round" class="panel hidden"></div>
     <div id="spec-bar" class="panel"></div>
 
-    <!-- top right: players -->
-    <div id="leaderboard" class="panel"></div>
-    <button id="help-toggle" class="round-btn" data-tip="Controls and how to play <kbd>?</kbd>">?</button>
-    <button id="menu-toggle" class="round-btn" data-tip="Menu <kbd>Esc</kbd>" aria-label="Menu">☰</button>
-
-    <!-- bottom left: what you clicked, and first-game tips -->
+    <!-- what you clicked (bottom right), and first-game tips (bottom left, above the map) -->
     <div id="selection" class="panel hidden"></div>
     <div id="tips" class="panel hidden"></div>
 
-    <!-- bottom centre: commands -->
+    <!-- bottom centre: the dock, and the drawer it opens -->
     <div id="bottom">
       <div id="toast"></div>
       <div id="order-info" class="pill"></div>
-      <div id="bar" class="panel">
-        <section class="sec build">
-          <h5>Build</h5>
+      <div id="drawer" class="panel hidden">
+        <section class="dr" data-dr="build">
+          <div class="dr-head"><b>Build</b><span class="muted">Pick one, then click your land · <kbd>Esc</kbd> cancels</span></div>
           <div class="tiles">
             <button id="tower-button" class="tile"></button>
             <button id="barracks-button" class="tile"></button>
@@ -42,16 +40,13 @@
             <button id="land-button" class="tile"></button>
           </div>
         </section>
-        <section class="sec wave">
-          <h5>Your wave <span id="wave-size"></span></h5>
-          <div class="wave-top">
-            <div id="wave-timer" data-tip="Every 20 seconds your core and barracks send out a free wave"></div>
-            <div id="slots"></div>
-          </div>
+        <section class="dr" data-dr="army">
+          <div class="dr-head"><b>Army</b><span id="wave-size" class="muted"></span></div>
+          <div id="slots"></div>
           <div id="army"></div>
         </section>
-        <section class="sec orders">
-          <h5>Squads <span id="squad-hint"></span></h5>
+        <section class="dr" data-dr="squads">
+          <div class="dr-head"><b>Squads</b><span id="squad-hint" class="muted"></span></div>
           <div id="squads"></div>
           <div class="squad-btns">
             <button id="squad-all" data-tip="Orders go to every squad <kbd>Q</kbd>">All <kbd>Q</kbd></button>
@@ -61,11 +56,22 @@
           <button id="new-waves" class="toggle"></button>
           <div id="alive"></div>
         </section>
+        <section class="dr" data-dr="diplo">
+          <div class="dr-head"><b>Diplomacy</b><span class="muted" id="diplo-hint"></span></div>
+          <div id="diplo"></div>
+        </section>
+      </div>
+      <div id="dock">
+        <button class="dock-btn" data-dr="build" data-tip="Build towers, barracks, trade posts, walls and land <kbd>Z</kbd>">Build<kbd>Z</kbd></button>
+        <button class="dock-btn" data-dr="army" data-tip="Choose your wave and level your troops <kbd>X</kbd>">Army<kbd>X</kbd></button>
+        <div id="wave-timer" data-tip="Every 20 seconds your core and barracks send out a free wave"></div>
+        <button class="dock-btn" data-dr="squads" data-tip="Your squads and their orders <kbd>C</kbd>">Squads<kbd>C</kbd><span class="badge" id="squads-badge"></span></button>
+        <button class="dock-btn" data-dr="diplo" data-tip="Alliances: offer, accept or break <kbd>P</kbd>">Diplomacy<kbd>P</kbd><span class="badge hot" id="diplo-badge"></span></button>
       </div>
     </div>
 
-    <!-- bottom right: map -->
-    <div id="minimap-wrap"><canvas id="minimap" width="170" height="170"></canvas></div>
+    <!-- bottom left: map -->
+    <div id="minimap-wrap"><canvas id="minimap" width="190" height="190"></canvas></div>
   </div>
 
   <!-- controls window (? key) -->
@@ -109,6 +115,7 @@
         <div><kbd>Wheel</kbd><span>Zoom</span></div>
         <div><kbd>Space</kbd><span>Jump to your base</span></div>
         <div><kbd>Esc</kbd><span>Cancel / deselect</span></div>
+        <div><kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd> <kbd>P</kbd><span>Open Build / Army / Squads / Diplomacy</span></div>
         <div><kbd>?</kbd><span>This window</span></div>
       </div>
       <button id="tips-reset" class="link">Show the first-game tips again</button>

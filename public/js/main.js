@@ -6,6 +6,7 @@ import { buildBar } from './bar.js';
 import { drawCamps, drawCreeps } from './camps.js';
 import { drawCores } from './cores.js';
 import { initDiplomacy } from './diplomacy.js';
+import { initDock } from './dock.js';
 import { drawEffects } from './effects.js';
 import { drawFog } from './fog.js';
 import { updateHud } from './hud.js';
@@ -81,6 +82,7 @@ resize();
 
 buildBar();
 initDiplomacy();
+initDock();
 
 connect();
 
