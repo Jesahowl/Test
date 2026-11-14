@@ -142,6 +142,15 @@ module.exports = {
     // Orders.
     if (this.time < p.bot.nextOrder) return;
     p.bot.nextOrder = this.time + 8 + this.rand() * 6;
+    // Sudden death: everything, new waves too, goes for the nearest rival's core, even with
+    // intruders at home (cores are crumbling: waiting it out only stalls the round).
+    if (this.suddenDeath()) {
+      const rival = this.nearestEnemy(p.core.x, p.core.y, p.id, true);
+      if (rival) {
+        this.order(p.id, null, { k: 'c', id: rival.id });
+        return;
+      }
+    }
     const intruders = [...this.units.values()].filter((u) => this.hostile(p.id, u.owner)
       && this.terr[this.idx(Math.floor(u.x), Math.floor(u.y))] === p.id);
     if (intruders.length >= 3) {

@@ -6,7 +6,7 @@ import { newOffers } from './diplomacy.js';
 import { formError, onLeft, onRoom } from './lobby.js';
 import { clearSelection } from './overlay.js';
 import { showDeath, showMenu, showRoundOver, startSpectating, stopSpectating, toast } from './screens.js';
-import { S, $, C, ALL_UNIT_KEYS, baseLift, cam, CAMP_KEYS, hexSpot, CREEP_KEYS, feed, grid, KIND_KEYS, players, selUnits, terr, UNIT_KEYS } from './state.js';
+import { S, $, C, ALL_UNIT_KEYS, baseLift, cam, CAMP_KEYS, hexSpot, CREEP_KEYS, feed, grid, KIND_KEYS, players, selUnits, terr } from './state.js';
 import { tipDone } from './tips.js';
 
 // ------------------------------------------------------------------ network
@@ -269,6 +269,8 @@ function applyState(msg) {
       fx.lift = t ? 0.62 * (1 + 0.07 * (t.level - 1)) * (0.95 + (t.level >= 2 ? 0.08 : 0)) : p ? 0.55 : 0;
     }
   }
+  // forget melee lunges once they're over (troops that died never ask for theirs again)
+  for (const [id, l] of S.lunges) if (now - l.at > 1000) S.lunges.delete(id);
   for (const text of msg.feed) feed.push({ text, born: now });
   while (feed.length > 6) feed.shift();
 

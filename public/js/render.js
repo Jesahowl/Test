@@ -1,7 +1,6 @@
 // Rendering basics: canvas sizing, background, labels, health bars and simple shapes.
 
-import { S, C, canvas, ctx, HEX, scale, toScreen, toWorld } from './state.js';
-import { roundRect } from './structures.js';
+import { S, C, canvas, ctx, HEX, scale, toScreen } from './state.js';
 import { drawTerritoryShapes } from './territory.js';
 
 // ------------------------------------------------------------------ rendering
@@ -12,6 +11,19 @@ function resize() {
 
 const onScreen = (x, y, pad) => x > -pad && y > -pad && x < canvas.width + pad && y < canvas.height + pad;
 
+// Three edges of every hex (together they outline them all), as one path in tile units.
+let gridPath = null;
+function hexGridPath() {
+  if (gridPath) return gridPath;
+  gridPath = new Path2D();
+  for (const h of HEX.hexes) {
+    const cs = HEX.corners(h);
+    gridPath.moveTo(cs[5][0], cs[5][1]);
+    for (let k = 0; k < 3; k++) gridPath.lineTo(cs[k][0], cs[k][1]);
+  }
+  return gridPath;
+}
+
 function drawBackground() {
   ctx.fillStyle = '#0b0f14';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -20,25 +32,17 @@ function drawBackground() {
   ctx.fillStyle = '#121820';
   ctx.fillRect(ox, oy, C.MAP_W * s, C.MAP_H * s);
 
-  // the hex grid: a faint outline round every hex in view
+  // the hex grid: a faint outline round every hex, built once (in tiles) and drawn scaled
   if (s >= 6) {
-    const [x0, y0] = toWorld(0, 0);
-    const [x1, y1] = toWorld(canvas.width, canvas.height);
-    const pad = C.HEX_R + 1;
-    ctx.strokeStyle = 'rgba(255,255,255,0.055)';
-    ctx.lineWidth = 1;
     ctx.save();
     ctx.beginPath();
     ctx.rect(ox, oy, C.MAP_W * s, C.MAP_H * s);
     ctx.clip();
-    ctx.beginPath();
-    for (const h of HEX.hexes) {
-      if (h.cx < x0 - pad || h.cx > x1 + pad || h.cy < y0 - pad || h.cy > y1 + pad) continue;
-      const cs = HEX.corners(h);
-      ctx.moveTo(ox + cs[5][0] * s, oy + cs[5][1] * s);
-      for (let k = 0; k < 3; k++) ctx.lineTo(ox + cs[k][0] * s, oy + cs[k][1] * s);
-    }
-    ctx.stroke();
+    ctx.translate(ox, oy);
+    ctx.scale(s, s);
+    ctx.strokeStyle = 'rgba(255,255,255,0.055)';
+    ctx.lineWidth = 1 / s;
+    ctx.stroke(hexGridPath());
     ctx.restore();
   }
 

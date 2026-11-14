@@ -9,7 +9,7 @@ import { sendMsg } from './net.js';
 import { clearSelection } from './overlay.js';
 import { resize } from './render.js';
 import { join, specNext, startSpectating } from './screens.js';
-import { S, $, C, cam, canvas, grid, keys, towerInHex, mini, mouse, players, scale, selUnits, terr, toWorld } from './state.js';
+import { S, $, C, cam, canvas, keys, towerInHex, mini, mouse, players, scale, selUnits, terr, toWorld } from './state.js';
 import { orderTargetAt } from './targets.js';
 import { hideTip } from './ui.js';
 

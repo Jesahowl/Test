@@ -1,7 +1,7 @@
 // Towers, barracks and ruins: sprites, health bars and build effects.
 
 import { drawTradeSprite } from './trade.js';
-import { label, onScreen } from './render.js';
+import { onScreen } from './render.js';
 import { S, C, baseLift, colorOf, ctx, hexSpot, mouse, scale, toScreen, towerInHex } from './state.js';
 
 // ---- structures
