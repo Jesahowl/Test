@@ -40,7 +40,16 @@ Download the game once with **Git** instead of a ZIP; after that, every start fe
    - **`play-online.bat`**: the same, plus a Cloudflare link (`https://....trycloudflare.com`) friends can join from.
      Needs `winget install --id Cloudflare.cloudflared` once.
 
-To update by hand instead, run `git pull` in the folder. Restart the game to load a new version.
+Each start shows which version you had and which you have now ("Was" / "Now"), and stops a game
+server still running from last time so the new version loads. Then press **F5** in the browser
+(friends too). To update without starting the game, double-click **`update.bat`**.
+
+If an update is ever blocked (it says files in the folder were changed), run this in the folder to
+throw those changes away and get the latest version:
+```
+git fetch origin claude/determined-johnson-hion2w
+git reset --hard origin/claude/determined-johnson-hion2w
+```
 
 ## Private rooms
 

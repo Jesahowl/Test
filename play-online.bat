@@ -4,17 +4,15 @@ rem Double-click this file. Close the windows (or press Ctrl+C in them) to stop.
 cd /d "%~dp0"
 title Territory Siege (online)
 
-if exist .git (
-  where git >nul 2>nul && (
-    echo Getting the latest version...
-    git pull --ff-only
-    echo.
-  )
-) else (
-  echo This folder wasn't downloaded with Git, so it can't update itself.
-  echo See "Updating automatically" in README.md to set that up.
-  echo.
+rem Update first, then start this file again fresh (the update may have changed it).
+if not "%TS_UPDATED%"=="1" (
+  call update.bat
+  set TS_UPDATED=1
+  call "%~f0"
+  exit /b
 )
+rem Stop a game server left running from last time (it would keep the old version on port 3000).
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:":3000 .*LISTENING"') do taskkill /f /pid %%p >nul 2>nul
 
 echo Installing...
 call npm install --no-audit --no-fund
