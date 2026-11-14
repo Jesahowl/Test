@@ -312,12 +312,12 @@ module.exports = {
   // Step toward (x, y), stopping `stop` short of it: straight, unless a wall u can't pass is in the
   // way, in which case it follows a short detour (round the wall, or through a gate).
   stepToward(u, x, y, stop, speed, dt) {
-    if (this.walls.size && dist(u.x, u.y, x, y) > stop && this.lineBlocked(u.owner, u.x, u.y, x, y) && this.detourStep(u, x, y, speed, dt)) return;
+    if (this.walls.size && dist(u.x, u.y, x, y) > stop && this.lineBlocked(u.owner, u.x, u.y, x, y, u) && this.detourStep(u, x, y, speed, dt)) return;
     this.stepRaw(u, x, y, stop, speed, dt);
   },
 
   // Is there a wall `owner` can't pass on the straight line between two points?
-  lineBlocked(owner, x1, y1, x2, y2) {
+  lineBlocked(owner, x1, y1, x2, y2, unit = null) {
     const th = this.hex.tileHex;
     const d = dist(x1, y1, x2, y2);
     const n = Math.min(120, Math.ceil(d / 0.4));
@@ -330,7 +330,7 @@ module.exports = {
       const h = th[this.idx(tx, ty)];
       if (h !== prev) {
         const w = this.wallBetween(prev, h);
-        if (w && !this.wallOpenFor(w, owner)) return true;
+        if (w && !(unit ? this.wallPassable(w, unit) : this.wallOpenFor(w, owner))) return true;
         prev = h;
       }
     }
@@ -372,7 +372,7 @@ module.exports = {
     const blocked = (a, b) => {
       if (th[a] === th[b]) return false;
       const wl = this.wallBetween(th[a], th[b]);
-      return !!wl && !this.wallOpenFor(wl, u.owner);
+      return !!wl && !this.wallPassable(wl, u);
     };
     const gen = ++this.bfsGen;
     const stamp = this.bfsStamp;

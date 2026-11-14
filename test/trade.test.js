@@ -163,3 +163,38 @@ test('caravans roll straight through a crowd of friendly troops at the trade pos
   assert.ok(!g.units.has(u.id), 'delivered');
   assert.ok(g.time - near < 6, `the last 5 tiles took ${(g.time - near).toFixed(1)}s`);
 });
+
+test('caravans pass their own side\'s and allies\' walls, gate or not', () => {
+  const { g, a, b } = duel(80);
+  ally(g, a, b);
+  post(g, a);
+  post(g, b);
+  const border = (p) => {
+    const out = [];
+    for (const h of g.hex.hexes) {
+      if (g.hexOwner[h.i] !== p.id) continue;
+      for (const j of h.n) if (g.hexOwner[j] !== p.id) out.push([h.i, j]);
+    }
+    return out;
+  };
+  // both bases walled in all round, with no gates at all
+  assert.strictEqual(g.buildWalls(a.id, border(a)), null);
+  assert.strictEqual(g.buildWalls(b.id, border(b)), null);
+  const walls = g.walls.size;
+  const ea = a.earned.trade;
+  const eb = b.earned.trade;
+  assert.ok(run(g, 150, () => a.earned.trade - ea >= 2 * g.cargoOf([...g.towers.values()].find((t) => t.kind === 'trade' && t.owner === a.id), [...g.towers.values()].find((t) => t.kind === 'trade' && t.owner === b.id)) && b.earned.trade > eb),
+    'caravans both ways got through the walls');
+  assert.strictEqual(g.walls.size, walls, 'without breaking any');
+});
+
+test('enemy walls still stop caravans', () => {
+  const { g, a, b } = duel(81);
+  ally(g, a, b);
+  const pa = post(g, a);
+  const pb = post(g, b);
+  const u = g.sendCaravan(pa, pb);
+  assert.strictEqual(g.wallPassable({ owner: b.id, gate: false }, u), true, 'an ally\'s wall is open to it');
+  assert.strictEqual(g.wallPassable({ owner: a.id, gate: false }, u), true, 'and its own side\'s');
+  assert.strictEqual(g.wallPassable({ owner: 999, gate: false }, u), false, 'an enemy\'s is not');
+});

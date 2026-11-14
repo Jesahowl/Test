@@ -159,6 +159,7 @@
     CARAVAN_PER_TILE: 0.3,
     CARAVAN_LEVEL_CARGO: 0.3,
     RAID_SHARE: 0.5,
+    CARAVAN_STUCK: 4, // a caravan that gets no closer for this many seconds plans its road again
     CARAVAN_DANGER: 6, // extra path cost (in steps) for each tile in reach of a hostile tower or core
 
     // ---- Walls: built on the edges between your hexes and land that isn't yours. They block everyone's

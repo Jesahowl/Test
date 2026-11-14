@@ -155,8 +155,28 @@ module.exports = {
       this.deliverCaravan(u, o);
       return;
     }
-    this.moveUnit(u, dt, def.speed);
+    // Head for the next point of the road. If a wall it can't pass is in the straight line there (it
+    // cut a corner, or skipped a point while jostled), take a short detour round it instead.
+    const next = u.path.length
+      ? { x: (u.path[0] % this.w) + 0.5, y: Math.floor(u.path[0] / this.w) + 0.5 }
+      : u.dest;
+    if (next && this.walls.size && this.lineBlocked(u.owner, u.x, u.y, next.x, next.y, u)) {
+      if (!this.detourStep(u, next.x, next.y, def.speed, dt)) this.planCaravan(u);
+    } else {
+      this.moveUnit(u, dt, def.speed);
+    }
     if (!u.path.length && !u.dest) this.planCaravan(u); // pushed off course: plan again
+    // No headway for a while (blocked by enemies, or a wall that went up on the road): plan again.
+    const d = dist(u.x, u.y, o.x + 0.5, o.y + 0.5);
+    if (u.trade.best === undefined || d < u.trade.best - 0.5) {
+      u.trade.best = d;
+      u.trade.bestAt = this.time;
+    } else if (this.time - u.trade.bestAt > C.CARAVAN_STUCK) {
+      u.trade.best = d;
+      u.trade.bestAt = this.time;
+      u.dpath = null;
+      this.planCaravan(u);
+    }
   },
 
   deliverCaravan(u, o) {

@@ -36,6 +36,12 @@ module.exports = {
     return w.gate && !this.hostile(owner, w.owner);
   },
 
+  // Can unit u pass wall w? Through its side's gates; caravans (trade carts) also through every wall
+  // of their own side and their allies'. Only enemy walls stop a caravan.
+  wallPassable(w, u) {
+    return this.wallOpenFor(w, u.owner) || (!!u.trade && !this.hostile(u.owner, w.owner));
+  },
+
   // Is the edge between hexes a and b one pid can wall: neighbours, exactly one of them pid's?
   canWallEdge(pid, a, b) {
     const ha = this.hex.hexes[a];
@@ -184,7 +190,8 @@ module.exports = {
       const w = this.wallAt.get(this.edgeKey(ha, hb));
       if (!w) return 0;
       if (this.wallOpenFor(w, owner)) return 0;
-      if (!breakable || !this.hostile(owner, w.owner)) return -1;
+      if (!breakable) return this.hostile(owner, w.owner) ? -1 : 0; // caravans: friendly walls are open
+      if (!this.hostile(owner, w.owner)) return -1;
       return Path.structureCost(C, w.maxHp);
     };
   },
@@ -200,7 +207,7 @@ module.exports = {
       const kb = this.idx(Math.max(0, Math.min(this.w - 1, Math.floor(u.x))), Math.max(0, Math.min(this.h - 1, Math.floor(u.y))));
       if (th[ka] === th[kb]) continue;
       const w = this.wallAt.get(this.edgeKey(th[ka], th[kb]));
-      if (!w || this.wallOpenFor(w, u.owner)) continue;
+      if (!w || this.wallPassable(w, u)) continue;
       u.x = u.px;
       u.y = u.py;
       if (this.hostile(u.owner, w.owner)) {
