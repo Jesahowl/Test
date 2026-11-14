@@ -14,7 +14,7 @@ function iconURL(kind, size = 44) {
   c.width = c.height = size;
   withContext(c.getContext('2d'), () => {
     const unit = C.UNITS[kind];
-    const color = unit ? unit.color : (C.TOWERS[kind] || { color: '#7ee787' }).color;
+    const color = unit ? unit.color : kind === 'wall' ? '#9aa4ae' : (C.TOWERS[kind] || { color: '#7ee787' }).color;
     if (unit) {
       ctx.fillStyle = '#0e1219';
       tokenPath(ctx, kind, size / 2, size / 2, size * (kind === 'archer' ? 0.32 : kind === 'scout' ? 0.38 : 0.44));

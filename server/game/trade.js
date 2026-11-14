@@ -119,10 +119,11 @@ module.exports = {
     }
     for (const p of this.players.values()) if (p.alive && this.hostile(u.owner, p.id)) mark(p.core.x + 0.5, p.core.y + 0.5, C.CORE_RANGE + 1);
     const goal = this.idx(o.x, o.y);
-    const field = Path.computeField(this.w, this.h, extra, goal);
+    const edge = this.wallCostFn(u.owner, false); // caravans go through their side's gates only
+    const field = Path.computeField(this.w, this.h, extra, goal, edge);
     const sx = Math.max(0, Math.min(this.w - 1, Math.floor(u.x)));
     const sy = Math.max(0, Math.min(this.h - 1, Math.floor(u.y)));
-    const path = Path.tracePath(field, this.w, this.h, extra, this.idx(sx, sy), goal, 4000);
+    const path = Path.tracePath(field, this.w, this.h, extra, this.idx(sx, sy), goal, 4000, edge);
     path.shift(); // the tile it's on
     if (path.length && path[path.length - 1] === goal) path.pop(); // it stops beside the post
     u.path = path;

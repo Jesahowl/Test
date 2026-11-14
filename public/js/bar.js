@@ -28,6 +28,10 @@ function buildBar() {
   xb.dataset.tip = `<span class="t">Trade Post <kbd>${xd.key}</kbd></span>Sends a <b>caravan</b> to an <b>ally's</b> trade post every ${C.CARAVAN_EVERY}s. When it arrives, you <b>both</b> get its cargo (more for longer routes and higher levels). Up to ${C.MAX_TRADE_POSTS}. <span class="m">Enemies can raid caravans for half their cargo: right-click your caravan to send a squad as escort.</span>`;
   xb.innerHTML = `<kbd>${xd.key}</kbd><span class="count"></span><img src="${iconURL('trade')}" alt="">Trade<span class="cost">${xd.cost}g</span>`;
   xb.onclick = () => toggleBuild('trade');
+  const wb = $('wall-button');
+  wb.dataset.tip = `<span class="t">Walls <kbd>V</kbd></span><b>Drag along your border</b> to wall it, ${C.WALL_COST}g a segment. Walls block <b>every</b> troop and caravan, yours too: click one and make it a <b>gate</b> (${C.WALL_GATE_COST}g) to let your side and your allies through. Upgrade to stone (${C.WALL_HP[1]} HP) and rune walls (${C.WALL_HP[2]} HP). <span class="m">Enemies hack through the weakest point; soldiers hit walls twice as hard.</span>`;
+  wb.innerHTML = `<kbd>V</kbd><img src="${iconURL('wall')}" alt="">Wall<span class="cost">${C.WALL_COST}g</span>`;
+  wb.onclick = () => toggleBuild('wall');
   const lb = $('land-button');
   lb.dataset.tip = `<span class="t">Claim land <kbd>L</kbd></span>Click an empty <b>hex</b> touching your border, or <b>drag along it</b> to claim a strip. <b>Double-click</b> outside your land to grow it one hex outward all round. A hex costs more the more land you own. <span class="m">Land = more gold and a bigger army. Enemy land can't be claimed: take their buildings or destroy their core.</span>`;
   lb.innerHTML = `<kbd>L</kbd><img src="${iconURL('land')}" alt="">Land<span class="cost"></span>`;

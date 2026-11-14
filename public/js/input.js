@@ -1,5 +1,6 @@
 // Input: mouse, keyboard, minimap and help window.
 
+import { pickWall, wallDown, wallMove, wallUp } from './walls.js';
 import { closeConfirm, confirmOpen, isAlly } from './diplomacy.js';
 import { expandAll, landDown, landMove, landUp } from './land.js';
 import { newSquadFromPicked, orderAt, pickSquadOf, selectAllSquads, squadKey, toggleBuild, toggleNewWaves } from './bar.js';
@@ -32,6 +33,7 @@ canvas.addEventListener('mousemove', (e) => {
   }
   updateMouseWorld();
   landMove();
+  wallMove();
 });
 
 canvas.addEventListener('mousedown', (e) => {
@@ -49,6 +51,10 @@ canvas.addEventListener('mousedown', (e) => {
 
   if (S.buildKind === 'land') {
     landDown();
+    return;
+  }
+  if (S.buildKind === 'wall') {
+    wallDown();
     return;
   }
   if (S.buildKind) {
@@ -95,6 +101,14 @@ canvas.addEventListener('mousedown', (e) => {
   if (cart) {
     selUnits.clear();
     S.selectedId = null;
+    S.selWall = null;
+    return;
+  }
+  // A wall (click near its edge)
+  if (pickWall(mouse.wx, mouse.wy)) {
+    selUnits.clear();
+    S.selectedId = null;
+    S.buildKind = null;
     return;
   }
   const ht = towerInHex(mouse.wx, mouse.wy);
@@ -106,6 +120,7 @@ canvas.addEventListener('mousedown', (e) => {
 
 window.addEventListener('mouseup', (e) => {
   if (e.button === 0 && S.landDrag) landUp();
+  if (e.button === 0 && S.wallDrag) wallUp();
   if ((e.button === 2 || e.button === 1) && mouse.rightDown) {
     mouse.rightDown = false;
     if (mouse.dragged || !S.myId) return;
@@ -187,6 +202,7 @@ window.addEventListener('keydown', (e) => {
   if (k === 'b') toggleBuild('tower');
   if (k === 'r') toggleBuild('barracks');
   if (k === 't') toggleBuild('trade');
+  if (k === 'v') toggleBuild('wall');
   if (k === 'l') toggleBuild('land');
   if (k === 'escape') {
     S.buildKind = null;
@@ -212,6 +228,8 @@ window.addEventListener('keydown', (e) => {
   const m = /^Digit([1-9])$/.exec(e.code);
   if (m) squadKey(Number(m[1]), e.shiftKey);
   if (k === 'u' && S.selectedId) sendMsg({ t: 'upgrade', id: S.selectedId });
+  if (k === 'u' && S.selWall) sendMsg({ t: 'wall', op: 'up', id: S.selWall });
+  if ((k === 'delete' || k === 'backspace') && S.selWall && S.walls.get(S.selWall)?.owner === S.myId) sendMsg({ t: 'wall', op: 'down', id: S.selWall });
   if ((k === 'delete' || k === 'backspace') && S.selectedId) {
     const t = S.towers.get(S.selectedId);
     if (t && t.owner === S.myId) sendMsg({ t: 'sell', id: S.selectedId });

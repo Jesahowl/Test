@@ -1,5 +1,6 @@
 // HUD panels: player card, wave info, leaderboard, feed and selection panel.
 
+import { wallPanel } from './walls.js';
 import { orderAt, squadsLabel, updateSquadsUi } from './bar.js';
 import { allyButton, isAlly, offersHtml } from './diplomacy.js';
 import { bindTradePanel, tradeInfo } from './trade.js';
@@ -187,6 +188,9 @@ function updateTowerAndArmy(gold, perWave) {
   xb.querySelector('.cost').textContent = xMax ? 'max' : `${C.TOWERS.trade.cost}g`;
   xb.querySelector('.cost').classList.toggle('max', xMax);
   xb.querySelector('.count').textContent = `${posts}/${C.MAX_TRADE_POSTS}`;
+  const wb = $('wall-button');
+  wb.classList.toggle('active', S.buildKind === 'wall');
+  wb.classList.toggle('poor', gold < C.WALL_COST);
   // Troop cards: how many per wave, how many were picked vs auto-filled, level and its price.
   const assigned = UNIT_KEYS.reduce((n, k) => n + S.me.army[k] * C.slotsOf(k), 0);
   const list = waveListOf(S.me);
@@ -248,6 +252,7 @@ function updateSelectionPanel(gold) {
     }
     return;
   }
+  if (S.selWall && wallPanel(panel, gold)) return;
   const t = S.selectedId && S.towers.get(S.selectedId);
   if (!t) {
     panel.classList.add('hidden');

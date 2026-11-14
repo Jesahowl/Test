@@ -1,5 +1,6 @@
 // Network: the WebSocket connection, incoming messages, and smooth (interpolated) movement.
 
+import { placeWall, wallsBuilt } from './walls.js';
 import { resetFog, setExplored, updateFog } from './fog.js';
 import { newOffers } from './diplomacy.js';
 import { formError, onLeft, onRoom } from './lobby.js';
@@ -91,6 +92,9 @@ function handle(msg) {
     case 'info':
       toast(msg.m, true);
       break;
+    case 'walled':
+      wallsBuilt(msg.n, msg.gold);
+      break;
     case 'ordered':
       if (S.pendingOrder) toast(S.pendingOrder(msg.n), true);
       S.pendingOrder = null;
@@ -175,6 +179,16 @@ function applyState(msg) {
   players.clear();
   for (const [id, p] of np) players.set(id, p);
 
+  S.walls = merge(S.walls, msg.walls, (a, old) => {
+    const w = { id: a[0], a: a[1], b: a[2], owner: a[3], level: a[4], hp: a[5], maxHp: a[6], gate: !!a[7] };
+    if (old && old.a === w.a && old.b === w.b) {
+      w.ends = old.ends;
+      w.x = old.x;
+      w.y = old.y;
+    } else placeWall(w);
+    return w;
+  });
+  if (S.selWall && !S.walls.has(S.selWall)) S.selWall = null;
   S.towers = merge(S.towers, msg.towers, (a, old) => {
     const t = { id: a[0], kind: KIND_KEYS[a[1]], x: a[2], y: a[3], owner: a[4], level: a[5], hp: a[6], maxHp: a[7], ruinOf: a[8] || '', partner: a[9] || 0, road: a[10] || null };
     t.ruin = !t.owner;

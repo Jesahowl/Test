@@ -30,6 +30,7 @@ class Game {
     this.winner = null;
     this.roster = new Map(); // everyone who played this round: id -> standings entry
     this.initDiplomacy();
+    this.initWalls();
 
     this.players = new Map();
     this.towers = new Map();
@@ -139,10 +140,15 @@ class Game {
     this.updateTrade();
     this.buildUnitGrid();
     this.updateBots();
+    for (const u of this.units.values()) {
+      u.px = u.x; // where everyone stood, so walls can stop anyone stepping through them
+      u.py = u.y;
+    }
     this.updateUnits(dt);
     this.updateStructures(dt);
     this.updateCreeps(dt);
     this.separateUnits();
+    this.enforceWalls();
 
     for (const t of this.towers.values()) {
       if (t.ruin && this.time - t.ruinTime > C.RUIN_LIFETIME) this.removeTower(t);
@@ -153,6 +159,7 @@ class Game {
     }
 
     if (this.terrDirty) this.recomputeTerritory();
+    this.maintainWalls();
     this.visionTick = (this.visionTick || 0) + 1;
     if (this.visionTick % 2 === 0) this.updateVision();
     this.checkRoundOver();
@@ -183,7 +190,9 @@ class Game {
     }
     const camps = this.camps.map((c) => [c.id, c.x, c.y, CAMP_KEYS.indexOf(c.type), c.alive ? 1 : 0,
       c.alive ? 0 : Math.max(0, Math.ceil(c.respawnAt - this.time))]);
-    const snap = { players, towers, units, creeps, camps, fx: this.fx, feed: this.feed };
+    const walls = [];
+    for (const w of this.walls.values()) walls.push([w.id, w.a, w.b, w.owner, w.level, Math.ceil(w.hp), w.maxHp, w.gate ? 1 : 0]);
+    const snap = { players, towers, walls, units, creeps, camps, fx: this.fx, feed: this.feed };
     if (this.rounds) {
       snap.round = {
         n: this.round, phase: this.phase, t: Math.floor(this.time),
@@ -230,6 +239,7 @@ Object.assign(Game.prototype,
   require('./game/bots'),
   require('./game/diplomacy'),
   require('./game/trade'),
+  require('./game/walls'),
 );
 
 Game.KIND_KEYS = KIND_KEYS;

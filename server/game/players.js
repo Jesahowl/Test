@@ -232,6 +232,8 @@ module.exports = {
         this.ruinTower(t, p.name);
       }
     }
+    // Their walls go with their land (to the conqueror), or crumble.
+    for (const w of this.walls.values()) if (w.owner === p.id && conquered) w.owner = killer.id;
     // Their land: all of it goes to whoever destroyed the core; otherwise (they left, or nobody
     // in particular brought it down) it opens up, empty, for anyone to buy.
     let landTaken = 0;

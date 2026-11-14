@@ -1,5 +1,6 @@
 // Entry point: the main loop and start-up.
 
+import { drawWalls } from './walls.js';
 import { layoutHud } from './layout.js';
 import { buildBar } from './bar.js';
 import { drawCamps, drawCreeps } from './camps.js';
@@ -56,6 +57,7 @@ function frame(now) {
   drawTradeRoads();
   drawCamps();
   drawTowers(dt);
+  drawWalls();
   drawCreeps(dt);
   drawUnits(dt);
   drawCores(dt);

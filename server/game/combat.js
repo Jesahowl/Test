@@ -11,6 +11,7 @@ module.exports = {
     else if (obj.isCreep) this.damageCreep(obj, amount, byPid);
     else if (obj.isTower) this.damageTower(obj, amount, byPid);
     else if (obj.isPlayer) this.damageCore(obj, amount, byPid);
+    else if (obj.isWall) this.damageWall(obj, amount, byPid);
   },
 
   damageUnit(u, amount, byPid) {

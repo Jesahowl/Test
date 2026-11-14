@@ -85,7 +85,9 @@
   }
 
   // extra: Int32Array of extra entry cost per tile (0 = open ground). Returns Int32Array of costs.
-  function computeField(w, h, extra, goal) {
+  // edgeCost (optional): (from tile, to tile) => extra cost of that step, or -1 if it's blocked
+  // (walls between hexes).
+  function computeField(w, h, extra, goal, edgeCost) {
     const dist = new Int32Array(w * h).fill(INF);
     const heap = new Heap();
     dist[goal] = 0;
@@ -104,7 +106,12 @@
         if (ux < 0 || uy < 0 || ux >= w || uy >= h) continue;
         if (!canMove(extra, w, ux, uy, DIRS[k][0], DIRS[k][1])) continue;
         const u = uy * w + ux;
-        const nd = d + DIRS[k][2] + enter;
+        let nd = d + DIRS[k][2] + enter;
+        if (edgeCost) {
+          const c = edgeCost(u, v);
+          if (c < 0) continue;
+          nd += c;
+        }
         if (nd < dist[u]) {
           dist[u] = nd;
           heap.push(nd, u);
@@ -115,7 +122,7 @@
   }
 
   // The tile a creep on tile i should move to next, or -1 if it is at the goal.
-  function nextStep(dist, w, h, extra, i, goal) {
+  function nextStep(dist, w, h, extra, i, goal, edgeCost) {
     if (i === goal) return -1;
     const x = i % w;
     const y = (i - x) / w;
@@ -127,7 +134,12 @@
       if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
       if (!canMove(extra, w, x, y, DIRS[k][0], DIRS[k][1])) continue;
       const n = ny * w + nx;
-      const c = dist[n] + DIRS[k][2] + (n === goal ? 0 : extra[n]);
+      let c = dist[n] + DIRS[k][2] + (n === goal ? 0 : extra[n]);
+      if (edgeCost) {
+        const e = edgeCost(i, n);
+        if (e < 0) continue;
+        c += e;
+      }
       if (c <= bestCost && (best === -1 || c < bestCost)) {
         bestCost = c;
         best = n;
@@ -137,11 +149,11 @@
   }
 
   // Follow the field from tile `start` to the goal; returns the list of tile indices visited.
-  function tracePath(dist, w, h, extra, start, goal, maxSteps = 2000) {
+  function tracePath(dist, w, h, extra, start, goal, maxSteps = 2000, edgeCost) {
     const path = [start];
     let i = start;
     for (let s = 0; s < maxSteps; s++) {
-      const n = nextStep(dist, w, h, extra, i, goal);
+      const n = nextStep(dist, w, h, extra, i, goal, edgeCost);
       if (n < 0) break;
       path.push(n);
       i = n;

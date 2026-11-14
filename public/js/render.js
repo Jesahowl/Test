@@ -161,6 +161,14 @@ function drawShape(kind, x, y, r, fill) {
       ctx.restore();
       break;
     }
+    case 'wall': {
+      // a stretch of battlemented stone wall
+      ctx.fillRect(x - r * 0.95, y - r * 0.2, r * 1.9, r * 0.75);
+      for (let i = 0; i < 4; i++) ctx.fillRect(x - r * 0.95 + i * r * 0.52, y - r * 0.48, r * 0.34, r * 0.3);
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      for (const yy of [0.1, 0.32]) ctx.fillRect(x - r * 0.95, y + r * yy, r * 1.9, Math.max(1, r * 0.05));
+      break;
+    }
     case 'trade': {
       // market hall: a roofed stall with a striped awning and a coin on top
       ctx.fillRect(x - r * 0.8, y - r * 0.05, r * 1.6, r * 0.8);

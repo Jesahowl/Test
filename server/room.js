@@ -14,7 +14,7 @@ const Game = require('./game');
 const SEND_EVERY = Math.max(1, Math.round(C.TICK_RATE / C.SNAPSHOT_RATE));
 // Buildings, players and camps are the same for everyone; troops, monsters and effects are
 // filtered per player by fog of war (spectators see everything).
-const COLLECTIONS = ['players', 'towers', 'camps'];
+const COLLECTIONS = ['players', 'towers', 'walls', 'camps'];
 const PRIVATE = ['units', 'creeps'];
 
 // Remembers the last rows sent for one entity list (rows are arrays whose first item is the id)
@@ -233,6 +233,17 @@ class Room {
       }
       case 'trade':
         return game.setTradePartner(client.pid, Number(msg.id), Number(msg.partner));
+      case 'walls': {
+        const edges = Array.isArray(msg.edges) ? msg.edges.slice(0, C.WALL_BUILD_MAX) : null;
+        const err = game.buildWalls(client.pid, edges);
+        if (game.lastWalls) send(client, { t: 'walled', n: game.lastWalls, gold: game.lastWalls * C.WALL_COST });
+        return game.lastWalls ? null : err;
+      }
+      case 'wall':
+        if (msg.op === 'up') return game.upgradeWall(client.pid, Number(msg.id));
+        if (msg.op === 'gate') return game.toggleGate(client.pid, Number(msg.id));
+        if (msg.op === 'down') return game.demolishWall(client.pid, Number(msg.id));
+        return null;
       case 'squad':
         if (msg.op === 'assign' || msg.op === 'merge') {
           const err = msg.op === 'assign'

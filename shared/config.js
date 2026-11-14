@@ -137,6 +137,8 @@
 
     BOT_TARGET: 6, // bots fill the server up to this many players
     BOT_STRIKE_SHARE: 0.6, // share of its home troops a bot sends on each attack
+    BOT_MAX_WALLS: 14, // bots wall at most this many segments (facing their nearest enemy)
+    BOT_GATES: 2,
     BOT_JUNGLE_SHARE: 0.35, // share of its home troops a bot sends to farm jungle camps
     MAX_PLAYERS: 24,
     // Player colours: 12 well-separated hues, picked so players in a game are as far apart as
@@ -158,6 +160,19 @@
     CARAVAN_LEVEL_CARGO: 0.3,
     RAID_SHARE: 0.5,
     CARAVAN_DANGER: 6, // extra path cost (in steps) for each tile in reach of a hostile tower or core
+
+    // ---- Walls: built on the edges between your hexes and land that isn't yours. They block everyone's
+    // troops and caravans; gates let yours and your allies' through. Tiers: palisade, stone, rune wall.
+    WALL_COST: 15,
+    WALL_HP: [300, 800, 1600],
+    WALL_UPGRADE: [40, 90], // palisade -> stone, stone -> rune
+    WALL_GATE_COST: 40,
+    WALL_REFUND: 0.6, // gold back when a wall is knocked down or ends up inside your land
+    WALL_SOLDIER_BONUS: 2, // soldiers hit walls this many times harder
+    WALL_BUILD_MAX: 120, // segments one build message may ask for
+    WALL_REBUILD_DELAY: 45, // seconds before a broken wall's edge can be walled again
+    WALL_ENEMY_GAP: 3, // no building a wall with enemy troops this close to it
+    DETOUR_RANGE: 18, // a troop walking straight at something behind a wall looks this far for a way round
 
     // Troop types. `cost` sets the price of levelling the type up (see armyLevelCost).
     UNITS: {

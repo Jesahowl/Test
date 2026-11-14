@@ -131,6 +131,9 @@ module.exports = {
       if (kinds.length) this.armyLevel(p.id, kinds[Math.floor(this.rand() * kinds.length)]);
     }
 
+    // Walls on the side facing the nearest enemy, with a gate toward them.
+    if (towers.length >= 2 && p.gold >= 150 && roll < 0.35 && !this.suddenDeath()) this.botWalls(p);
+
     // Upgrade towers when rich.
     if (p.gold > 400 && towers.length && roll < 0.2) {
       this.upgrade(p.id, towers[Math.floor(this.rand() * towers.length)].id);
@@ -194,6 +197,44 @@ module.exports = {
       const strike = home.slice(0, Math.ceil(home.length * C.BOT_STRIKE_SHARE)).map((u) => u.id);
       this.order(p.id, strike, target); // picked troops only: squads keep defending home
       return;
+    }
+  },
+
+  // Wall the stretch of border facing the nearest enemy (a few segments at a time), and make sure
+  // one of those walls, the one straight toward them, is a gate.
+  botWalls(p) {
+    const enemy = this.nearestEnemy(p.core.x, p.core.y, p.id, false);
+    if (!enemy) return;
+    const ex = enemy.core.x - p.core.x;
+    const ey = enemy.core.y - p.core.y;
+    const el = Math.hypot(ex, ey) || 1;
+    const facing = (h) => {
+      const dx = h.cx - p.core.x;
+      const dy = h.cy - p.core.y;
+      return (dx * ex + dy * ey) / ((Math.hypot(dx, dy) || 1) * el);
+    };
+    const cands = [];
+    for (const h of this.hex.hexes) {
+      if (this.hexOwner[h.i] !== p.id) continue;
+      for (const j of h.n) {
+        if (!this.canWallEdge(p.id, h.i, j)) continue;
+        const f = facing(this.hex.hexes[j]);
+        if (f > 0.55) cands.push([h.i, j, f]);
+      }
+    }
+    let mine = [...this.walls.values()].filter((w) => w.owner === p.id);
+    const room = C.BOT_MAX_WALLS - mine.length;
+    if (cands.length && room > 0) {
+      cands.sort((x, y) => y[2] - x[2]);
+      this.buildWalls(p.id, cands.slice(0, Math.min(6, room)).map(([i, j]) => [i, j]));
+      mine = [...this.walls.values()].filter((w) => w.owner === p.id);
+    }
+    // gates: the walls most straight toward the enemy, so its own waves get out
+    const gates = mine.filter((w) => w.gate).length;
+    if (mine.length >= 3 && gates < C.BOT_GATES && p.gold >= C.WALL_GATE_COST) {
+      const shut = mine.filter((w) => !w.gate);
+      const best = shut.reduce((x, y) => (facing(x) > facing(y) ? x : y));
+      this.toggleGate(p.id, best.id);
     }
   },
 };

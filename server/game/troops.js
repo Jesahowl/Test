@@ -25,13 +25,16 @@ module.exports = {
   // Flow field to a goal tile. At most PATH_FIELDS_PER_TICK new fields are built per tick (each
   // costs ~2 ms); past that, a stale field is reused, or null is returned and the troop walks
   // straight for now (the map has no walls, so that's always safe).
-  getFieldTo(goal) {
-    let f = this.fields.get(goal);
+  getFieldTo(goal, owner = 0) {
+    // with walls about, each player gets their own fields (gates and walls differ per side)
+    const key = this.walls.size && owner ? `${goal}:${owner}` : goal;
+    let f = this.fields.get(key);
     const stale = !f || (f.version !== this.structVersion && this.time - f.at >= C.PATH_RECOMPUTE_INTERVAL);
     if (stale && this.fieldBudget > 0) {
       this.fieldBudget--;
-      f = { dist: Path.computeField(this.w, this.h, this.getExtra(), goal), goal, version: this.structVersion, at: this.time };
-      this.fields.set(goal, f);
+      const edge = this.walls.size && owner ? this.wallCostFn(owner) : null;
+      f = { dist: Path.computeField(this.w, this.h, this.getExtra(), goal, edge), goal, edge, version: this.structVersion, at: this.time };
+      this.fields.set(key, f);
     } else {
       this.getExtra();
     }
@@ -131,6 +134,7 @@ module.exports = {
       if (!this.hostile(u.owner, v.owner)) continue;
       const d = dist(u.x, u.y, v.x, v.y);
       if (d > reach) continue;
+      if (def.melee && this.wallBlocks(u.owner, u.x, u.y, v.x, v.y)) continue; // no swinging through a wall
       if (d < bestScore) {
         bestScore = d;
         best = v;
@@ -184,11 +188,12 @@ module.exports = {
     }
     const [tx, ty] = posOf(target);
     const isStruct = target.isTower || target.isPlayer;
+    const wallBonus = target.isWall && u.kind === 'soldier' ? C.WALL_SOLDIER_BONUS : 1;
     const home = this.onHomeLand(u) ? 1 + C.HOME_DAMAGE_BONUS : 1;
     const buff = this.buffed(u.owner) ? 1 + C.JUNGLE_BUFF_DAMAGE : 1;
     const base = s.damage * buff;
     const siege = isStruct ? (def.siege || 1) * (this.suddenDeath() ? C.SUDDEN_DEATH_SIEGE : this.siegeRamp()) : 1;
-    const dmg = base * home * siege;
+    const dmg = base * home * siege * wallBonus;
     if (def.ranged) {
       // Archer: an arrow flies to the target.
       this.hurt(target, dmg, u.owner);
@@ -304,8 +309,112 @@ module.exports = {
     return false;
   },
 
-  // Step straight toward (x, y), stopping `stop` short of it.
+  // Step toward (x, y), stopping `stop` short of it: straight, unless a wall u can't pass is in the
+  // way, in which case it follows a short detour (round the wall, or through a gate).
   stepToward(u, x, y, stop, speed, dt) {
+    if (this.walls.size && dist(u.x, u.y, x, y) > stop && this.lineBlocked(u.owner, u.x, u.y, x, y) && this.detourStep(u, x, y, speed, dt)) return;
+    this.stepRaw(u, x, y, stop, speed, dt);
+  },
+
+  // Is there a wall `owner` can't pass on the straight line between two points?
+  lineBlocked(owner, x1, y1, x2, y2) {
+    const th = this.hex.tileHex;
+    const d = dist(x1, y1, x2, y2);
+    const n = Math.min(120, Math.ceil(d / 0.4));
+    let prev = th[this.idx(Math.floor(x1), Math.floor(y1))];
+    for (let i = 1; i <= n; i++) {
+      const t = i / n;
+      const tx = Math.floor(x1 + (x2 - x1) * t);
+      const ty = Math.floor(y1 + (y2 - y1) * t);
+      if (!this.inBounds(tx, ty)) continue;
+      const h = th[this.idx(tx, ty)];
+      if (h !== prev) {
+        const w = this.wallBetween(prev, h);
+        if (w && !this.wallOpenFor(w, owner)) return true;
+        prev = h;
+      }
+    }
+    return false;
+  },
+
+  // Follow a short detour (planned at most once a second) toward (x, y). False if there's none.
+  detourStep(u, x, y, speed, dt) {
+    const gx = Math.max(0, Math.min(this.w - 1, Math.floor(x)));
+    const gy = Math.max(0, Math.min(this.h - 1, Math.floor(y)));
+    const goal = this.idx(gx, gy);
+    if (!u.dpath || u.dgoal !== goal || this.time >= u.dAt) {
+      u.dpath = this.planDetour(u, gx, gy);
+      u.dgoal = goal;
+      u.dAt = this.time + 1;
+    }
+    while (u.dpath && u.dpath.length) {
+      const k = u.dpath[0];
+      const tx = (k % this.w) + 0.5;
+      const ty = Math.floor(k / this.w) + 0.5;
+      if (dist(u.x, u.y, tx, ty) < 0.35) {
+        u.dpath.shift();
+        continue;
+      }
+      this.stepRaw(u, tx, ty, 0, speed, dt);
+      return true;
+    }
+    return false;
+  },
+
+  // Breadth-first search for a way from u to tile (gx, gy) that doesn't cross walls u can't pass
+  // (hostile ones included), within DETOUR_RANGE tiles. Returns tile indices, or null.
+  planDetour(u, gx, gy) {
+    const w = this.w;
+    const R = C.DETOUR_RANGE;
+    const sx = Math.max(0, Math.min(w - 1, Math.floor(u.x)));
+    const sy = Math.max(0, Math.min(this.h - 1, Math.floor(u.y)));
+    const th = this.hex.tileHex;
+    const blocked = (a, b) => {
+      if (th[a] === th[b]) return false;
+      const wl = this.wallBetween(th[a], th[b]);
+      return !!wl && !this.wallOpenFor(wl, u.owner);
+    };
+    const gen = ++this.bfsGen;
+    const stamp = this.bfsStamp;
+    const parent = this.bfsParent;
+    const queue = this.bfsQueue;
+    const start = this.idx(sx, sy);
+    const goal = this.idx(gx, gy);
+    let head = 0;
+    let tail = 0;
+    queue[tail++] = start;
+    stamp[start] = gen;
+    parent[start] = -1;
+    let found = false;
+    while (head < tail) {
+      const k = queue[head++];
+      if (k === goal) {
+        found = true;
+        break;
+      }
+      const x = k % w;
+      const y = (k - x) / w;
+      for (const [dx, dy] of DIRS8) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (!this.inBounds(nx, ny) || Math.abs(nx - sx) > R || Math.abs(ny - sy) > R) continue;
+        const n = this.idx(nx, ny);
+        if (stamp[n] === gen || blocked(k, n)) continue;
+        if (dx && dy && (blocked(k, this.idx(x + dx, y)) || blocked(k, this.idx(x, y + dy)))) continue;
+        stamp[n] = gen;
+        parent[n] = k;
+        queue[tail++] = n;
+      }
+    }
+    if (!found) return null;
+    const path = [];
+    for (let k = goal; k !== start && k !== -1; k = parent[k]) path.push(k);
+    path.reverse();
+    return path;
+  },
+
+  // Step straight toward (x, y), stopping `stop` short of it.
+  stepRaw(u, x, y, stop, speed, dt) {
     const d = dist(u.x, u.y, x, y);
     if (d <= stop) return;
     const step = Math.min(d - stop, speed * dt);
@@ -318,21 +427,22 @@ module.exports = {
     const d = dist(u.x, u.y, gx, gy);
     if (d <= stop) return true;
     // Close by, or no field available this tick: just walk straight there.
-    const f = d < C.PATH_DIRECT_RANGE ? null : this.getFieldTo(goal);
+    // (with walls about, only the last stretch is walked straight: a wall could be in the way)
+    const f = d < (this.walls.size ? 1.5 : C.PATH_DIRECT_RANGE) ? null : this.getFieldTo(goal, u.owner);
     if (!f) {
       this.stepToward(u, gx, gy, stop, speed, dt);
       return false;
     }
     const tx = Math.max(0, Math.min(this.w - 1, Math.floor(u.x)));
     const ty = Math.max(0, Math.min(this.h - 1, Math.floor(u.y)));
-    const next = Path.nextStep(f.dist, this.w, this.h, this.extra, this.idx(tx, ty), goal);
+    const next = Path.nextStep(f.dist, this.w, this.h, this.extra, this.idx(tx, ty), goal, f.edge);
     let nx = gx;
     let ny = gy;
     if (next >= 0 && next !== goal) {
       nx = (next % this.w) + 0.5;
       ny = Math.floor(next / this.w) + 0.5;
     }
-    this.stepToward(u, nx, ny, 0, speed, dt);
+    this.stepRaw(u, nx, ny, 0, speed, dt);
     return false;
   },
 
@@ -593,6 +703,16 @@ module.exports = {
           if (pace > 0) this.marchTo(u, tgt.goal, tgt.x, tgt.y, 2, pace, dt);
         } else this.scoutTick(u, speed, dt);
         continue;
+      }
+
+      if (u.wallHit && this.time - u.wallHitAt < 0.6 && !def.heal) {
+        // Walked into a hostile wall on the way: hack at it until it's down.
+        const w = this.walls.get(u.wallHit);
+        if (w && this.hostile(u.owner, w.owner)) {
+          if (u.cd <= 0) this.unitFire(u, w, s, def);
+          continue;
+        }
+        u.wallHit = 0;
       }
 
       if (tgt && tgt.unit && !def.heal) {

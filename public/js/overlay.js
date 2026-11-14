@@ -1,5 +1,6 @@
 // Overlays: build and land previews (in hexes), order lines and markers, and the minimap.
 
+import { drawWallMode } from './walls.js';
 import { isAlly } from './diplomacy.js';
 import { squadsLabel } from './bar.js';
 import { mySquads, squadPicked } from './squads.js';
@@ -47,6 +48,7 @@ function drawRange(wx, wy, range, color) {
 function clearSelection() {
   S.selectedId = null;
   S.selCaravan = null;
+  S.selWall = null;
   selUnits.clear();
 }
 
@@ -249,6 +251,10 @@ function drawOverlay() {
 
   if (S.buildKind === 'land' && S.myId) {
     drawLandMode();
+    return;
+  }
+  if (S.buildKind === 'wall' && S.myId) {
+    drawWallMode();
     return;
   }
   if (S.buildKind && S.myId) {
