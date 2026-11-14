@@ -504,14 +504,23 @@ module.exports = {
     }
   },
 
-  // Is (x, y) in u's owner's land, or in a hex next to it?
+  // Is (x, y) in owner's land, or within HOME_EDGE tiles of its border?
   nearHome(owner, x, y) {
-    const tx = Math.floor(x);
-    const ty = Math.floor(y);
-    if (!this.inBounds(tx, ty)) return false;
-    const h = this.hex.hexes[this.hexAt(tx, ty)];
-    if (this.hexOwner[h.i] === owner) return true;
-    return h.n.some((j) => this.hexOwner[j] === owner);
+    const e = C.HOME_EDGE;
+    const x0 = Math.floor(x - e);
+    const x1 = Math.floor(x + e);
+    const y0 = Math.floor(y - e);
+    const y1 = Math.floor(y + e);
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        if (!this.inBounds(tx, ty) || this.terr[this.idx(tx, ty)] !== owner) continue;
+        // distance from (x, y) to the nearest point of tile (tx, ty)
+        const dx = Math.max(tx - x, 0, x - tx - 1);
+        const dy = Math.max(ty - y, 0, y - ty - 1);
+        if (dx * dx + dy * dy <= e * e) return true;
+      }
+    }
+    return false;
   },
 
   // The nearest enemy troop (or barbarian out for blood) within HOME_ALERT of troop u that's on its

@@ -558,3 +558,23 @@ test('troops at home fight enemies coming into their land, without leaving it', 
   assert.ok(!g.units.has(foe.id), 'the home troops dealt with the intruder');
   assert.strictEqual(offLand, 0, 'without stepping off their land');
 });
+
+test('home troops react to enemies within 1 tile of their border, not further out', () => {
+  const { g, a } = duel(35);
+  const edge = (gap) => {
+    // a point `gap` tiles straight out from a's border, on empty ground
+    for (let y = 0; y < g.h; y++) {
+      for (let x = 0; x < g.w - 6; x++) {
+        if (g.terr[g.idx(x, y)] !== a.id || g.terr[g.idx(x + 1, y)] === a.id) continue;
+        let ok = true;
+        for (let k = 1; k <= gap + 2; k++) if (g.terr[g.idx(x + k, y)]) ok = false;
+        if (ok) return [x + 1 + gap - 0.5, y + 0.5];
+      }
+    }
+    return null;
+  };
+  const [nx, ny] = edge(1);
+  assert.ok(g.nearHome(a.id, nx, ny), 'half a tile past the border counts');
+  const [fx, fy] = edge(3);
+  assert.ok(!g.nearHome(a.id, fx, fy), 'two and a half tiles out does not');
+});
