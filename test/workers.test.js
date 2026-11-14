@@ -76,7 +76,7 @@ test('buildings are sites until workers build them; then they work', () => {
   assert.match(g.build(a.id, x2, y2, 'tower'), /wood/);
 });
 
-test('workers chop forests next to their land and carry the wood home', () => {
+test('workers chop forests and carry the wood home', () => {
   const { g, a } = setup(72);
   only(a, 'gather');
   // make sure there's a forest hex touching a's land
@@ -91,8 +91,7 @@ test('workers chop forests next to their land and carry the wood home', () => {
   const chopped = [...g.forest.entries()].some(([, w]) => w < C.FOREST_WOOD);
   assert.ok(chopped, 'a forest was chopped');
   // forests grow back
-  only(a, 'build');
-  run(g, 20); // (anyone mid-chop fills their load and heads home)
+  for (const u of workers(g, a)) g.units.delete(u.id); // nobody chopping any more
   const [i, left] = [...g.forest.entries()].find(([, w]) => w < C.FOREST_WOOD);
   run(g, 5);
   assert.ok(g.forest.get(i) > left, 'and regrow');
