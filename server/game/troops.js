@@ -504,6 +504,40 @@ module.exports = {
     }
   },
 
+  // Is (x, y) in u's owner's land, or in a hex next to it?
+  nearHome(owner, x, y) {
+    const tx = Math.floor(x);
+    const ty = Math.floor(y);
+    if (!this.inBounds(tx, ty)) return false;
+    const h = this.hex.hexes[this.hexAt(tx, ty)];
+    if (this.hexOwner[h.i] === owner) return true;
+    return h.n.some((j) => this.hexOwner[j] === owner);
+  },
+
+  // The nearest enemy troop (or barbarian out for blood) within HOME_ALERT of troop u that's on its
+  // land or right next to it, or null.
+  homeIntruder(u) {
+    let foe = null;
+    let best = C.HOME_ALERT;
+    for (const v of this.nearUnits(u.x, u.y, C.HOME_ALERT)) {
+      if (v.owner === u.owner) continue;
+      const d = dist(u.x, u.y, v.x, v.y);
+      if (d < best && this.nearHome(u.owner, v.x, v.y)) {
+        best = d;
+        foe = v;
+      }
+    }
+    for (const c of this.creeps.values()) {
+      if (c.angry !== u.owner) continue;
+      const d = dist(u.x, u.y, c.x, c.y);
+      if (d < best && this.nearHome(u.owner, c.x, c.y)) {
+        best = d;
+        foe = c;
+      }
+    }
+    return foe;
+  },
+
   updateUnits(dt) {
     this.groups = this.squadGroups();
     this.assignSlots();
@@ -624,27 +658,13 @@ module.exports = {
       }
 
       if (!def.heal) {
-        // Chase intruders near what we guard, staying on the leash.
-        let foe = null;
-        let foeD = Infinity;
-        for (const v of this.nearUnits(a.x, a.y, a.leash + s.range)) {
-          if (v.owner === u.owner || dist(a.x, a.y, v.x, v.y) > a.leash + s.range) continue;
-          const d = dist(u.x, u.y, v.x, v.y);
-          if (d < foeD) {
-            foeD = d;
-            foe = v;
-          }
-        }
+        // Home defence: go after enemies in (or right next to) my land nearby. Paths only cross my
+        // own land, so troops meet them at the border and never wander out after them.
+        const foe = this.homeIntruder(u);
         if (foe) {
-          let gx = foe.x;
-          let gy = foe.y;
-          const da = dist(a.x, a.y, gx, gy);
-          if (da > a.leash) {
-            gx = a.x + ((gx - a.x) / da) * a.leash;
-            gy = a.y + ((gy - a.y) / da) * a.leash;
-          }
+          const [fx, fy] = posOf(foe);
           if (this.time >= u.repathAt || !u.dest) {
-            this.planUnit(u, gx, gy);
+            this.planUnit(u, fx, fy);
             u.repathAt = this.time + C.UNIT_REPATH;
           }
           this.moveUnit(u, dt, speed);

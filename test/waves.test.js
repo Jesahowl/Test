@@ -533,3 +533,28 @@ test("a tower's lightning chains on to nearby enemies, weaker each jump", () => 
   assert.ok(Math.abs(lost[1] - dmg * C.CHAIN_FALLOFF) < 1e-6, 'the bolt jumps on, weaker');
   assert.ok(Math.abs(lost[2] - dmg * C.CHAIN_FALLOFF ** 2) < 1e-6, 'and again');
 });
+
+test('troops at home fight enemies coming into their land, without leaving it', () => {
+  const { g, a, b } = duel(34);
+  for (const k of Object.keys(a.army)) a.army[k] = 0; // all soldiers
+  a.nextWaveAt = g.time;
+  g.update(0.05);
+  a.nextWaveAt = Infinity;
+  const guards = mine(g, a);
+  run(g, 15); // formed up next to the core
+  // an intruder on a's land, well away from the guards' post (beyond the old guard leash)
+  const core = g.hex.hexes[g.hexAt(a.core.x, a.core.y)];
+  const post = guards[0].slotPos;
+  const target = g.hex.hexes.filter((h) => g.hexOwner[h.i] === a.id && h !== core)
+    .sort((p, q) => Math.hypot(q.cx - post.x, q.cy - post.y) - Math.hypot(p.cx - post.x, p.cy - post.y))[0];
+  const [foe] = troops(g, b, 'soldier', 1, target.cx, target.cy);
+  foe.attack = { k: 'p', id: g.idx(Math.floor(target.cx), Math.floor(target.cy)) }; // it holds its ground
+  assert.ok(Math.hypot(foe.x - post.x, foe.y - post.y) > C.UNIT_LEASH_CORE, 'out of reach of the old guard rule');
+  let offLand = 0;
+  run(g, 25, () => {
+    for (const u of guards) if (g.units.has(u.id) && g.terr[g.idx(Math.floor(u.x), Math.floor(u.y))] !== a.id) offLand++;
+    return !g.units.has(foe.id);
+  });
+  assert.ok(!g.units.has(foe.id), 'the home troops dealt with the intruder');
+  assert.strictEqual(offLand, 0, 'without stepping off their land');
+});

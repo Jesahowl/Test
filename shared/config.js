@@ -72,6 +72,9 @@
     HOLD_LEASH: 6, // troops holding a spot fight enemies within this distance of it
     HUNT_ROLL_RANGE: 6, // when a hunted troop dies, hunters go after its squadmates within this range
     TROOP_AGGRO: 2,
+    // Home defence: troops at home go after enemy troops (and angry barbarians) within HOME_ALERT tiles
+    // that are on their land or in a hex next to it, fighting from their own side of the border.
+    HOME_ALERT: 8,
     PROVOKE_TIME: 3, // troops shot by someone out of reach go after the shooter for this long...
     PROVOKE_RANGE: 7, // ...if it's within their range + this
     // Fog of war: you see your own land plus what your core, buildings and troops can see.
