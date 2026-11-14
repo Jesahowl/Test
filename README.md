@@ -191,10 +191,10 @@ test/                   node:test suite (game rules, squads & orders, jungle, ro
   patrol around the structure they guard.
 - **Smooth movement.** Each snapshot carries the server tick number; the client draws troops and monsters 100 ms in the
   past, interpolating between snapshots on that steady clock, so movement stays smooth despite network jitter.
-- **Bots** buy land at their border (growing round their core), build towers inside it and level their troops. Their
-  barracks come first (a bot builds its first one straight away, then upgrades and adds more before buying land), and their
-  four squads have roles: a strike force that attacks the nearest rival's towers once it's mostly at strength (and falls
-  back to regroup when worn down), a home guard and an aggressive jungle party farming camps. Their strike force brings siege rams once it's big enough.
+- **Bots** build their first barracks straight away, then grow their army (upgrading barracks and adding more) before
+  buying land at their border, build towers and workshops, and level their troops. Their squads have roles: squads 1
+  and 4 strike the nearest rival's towers once mostly at strength (with siege rams once they're big enough) and fall
+  back to regroup when worn down, squad 2 guards home and squad 3 is an aggressive jungle party farming camps.
 
 ## Ideas for next steps
 
