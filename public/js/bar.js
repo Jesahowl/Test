@@ -125,12 +125,15 @@ function pickSquadOf(u, add = false) {
   pickSquad(u.sq, add);
 }
 
+// The squads Merge acts on: every squad when orders go to all of them (Q), else the picked ones.
+const mergeList = () => mySquads().filter((q) => S.allSquads || squadPicked(q.id));
+
 function mergeSquads() {
-  const list = mySquads().filter((q) => squadPicked(q.id));
+  const list = mergeList();
   if (list.length < 2) return;
   sendMsg({ t: 'squad', op: 'merge', squads: list.map((q) => q.id) });
-  S.pendingOrder = () => `Squads ${list.map((q) => q.num).join(' + ')} merged into squad ${list[0].num}`;
-  S.selSquads = new Set([list[0].id]);
+  S.pendingOrder = () => (S.allSquads ? `All ${list.length} squads merged into squad ${list[0].num}` : `Squads ${list.map((q) => q.num).join(' + ')} merged into squad ${list[0].num}`);
+  if (!S.allSquads) S.selSquads = new Set([list[0].id]);
 }
 
 function toggleNewWaves() {
@@ -191,9 +194,9 @@ function updateSquadsUi() {
       };
     }
   }
-  const picked = squads.filter((q) => squadPicked(q.id)).length;
   $('squad-all').classList.toggle('on', S.allSquads && !moving);
-  $('squad-merge').disabled = picked < 2;
+  $('squad-merge').disabled = mergeList().length < 2;
+  $('squad-merge').dataset.tip = S.allSquads ? 'Merge every squad into one <kbd>M</kbd>' : 'Merge the picked squads into one <kbd>M</kbd>';
   const follow = S.me.newWaves === 'follow';
   const nw = $('new-waves');
   nw.classList.toggle('on', follow);
