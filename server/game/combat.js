@@ -128,7 +128,31 @@ module.exports = {
       if (!target) continue;
       sh.obj.cd = 1 / sh.rate;
       this.fx.push({ k: 'tshot', x1: sh.x, y1: sh.y, x2: round2(target.x), y2: round2(target.y), o: sh.owner });
+      // chain lightning: the bolt jumps on to nearby enemies, weaker each time
+      const hit = new Set([target.id]);
+      let from = target;
+      let dmg = sh.damage;
+      const chain = [];
+      for (let j = 0; j < C.CHAIN_JUMPS; j++) {
+        let next = null;
+        let nd = C.CHAIN_RANGE;
+        for (const u of this.nearUnits(from.x, from.y, C.CHAIN_RANGE)) {
+          if (u.owner === sh.owner || hit.has(u.id)) continue;
+          const d = dist(from.x, from.y, u.x, u.y);
+          if (d <= nd) {
+            nd = d;
+            next = u;
+          }
+        }
+        if (!next) break;
+        dmg *= C.CHAIN_FALLOFF;
+        hit.add(next.id);
+        chain.push([next, dmg]);
+        this.fx.push({ k: 'tshot', c: 1, x1: round2(from.x), y1: round2(from.y), x2: round2(next.x), y2: round2(next.y), o: sh.owner });
+        from = next;
+      }
       this.damageUnit(target, sh.damage, sh.owner);
+      for (const [u, d] of chain) if (this.units.has(u.id)) this.damageUnit(u, d, sh.owner);
     }
   },
 };

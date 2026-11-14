@@ -179,7 +179,7 @@ test('orders: every squad, or only picked troops (which split off as a squad of 
 test('an attack marches across the map and takes an undefended tower', () => {
   const { g, a, b } = duel(5);
   const t = outpost(g, b);
-  const squad = troops(g, a, 'soldier', 5, a.core.x + 0.5, a.core.y + 2);
+  const squad = troops(g, a, 'soldier', 9, a.core.x + 0.5, a.core.y + 2);
   g.order(a.id, squad.map((u) => u.id), { k: 't', id: t.id });
   assert.ok(run(g, 120, () => t.owner !== b.id), 'tower should fall');
   assert.strictEqual(t.owner, a.id, 'the attackers destroy and claim it');
@@ -516,4 +516,20 @@ test('standing troops fill their hex in an even formation', () => {
   const h2 = new Set(second.map((u) => g.hexAt(Math.floor(u.x), Math.floor(u.y))));
   assert.strictEqual(h2.size, 1);
   assert.notStrictEqual([...h2][0], h, 'each squad has its own hex');
+});
+
+test("a tower's lightning chains on to nearby enemies, weaker each jump", () => {
+  const { g, a, b } = duel(33);
+  const t = outpost(g, b);
+  // three of a's soldiers in a tight line, the first in the tower's range
+  const near = troops(g, a, 'soldier', 3, t.x + 0.5 - 3, t.y + 0.5);
+  near.forEach((u, i) => { u.x = t.x + 0.5 - 3 - i * 1.0; u.y = t.y + 0.5; u.hp = u.maxHp = 1e6; u.attack = { k: 'p', id: g.idx(Math.floor(u.x), Math.floor(u.y)) }; });
+  g.buildUnitGrid();
+  t.cd = 0;
+  g.updateStructures(0.05);
+  const lost = near.map((u) => 1e6 - u.hp);
+  const dmg = C.towerStats('tower', t.level).damage;
+  assert.ok(Math.abs(lost[0] - dmg) < 1e-6, 'the nearest is hit in full');
+  assert.ok(Math.abs(lost[1] - dmg * C.CHAIN_FALLOFF) < 1e-6, 'the bolt jumps on, weaker');
+  assert.ok(Math.abs(lost[2] - dmg * C.CHAIN_FALLOFF ** 2) < 1e-6, 'and again');
 });

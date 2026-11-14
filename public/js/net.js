@@ -228,8 +228,8 @@ function applyState(msg) {
       // the attacker lunges at its target (drawn in troops.js / camps.js)
       S.lunges.set(f.a, { at: now + INTERP_DELAY, x: f.x, y: f.y });
     }
-    if (f.k === 'tshot') {
-      // flare the shooting tower's (or core's) crystal
+    if (f.k === 'tshot' && !f.c) {
+      // flare the shooting tower's (or core's) crystal (chain jumps, f.c, start at a troop)
       const tx = Math.floor(f.x1);
       const ty = Math.floor(f.y1);
       const t = S.towers.get(grid.get(`${tx},${ty}`));

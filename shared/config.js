@@ -76,6 +76,11 @@
     PROVOKE_RANGE: 7, // ...if it's within their range + this
     // Fog of war: you see your own land plus what your core, buildings and troops can see.
     CORE_SIGHT: 9,
+    // Chain lightning: a tower's (or core's) bolt jumps from its target to up to CHAIN_JUMPS more
+    // enemies, each within CHAIN_RANGE of the last one hit, dealing CHAIN_FALLOFF of the previous hit.
+    CHAIN_JUMPS: 2,
+    CHAIN_RANGE: 2.5,
+    CHAIN_FALLOFF: 0.75,
     TOWER_SIGHT_BONUS: 2, // towers see this much past their range
     BARRACKS_SIGHT: 5,
     SCOUT_RANGE: 45, // scouts explore up to this far from their core
@@ -150,7 +155,7 @@
     // Fixed structures.
     TOWERS: {
       tower: {
-        name: 'Tower', key: 'B', cost: 120, hp: 2400, range: 5, damage: 40, rate: 1,
+        name: 'Tower', key: 'B', cost: 120, hp: 2400, range: 5, damage: 58, dmgPerLevel: 0.2, rate: 1,
         color: '#80deea', desc: 'Zaps enemy troops that come near. Build on your own land',
       },
       barracks: {
@@ -216,7 +221,7 @@
     const l = level - 1;
     return {
       hp: Math.round(d.hp * (1 + 0.5 * l)),
-      damage: d.damage ? d.damage * (1 + 0.6 * l) : 0,
+      damage: d.damage ? d.damage * (1 + (d.dmgPerLevel ?? 0.6) * l) : 0,
       heal: d.heal ? d.heal * (1 + 0.6 * l) : 0,
       range: d.range ? d.range + 0.5 * l : 0,
       rate: d.rate || 0,
