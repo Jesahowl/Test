@@ -1,5 +1,5 @@
 // Trade in the browser: the trade post (a stone market hall with a striped awning in the owner's
-// colour), caravans (a covered wagon pulled by an ox, two guards walking alongside), the trade roads
+// colour), caravans (an open wagon of barrels pulled by an ox, two guards walking alongside), the trade roads
 // between allied posts, and the trade post's panel.
 
 import { isAlly } from './diplomacy.js';
@@ -7,6 +7,7 @@ import { sendMsg } from './net.js';
 import { escapeHtml } from './screens.js';
 import { S, $, C, colorOf, ctx, hexSpot, players, scale, toScreen } from './state.js';
 import { drawCracks, drawCrystal, drawSmoke, runeEllipse } from './structures.js';
+import { drawOxWagon, drawTroop, teamOf } from './chibi.js';
 
 const OUT = '#22272d';
 const WOOD = '#6b4a2f';
@@ -183,82 +184,9 @@ function drawGoldCrystal(x, y, cr, glow) {
 
 // ---- caravans
 
-function wheel(x, y, rr, lw, spin) {
-  ctx.fillStyle = WOOD_D;
-  ctx.strokeStyle = OUT;
-  ctx.lineWidth = lw;
-  ctx.beginPath();
-  ctx.arc(x, y, rr, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.strokeStyle = '#8a6a48';
-  ctx.lineWidth = Math.max(0.8, lw * 0.6);
-  for (let k = 0; k < 3; k++) {
-    const a = spin + (k * Math.PI) / 3;
-    ctx.beginPath();
-    ctx.moveTo(x - Math.cos(a) * rr * 0.8, y - Math.sin(a) * rr * 0.8);
-    ctx.lineTo(x + Math.cos(a) * rr * 0.8, y + Math.sin(a) * rr * 0.8);
-    ctx.stroke();
-  }
-}
-
-function ox(x, y, s, lw, step) {
-  const legs = Math.sin(step) * s * 0.06;
-  ctx.fillStyle = '#5b4636';
-  ctx.strokeStyle = OUT;
-  ctx.lineWidth = lw;
-  ctx.fillRect(x - s * 0.2, y - s * 0.05, s * 0.07, s * 0.2 + legs);
-  ctx.fillRect(x + s * 0.15, y - s * 0.05, s * 0.07, s * 0.2 - legs);
-  ctx.beginPath();
-  ctx.ellipse(x, y - s * 0.15, s * 0.32, s * 0.17, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.ellipse(x + s * 0.34, y - s * 0.2, s * 0.13, s * 0.1, 0.3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.strokeStyle = '#d8cfb8';
-  ctx.lineWidth = Math.max(0.8, lw * 0.8);
-  ctx.beginPath();
-  ctx.moveTo(x + s * 0.3, y - s * 0.28);
-  ctx.quadraticCurveTo(x + s * 0.3, y - s * 0.4, x + s * 0.22, y - s * 0.38);
-  ctx.moveTo(x + s * 0.4, y - s * 0.28);
-  ctx.quadraticCurveTo(x + s * 0.44, y - s * 0.4, x + s * 0.5, y - s * 0.37);
-  ctx.stroke();
-}
-
-// A guard walking beside the wagon: a small troop token in the owner's colour.
-function guard(x, y, rr, owner, hex) {
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.beginPath();
-  ctx.ellipse(x, y + rr * 0.8, rr, rr * 0.35, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = colorOf(owner, 30, 0.95);
-  ctx.strokeStyle = colorOf(owner, 60);
-  ctx.lineWidth = Math.max(1, rr * 0.3);
-  ctx.beginPath();
-  if (hex) {
-    for (let k = 0; k < 6; k++) {
-      const a = (Math.PI / 3) * k - Math.PI / 6;
-      ctx.lineTo(x + rr * Math.cos(a), y + rr * Math.sin(a));
-    }
-    ctx.closePath();
-  } else ctx.arc(x, y, rr, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = '#c9d1d9';
-  ctx.beginPath();
-  ctx.moveTo(x, y - rr * 0.55);
-  ctx.lineTo(x + rr * 0.15, y + rr * 0.3);
-  ctx.lineTo(x - rr * 0.15, y + rr * 0.3);
-  ctx.closePath();
-  ctx.fill();
-}
-
 // A caravan at screen (x, y), s = pixels per tile. face: 1 heading right, -1 left.
 function drawCaravan(u, x, y, s, now) {
   const sz = s * 1.25;
-  const lw = Math.max(1, sz * 0.045);
   const t = now / 1000 + u.id;
   const moving = u.moving ? 1 : 0;
   ctx.save();
@@ -274,47 +202,13 @@ function drawCaravan(u, x, y, s, now) {
     ctx.stroke();
     ctx.setLineDash([]);
   }
-  ctx.save();
-  ctx.scale(u.face || 1, 1);
-  ctx.fillStyle = 'rgba(0,0,0,0.32)';
-  ctx.beginPath();
-  ctx.ellipse(0, sz * 0.35, sz * 0.95, sz * 0.2, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ox(sz * 0.8, sz * 0.3, sz, lw, t * 6 * moving);
-  ctx.strokeStyle = WOOD_D;
-  ctx.lineWidth = lw;
-  ctx.beginPath();
-  ctx.moveTo(sz * 0.42, sz * 0.12);
-  ctx.lineTo(sz * 0.58, sz * 0.12);
-  ctx.stroke();
-  box(-sz * 0.55, -sz * 0.02, sz * 1.0, sz * 0.2, WOOD, lw);
-  // canvas top in the owner's colour, with hoops
-  ctx.fillStyle = colorOf(u.owner, 62);
-  ctx.strokeStyle = OUT;
-  ctx.lineWidth = lw;
-  ctx.beginPath();
-  ctx.moveTo(-sz * 0.55, -sz * 0.02);
-  ctx.bezierCurveTo(-sz * 0.6, -sz * 0.6, sz * 0.5, -sz * 0.6, sz * 0.45, -sz * 0.02);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  ctx.strokeStyle = colorOf(u.owner, 40, 0.8);
-  ctx.lineWidth = Math.max(0.8, lw * 0.7);
-  for (const fx of [-0.25, 0.05, 0.3]) {
-    ctx.beginPath();
-    ctx.moveTo(sz * fx - sz * 0.03, -sz * 0.02);
-    ctx.quadraticCurveTo(sz * fx, -sz * 0.55, sz * fx + sz * 0.03, -sz * 0.02);
-    ctx.stroke();
-  }
-  coins(-sz * 0.05, -sz * 0.5, sz * 0.05, 2 + u.level * 2);
-  wheel(-sz * 0.35, sz * 0.2, sz * 0.15, lw, t * 4 * moving);
-  wheel(sz * 0.25, sz * 0.2, sz * 0.15, lw, t * 4 * moving);
-  ctx.restore();
-  // the two guards: one walking behind, one ahead on the far side (bobbing as they walk)
-  const bob = Math.sin(t * 8) * sz * 0.03 * moving;
+  // the two guards: one walking behind on the far side, one ahead on the near side (bobbing as they walk)
   const f = u.face || 1;
-  guard(-f * sz * 0.75, sz * 0.45 + bob, s * 0.24, u.owner, true);
-  guard(f * sz * 0.2, -sz * 0.55 - bob, s * 0.24, u.owner, false);
+  const bob = -Math.abs(Math.sin(t * 8)) * sz * 0.04 * moving;
+  const gk = s * 0.27;
+  drawTroop(ctx, 'soldier', u.owner, -f * sz * 0.95, -sz * 0.35 + bob, gk, f);
+  drawOxWagon(ctx, 0, 0, sz * 0.62, teamOf(u.owner), f, t * 4 * moving, t * 6 * moving, 1 + (u.level || 1));
+  drawTroop(ctx, 'soldier', u.owner, f * sz * 0.15, sz * 0.5 + bob, gk, f);
   ctx.restore();
 }
 

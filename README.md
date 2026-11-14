@@ -91,7 +91,7 @@ closes after a minute. **Play** still drops you into the always-running public g
 
 ### Troops
 
-Each type has its own token shape, so you can tell them apart at a glance: soldiers are **rounded squares**, scouts **diamonds**, medics **circles** and archers **triangles**.
+Troops are little big-headed figures dressed in their owner's colour (helmet, hood, cap or hat, plus a team-coloured belt), so you can tell them apart at a glance: **soldiers** wear a round steel helmet and carry a sword and round shield, **scouts** a pointed hood and short cape, **medics** a white cap and tunic with crosses and a healing staff, and **archers** a feathered felt hat and a short bow. They face the way they walk and bob as they march. Caravans are an **open wagon of barrels pulled by an ox**, with two soldiers walking alongside.
 
 | Troop | Wave slots | Level 2 | HP | Role |
 |---|---|---|---|---|

@@ -197,7 +197,7 @@
       // post's level; its two guards (drawn riding along) fight back with this damage and range.
       caravan: {
         name: 'Caravan', caravan: true, hp: 500, range: 2.5, damage: 14, rate: 1, speed: 1.6, sight: 4,
-        color: '#d9c7a0', desc: 'A covered wagon carrying trade goods to an ally. Two guards ride with it',
+        color: '#d9c7a0', desc: 'An ox wagon of barrels carrying trade goods to an ally. Two guards walk with it',
       },
     },
 

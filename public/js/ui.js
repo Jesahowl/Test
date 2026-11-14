@@ -1,7 +1,8 @@
 // HUD helpers: icons drawn from the in-game shapes, and tooltips.
 
-import { drawShape, tokenPath } from './render.js';
-import { $, C, ctx, withContext } from './state.js';
+import { drawShape } from './render.js';
+import { drawFigure, teamFromHex } from './chibi.js';
+import { $, C, withContext } from './state.js';
 
 // ------------------------------------------------------------------ HUD
 // ---- UI icons: the in-game shapes, drawn once into little images for the HUD.
@@ -12,21 +13,16 @@ function iconURL(kind, size = 44) {
   if (iconCache.has(key)) return iconCache.get(key);
   const c = document.createElement('canvas');
   c.width = c.height = size;
-  withContext(c.getContext('2d'), () => {
-    const unit = C.UNITS[kind];
-    const color = unit ? unit.color : kind === 'wall' ? '#9aa4ae' : (C.TOWERS[kind] || { color: '#7ee787' }).color;
-    if (unit) {
-      ctx.fillStyle = '#0e1219';
-      tokenPath(ctx, kind, size / 2, size / 2, size * (kind === 'archer' ? 0.32 : kind === 'scout' ? 0.38 : 0.44));
-      ctx.fill();
-      ctx.strokeStyle = color;
-      ctx.globalAlpha = 0.55;
-      ctx.lineWidth = Math.max(1.5, size * 0.05);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-    drawShape(kind, size / 2, size / 2 + (unit ? 0 : size * 0.04), size * (unit ? 0.36 : 0.44), color);
-  });
+  const unit = C.UNITS[kind];
+  if (unit) {
+    // troops: the little figure itself, dressed in the type's colour
+    drawFigure(c.getContext('2d'), kind, size / 2, size * 0.63, size * 0.38, teamFromHex(unit.color));
+  } else {
+    withContext(c.getContext('2d'), () => {
+      const color = kind === 'wall' ? '#9aa4ae' : (C.TOWERS[kind] || { color: '#7ee787' }).color;
+      drawShape(kind, size / 2, size / 2 + size * 0.04, size * 0.44, color);
+    });
+  }
   const url = c.toDataURL();
   iconCache.set(key, url);
   return url;

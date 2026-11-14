@@ -310,34 +310,6 @@ function drawShape(kind, x, y, r, fill) {
   }
 }
 
-// The outline of a troop's token, different for each type so they can be told apart at a glance:
-// soldiers a rounded square, scouts a diamond, medics a circle, archers a triangle.
-// R is the size of the round token the shapes replace.
-function tokenPath(g, kind, x, y, R) {
-  g.beginPath();
-  if (kind === 'soldier') {
-    const h = R * 0.9;
-    g.roundRect(x - h, y - h, h * 2, h * 2, R * 0.32);
-  } else if (kind === 'scout') {
-    const d = R * 1.22;
-    g.moveTo(x, y - d);
-    g.lineTo(x + d, y);
-    g.lineTo(x, y + d);
-    g.lineTo(x - d, y);
-    g.closePath();
-  } else if (kind === 'archer') {
-    const c = R * 1.5;
-    const cy = y + R * 0.18;
-    for (let i = 0; i < 3; i++) {
-      const a = -Math.PI / 2 + (i * Math.PI * 2) / 3;
-      g.lineTo(x + Math.cos(a) * c, cy + Math.sin(a) * c);
-    }
-    g.closePath();
-  } else {
-    g.arc(x, y, R, 0, Math.PI * 2);
-  }
-}
-
 // A melee swing: the attacker dashes in at its target and springs back. Returns the offset to draw
 // troop/barbarian `id` (at world x, y) with, in tiles.
 const LUNGE_MS = 240;
@@ -359,4 +331,4 @@ function lungeOffset(id, x, y, now) {
   return [(dx / d) * reach, (dy / d) * reach];
 }
 
-export { lungeOffset, drawBackground, drawShape, hpBar, label, onScreen, resize, tokenPath };
+export { lungeOffset, drawBackground, drawShape, hpBar, label, onScreen, resize };
