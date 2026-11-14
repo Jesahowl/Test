@@ -25,6 +25,23 @@ Open the URL in a few browser tabs (or share it on your LAN) to play against eac
 To put it online for friends, follow **[HOSTING.md](HOSTING.md)** (free, about 10 minutes, on Render).
 AI bots fill the server up to 6 players, so it's playable alone too.
 
+
+### Updating automatically (Windows)
+
+Download the game once with **Git** instead of a ZIP; after that, every start fetches the latest version.
+
+1. Install Git once: `winget install --id Git.Git` (then open a new Command Prompt).
+2. Download the game once (it goes into a folder called `territory-siege`):
+   ```
+   git clone -b claude/determined-johnson-hion2w https://github.com/jesahowl/test.git territory-siege
+   ```
+3. From then on, just double-click a file in that folder:
+   - **`play.bat`**: updates, installs and starts the game, and opens http://localhost:3000.
+   - **`play-online.bat`**: the same, plus a Cloudflare link (`https://....trycloudflare.com`) friends can join from.
+     Needs `winget install --id Cloudflare.cloudflared` once.
+
+To update by hand instead, run `git pull` in the folder. Restart the game to load a new version.
+
 ## Private rooms
 
 On the menu, **Create private room** gives you a 5-letter room code and an invite link
