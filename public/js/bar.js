@@ -29,7 +29,7 @@ function buildBar() {
   xb.innerHTML = `<kbd>${xd.key}</kbd><span class="count"></span><img src="${iconURL('trade')}" alt="">Trade<span class="cost">${xd.cost}g</span>`;
   xb.onclick = () => toggleBuild('trade');
   const wb = $('wall-button');
-  wb.dataset.tip = `<span class="t">Walls <kbd>V</kbd></span><b>Drag along your border</b> to wall it, ${C.WALL_COST}g a segment. Walls block <b>every</b> troop and caravan, yours too: click one and make it a <b>gate</b> (${C.WALL_GATE_COST}g) to let your side and your allies through. Upgrade to strong (${C.WALL_HP[1]} HP) and rune walls (${C.WALL_HP[2]} HP): each tier stands taller. <span class="m">Enemies hack through the weakest point; soldiers hit walls twice as hard.</span>`;
+  wb.dataset.tip = `<span class="t">Walls <kbd>V</kbd></span><b>Drag along your border</b> to wall it, ${C.WALL_COST}g a segment. Walls block <b>every</b> troop and caravan, yours too: click one and make it a <b>gate</b> (${C.WALL_GATE_COST}g) to let your side and your allies through. Each segment has ${C.WALL_HP} HP. <span class="m">Enemies hack through the weakest point; soldiers hit walls twice as hard.</span>`;
   wb.innerHTML = `<kbd>V</kbd><img src="${iconURL('wall')}" alt="">Wall<span class="cost">${C.WALL_COST}g</span>`;
   wb.onclick = () => toggleBuild('wall');
   const lb = $('land-button');

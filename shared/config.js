@@ -162,10 +162,9 @@
     CARAVAN_DANGER: 6, // extra path cost (in steps) for each tile in reach of a hostile tower or core
 
     // ---- Walls: built on the edges between your hexes and land that isn't yours. They block everyone's
-    // troops and caravans; gates let yours and your allies' through. Tiers: palisade, stone, rune wall.
+    // troops and caravans; gates let yours and your allies' through.
     WALL_COST: 15,
-    WALL_HP: [300, 800, 1600],
-    WALL_UPGRADE: [40, 90], // palisade -> stone, stone -> rune
+    WALL_HP: 600, // every wall is the same (no upgrades)
     WALL_GATE_COST: 40,
     WALL_REFUND: 0.6, // gold back when a wall is knocked down or ends up inside your land
     WALL_SOLDIER_BONUS: 2, // soldiers hit walls this many times harder

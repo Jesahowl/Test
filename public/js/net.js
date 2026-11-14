@@ -180,7 +180,7 @@ function applyState(msg) {
   for (const [id, p] of np) players.set(id, p);
 
   S.walls = merge(S.walls, msg.walls, (a, old) => {
-    const w = { id: a[0], a: a[1], b: a[2], owner: a[3], level: a[4], hp: a[5], maxHp: a[6], gate: !!a[7] };
+    const w = { id: a[0], a: a[1], b: a[2], owner: a[3], hp: a[4], maxHp: a[5], gate: !!a[6] };
     if (old && old.a === w.a && old.b === w.b) {
       w.ends = old.ends;
       w.x = old.x;

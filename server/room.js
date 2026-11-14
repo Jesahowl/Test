@@ -240,7 +240,6 @@ class Room {
         return game.lastWalls ? null : err;
       }
       case 'wall':
-        if (msg.op === 'up') return game.upgradeWall(client.pid, Number(msg.id));
         if (msg.op === 'gate') return game.toggleGate(client.pid, Number(msg.id));
         if (msg.op === 'down') return game.demolishWall(client.pid, Number(msg.id));
         return null;

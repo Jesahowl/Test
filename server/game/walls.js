@@ -3,7 +3,7 @@
 // Walls on the edges between hexes, along a player's border.
 // - A wall sits between one of its owner's hexes and a hex that isn't theirs. It blocks everyone's
 //   troops and caravans (its owner's too) unless it is a gate: gates let their owner's and allies'
-//   troops and caravans through. Three tiers: palisade, stone, rune wall.
+//   troops and caravans through. Every wall is the same strength (no upgrades).
 // - Hostile troops break through: crossing a hostile wall costs their pathfinding extra (by its HP),
 //   so they go round when there's a reasonable way, and a troop that walks into one hacks at it.
 //   Soldiers hit walls harder.
@@ -15,7 +15,7 @@ const { C, Path, round2 } = require('./common');
 
 module.exports = {
   initWalls() {
-    this.walls = new Map(); // id -> { isWall, id, owner, a, b, level, hp, maxHp, gate, x, y }
+    this.walls = new Map(); // id -> { isWall, id, owner, a, b, hp, maxHp, gate, x, y }
     this.wallAt = new Map(); // edge key -> wall
     this.wallsTerrVersion = -1;
     this.wallBroken = new Map(); // edge key -> when a wall there was knocked down by enemies
@@ -89,13 +89,13 @@ module.exports = {
     return this.lastWalls ? null : reason || 'No wall built';
   },
 
-  addWall(pid, a, b, level = 1) {
+  addWall(pid, a, b) {
     const id = this.nextId++;
     const ha = this.hex.hexes[a];
     const hb = this.hex.hexes[b];
-    const hp = C.WALL_HP[level - 1];
+    const hp = C.WALL_HP;
     const w = {
-      isWall: true, id, owner: pid, a: Math.min(a, b), b: Math.max(a, b), level, hp, maxHp: hp, gate: false,
+      isWall: true, id, owner: pid, a: Math.min(a, b), b: Math.max(a, b), hp, maxHp: hp, gate: false,
       x: (ha.cx + hb.cx) / 2, y: (ha.cy + hb.cy) / 2, // the middle of the edge
     };
     this.walls.set(id, w);
@@ -110,27 +110,9 @@ module.exports = {
     this.structVersion++;
   },
 
-  // Gold put into a wall: the segment, its upgrades and its gate.
+  // Gold put into a wall: the segment and its gate.
   wallSpent(w) {
-    let g = C.WALL_COST;
-    for (let l = 1; l < w.level; l++) g += C.WALL_UPGRADE[l - 1];
-    return g + (w.gate ? C.WALL_GATE_COST : 0);
-  },
-
-  upgradeWall(pid, id) {
-    const p = this.players.get(pid);
-    const w = this.walls.get(id);
-    if (!p || !p.alive || !w || w.owner !== pid) return 'Invalid upgrade';
-    if (w.level >= C.WALL_HP.length) return 'Already a rune wall';
-    const cost = C.WALL_UPGRADE[w.level - 1];
-    if (p.gold < cost) return 'Not enough gold';
-    p.gold -= cost;
-    w.level++;
-    const hp = C.WALL_HP[w.level - 1];
-    w.hp += hp - w.maxHp;
-    w.maxHp = hp;
-    this.structVersion++;
-    return null;
+    return C.WALL_COST + (w.gate ? C.WALL_GATE_COST : 0);
   },
 
   // Turn a wall into a gate (costs WALL_GATE_COST), or a gate back into a plain wall (free).

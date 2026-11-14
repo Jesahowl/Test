@@ -228,7 +228,6 @@ window.addEventListener('keydown', (e) => {
   const m = /^Digit([1-9])$/.exec(e.code);
   if (m) squadKey(Number(m[1]), e.shiftKey);
   if (k === 'u' && S.selectedId) sendMsg({ t: 'upgrade', id: S.selectedId });
-  if (k === 'u' && S.selWall) sendMsg({ t: 'wall', op: 'up', id: S.selWall });
   if ((k === 'delete' || k === 'backspace') && S.selWall && S.walls.get(S.selWall)?.owner === S.myId) sendMsg({ t: 'wall', op: 'down', id: S.selWall });
   if ((k === 'delete' || k === 'backspace') && S.selectedId) {
     const t = S.towers.get(S.selectedId);

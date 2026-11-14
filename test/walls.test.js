@@ -17,7 +17,7 @@ function border(g, p) {
 
 const hexOf = (g, x, y) => g.hex.tileHex[g.idx(Math.floor(x), Math.floor(y))];
 
-test('walls go on your border only, cost gold, and upgrade through three tiers', () => {
+test('walls go on your border only and cost gold', () => {
   const { g, a, b } = duel(70);
   const edges = border(g, a);
   const gold = a.gold;
@@ -31,11 +31,7 @@ test('walls go on your border only, cost gold, and upgrade through three tiers',
   assert.notStrictEqual(g.buildWalls(a.id, [border(g, b)[0]]), null);
   assert.notStrictEqual(g.buildWalls(a.id, [edges[0]]), null);
   const w = [...g.walls.values()][0];
-  assert.strictEqual(w.maxHp, C.WALL_HP[0]);
-  assert.strictEqual(g.upgradeWall(a.id, w.id), null);
-  assert.strictEqual(g.upgradeWall(a.id, w.id), null);
-  assert.strictEqual(w.maxHp, C.WALL_HP[2]);
-  assert.notStrictEqual(g.upgradeWall(a.id, w.id), null, 'rune is the top tier');
+  assert.strictEqual(w.maxHp, C.WALL_HP);
 });
 
 test('a walled-in core holds until attackers break through the wall', () => {

@@ -7,7 +7,6 @@ import { sendMsg } from './net.js';
 import { S, $, C, colorOf, ctx, explored, HEX, mouse, players, scale, terr, toScreen } from './state.js';
 import { iconURL } from './ui.js';
 
-const TIER = ['Light wall', 'Strong wall', 'Rune wall'];
 
 S.walls = new Map();
 S.wallDrag = null; // { list: [[a, b]...], set: Set of keys } while dragging
@@ -90,8 +89,8 @@ function wallUp() {
 
 // ---- drawing
 
-// Height of a wall of this tier on screen (s = pixels per tile).
-const wallHeight = (level, s) => s * [0.42, 0.62, 0.82][level - 1];
+// Height of a wall on screen (s = pixels per tile).
+const wallHeight = (s) => s * 0.6;
 
 // Join wall segments ({ A, B, w }, A/B world points) that meet end to end into runs, each segment
 // turned to face along its run. Only segments with the same owner join (a border's walls never meet
@@ -137,8 +136,8 @@ function chainsOf(items) {
 }
 
 // One run of wall: the border lifted up into a see-through band of light in its owner's colour,
-// taller and brighter for each tier. The face is filled segment by segment (they meet edge to
-// edge), and the top is ONE line through the whole run, stepping up or down where the tier changes,
+// all one height. The face is filled segment by segment (they meet edge to edge), and the top is
+// ONE line through the whole run,
 // so the run reads as a single wall. A gate is part of the same line: its face is left almost clear,
 // the ground under it dashed, with a bright post at each end.
 function drawRun(run, s, now, ghost) {
@@ -147,8 +146,8 @@ function drawRun(run, s, now, ghost) {
   const P = run.map(({ A, B, w }) => {
     const a = toScreen(A[0], A[1]);
     const b = toScreen(B[0], B[1]);
-    const h = wallHeight(w.level, s);
-    const pulse = w.level === 3 ? 0.85 + 0.15 * Math.sin(now / 450 + w.id) : 1;
+    const h = wallHeight(s);
+    const pulse = 1;
     return { a, b, h, w, pulse, dmg: w.maxHp ? 1 - w.hp / w.maxHp : 0 };
   });
   ctx.save();
@@ -158,8 +157,8 @@ function drawRun(run, s, now, ghost) {
   // faces
   for (const { a, b, h, w, pulse } of P) {
     const g = ctx.createLinearGradient(0, Math.max(a[1], b[1]), 0, Math.min(a[1], b[1]) - h);
-    g.addColorStop(0, colorOf(owner, 60, (w.gate ? 0.05 : 0.14 + w.level * 0.11) * pulse));
-    g.addColorStop(1, colorOf(owner, 70, (w.gate ? 0.02 : 0.04 + w.level * 0.08) * pulse));
+    g.addColorStop(0, colorOf(owner, 60, (w.gate ? 0.05 : 0.3) * pulse));
+    g.addColorStop(1, colorOf(owner, 70, (w.gate ? 0.02 : 0.12) * pulse));
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.moveTo(a[0], a[1]);
@@ -196,9 +195,8 @@ function drawRun(run, s, now, ghost) {
     const loop = P.length > 2 && Math.hypot(first.a[0] - last.b[0], first.a[1] - last.b[1]) < 0.5;
     if (loop) ctx.lineTo(first.a[0], first.a[1] - first.h);
   };
-  const lvl = Math.max(...P.map((p) => p.w.level));
   ctx.strokeStyle = colorOf(owner, 70, 0.25);
-  ctx.lineWidth = Math.max(5, s * (0.3 + lvl * 0.04));
+  ctx.lineWidth = Math.max(5, s * 0.36);
   topPath();
   ctx.stroke();
   ctx.strokeStyle = colorOf(owner, 80, 0.75);
@@ -209,16 +207,8 @@ function drawRun(run, s, now, ghost) {
   ctx.lineWidth = Math.max(1, s * 0.05);
   topPath();
   ctx.stroke();
-  // per segment: rune walls pulse brighter along their top, battered walls flicker dark
+  // per segment: battered walls flicker dark along their top
   for (const { a, b, h, w, pulse, dmg } of P) {
-    if (w.level === 3 && !w.gate) {
-      ctx.strokeStyle = colorOf(owner, 92, 0.6 * pulse);
-      ctx.lineWidth = Math.max(1.5, s * 0.09);
-      ctx.beginPath();
-      ctx.moveTo(a[0], a[1] - h);
-      ctx.lineTo(b[0], b[1] - h);
-      ctx.stroke();
-    }
     if (dmg > 0.5) {
       ctx.strokeStyle = `rgba(13, 17, 23, ${0.55 * Math.abs(Math.sin(now / 90 + w.id))})`;
       ctx.lineWidth = Math.max(2.5, s * 0.17);
@@ -291,9 +281,9 @@ function drawWalls() {
       if (w.hp < w.maxHp || hovered || w.id === S.selWall) {
         const bw = s * 0.9;
         ctx.fillStyle = 'rgba(0,0,0,0.6)';
-        ctx.fillRect(mx - bw / 2, my - wallHeight(w.level, s) - s * 0.45, bw, Math.max(3, s * 0.1));
+        ctx.fillRect(mx - bw / 2, my - wallHeight(s) - s * 0.45, bw, Math.max(3, s * 0.1));
         ctx.fillStyle = w.hp / w.maxHp > 0.5 ? '#3fb950' : w.hp / w.maxHp > 0.25 ? '#d29922' : '#f85149';
-        ctx.fillRect(mx - bw / 2, my - wallHeight(w.level, s) - s * 0.45, bw * Math.max(0, w.hp / w.maxHp), Math.max(3, s * 0.1));
+        ctx.fillRect(mx - bw / 2, my - wallHeight(s) - s * 0.45, bw * Math.max(0, w.hp / w.maxHp), Math.max(3, s * 0.1));
       }
     }
   }
@@ -332,7 +322,7 @@ function drawWallMode() {
   }
   const now = performance.now();
   if (d && d.list.length) {
-    const ghost = { id: 0, owner: S.myId, level: 1, hp: 1, maxHp: 1 };
+    const ghost = { id: 0, owner: S.myId, hp: 1, maxHp: 1 };
     const items = d.list.map(([a, b]) => edgeEnds(a, b)).filter(Boolean).map((e) => ({ A: e[0], B: e[1], w: ghost }));
     for (const run of chainsOf(items)) drawRun(run, s, now, true);
   }
@@ -346,7 +336,7 @@ function drawWallMode() {
     text = gold < C.WALL_COST ? `${C.WALL_COST}g (not enough gold)` : `Wall: ${C.WALL_COST}g (drag along your border)`;
     if (gold < C.WALL_COST) color = '#ffa198';
     const e = edgeEnds(near.a, near.b);
-    if (e) drawRun([{ A: e[0], B: e[1], w: { id: 0, owner: S.myId, level: 1, hp: 1, maxHp: 1 } }], s, now, true);
+    if (e) drawRun([{ A: e[0], B: e[1], w: { id: 0, owner: S.myId, hp: 1, maxHp: 1 } }], s, now, true);
   } else if (hh >= 0) {
     text = 'Walls go on your border: drag along its edge';
     color = '#8b949e';
@@ -371,31 +361,25 @@ function wallPanel(panel, gold) {
   }
   panel.classList.remove('hidden');
   const mine = w.owner === S.myId;
-  const key = `w:${w.id}:${w.level}:${w.gate}:${w.owner}`;
-  const name = w.gate ? `gate (${TIER[w.level - 1].toLowerCase()})` : TIER[w.level - 1].toLowerCase();
+  const key = `w:${w.id}:${w.gate}:${w.owner}`;
+  const name = w.gate ? 'gate' : 'wall';
   if (panel.dataset.key !== key) {
     panel.dataset.key = key;
     const who = mine ? 'Your' : `${escapeHtml((players.get(w.owner) || { name: '?' }).name)}'s`;
-    const up = w.level < C.WALL_HP.length ? C.WALL_UPGRADE[w.level - 1] : 0;
     panel.innerHTML = `<h4><img src="${iconURL('wall')}" alt="">${who} ${name}</h4>
       <div id="sel-info" class="stats"></div>
       <div class="muted">${w.gate ? 'Opens for its owner\'s and allies\' troops and caravans; shut to everyone else.' : 'Blocks every troop and caravan, its owner\'s too: add a gate to let your side through.'}</div>
       ${mine ? `<div class="btns">
-        <button id="wall-up" class="primary" data-tip="${up ? `${TIER[w.level]}: ${C.WALL_HP[w.level]} HP <kbd>U</kbd>` : 'Already the strongest wall'}">${up ? `▲ ${TIER[w.level]} ${up}g` : 'Max tier'}</button>
         <button id="wall-gate" data-tip="${w.gate ? 'Back to a plain wall (free)' : `Your troops, caravans and allies can pass through: ${C.WALL_GATE_COST}g`}">${w.gate ? 'Close up gate' : `⛩ Make gate ${C.WALL_GATE_COST}g`}</button>
       </div>
       <div class="btns"><button id="wall-down" data-tip="Knock it down for ${Math.round(C.WALL_REFUND * 100)}% of its cost back <kbd>Del</kbd>">Knock down</button></div>` : '<div class="muted">Troops that walk into it hack at it. Soldiers hit walls twice as hard.</div>'}`;
     if (mine) {
-      $('wall-up').onclick = () => sendMsg({ t: 'wall', op: 'up', id: w.id });
       $('wall-gate').onclick = () => sendMsg({ t: 'wall', op: 'gate', id: w.id });
       $('wall-down').onclick = () => sendMsg({ t: 'wall', op: 'down', id: w.id });
     }
   }
-  $('sel-info').innerHTML = `<div>HP <b>${w.hp}/${w.maxHp}</b></div><div>Tier <b>${w.level}/3</b></div>`;
-  if (mine && $('wall-up')) {
-    $('wall-up').disabled = w.level >= C.WALL_HP.length || gold < C.WALL_UPGRADE[w.level - 1];
-    $('wall-gate').disabled = !w.gate && gold < C.WALL_GATE_COST;
-  }
+  $('sel-info').innerHTML = `<div>HP <b>${w.hp}/${w.maxHp}</b></div>`;
+  if (mine && $('wall-gate')) $('wall-gate').disabled = !w.gate && gold < C.WALL_GATE_COST;
   return true;
 }
 

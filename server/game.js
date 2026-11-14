@@ -191,7 +191,7 @@ class Game {
     const camps = this.camps.map((c) => [c.id, c.x, c.y, CAMP_KEYS.indexOf(c.type), c.alive ? 1 : 0,
       c.alive ? 0 : Math.max(0, Math.ceil(c.respawnAt - this.time))]);
     const walls = [];
-    for (const w of this.walls.values()) walls.push([w.id, w.a, w.b, w.owner, w.level, Math.ceil(w.hp), w.maxHp, w.gate ? 1 : 0]);
+    for (const w of this.walls.values()) walls.push([w.id, w.a, w.b, w.owner, Math.ceil(w.hp), w.maxHp, w.gate ? 1 : 0]);
     const snap = { players, towers, walls, units, creeps, camps, fx: this.fx, feed: this.feed };
     if (this.rounds) {
       snap.round = {
