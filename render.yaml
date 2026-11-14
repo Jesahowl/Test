@@ -1,0 +1,14 @@
+# Render Blueprint: one free web service running the game server.
+# See HOSTING.md for step-by-step instructions.
+services:
+  - type: web
+    name: territory-siege
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /
+    autoDeploy: true # redeploy whenever the branch is pushed to
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
