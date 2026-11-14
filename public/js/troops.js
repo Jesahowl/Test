@@ -69,16 +69,30 @@ function drawUnits(dt) {
       ctx.stroke();
     }
     const op = players.get(u.owner);
-    if (op && op.buff) {
-      // jungle buff: flickering ember aura
-      const fl = 0.5 + 0.3 * Math.sin(performance.now() / 90 + u.id);
-      ctx.fillStyle = `rgba(255, 120, 40, ${0.35 * fl})`;
+    if (op && op.buff && u.kind !== 'worker') {
+      // Warlord buff: a flickering ember glow on the ground at its feet, with a couple of sparks
+      // drifting up (troops only: workers don't fight)
+      const fl = 0.55 + 0.25 * Math.sin(now / 90 + u.id);
+      const fy = y + r * 1.25;
+      const glow = ctx.createRadialGradient(x, fy, 0, x, fy, r * 1.1);
+      glow.addColorStop(0, `rgba(255, 140, 50, ${0.8 * fl})`);
+      glow.addColorStop(1, 'rgba(255, 120, 40, 0)');
+      ctx.fillStyle = glow;
       ctx.beginPath();
-      ctx.arc(x, y, r * 1.6, 0, Math.PI * 2);
+      ctx.ellipse(x, fy, r * 1.1, r * 0.45, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = `rgba(255, 170, 60, ${fl})`;
-      ctx.lineWidth = Math.max(1.5, s * 0.05);
+      ctx.strokeStyle = `rgba(255, 160, 60, ${0.75 * fl})`;
+      ctx.lineWidth = Math.max(1.2, s * 0.04);
+      ctx.beginPath();
+      ctx.ellipse(x, fy, r * 0.9, r * 0.38, 0, 0, Math.PI * 2);
       ctx.stroke();
+      for (let k = 0; k < 2; k++) {
+        const t = ((now / 900 + u.id * 0.37 + k * 0.5) % 1);
+        ctx.fillStyle = `rgba(255, 200, 100, ${0.95 * (1 - t)})`;
+        ctx.beginPath();
+        ctx.arc(x + (k ? 1 : -1) * r * 0.7, fy - t * r * 2.2, Math.max(1.3, s * 0.05), 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     // workers bob as they hammer, chop or hoe; troops as they march
     const bob = u.working ? -Math.abs(Math.sin(now / 160 + u.id)) * r * 0.16 : u.moving ? -Math.abs(Math.sin(now / 95 + u.id)) * r * 0.12 : 0;
