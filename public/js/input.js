@@ -1,7 +1,7 @@
 // Input: mouse, keyboard, minimap and help window.
 
 import { closePause, openPause, pauseOpen } from './pause.js';
-import { pickWall, wallDown, wallMove, wallUp } from './walls.js';
+import { edgeNear, pickWall, wallAtEdge, wallDown, wallMove, wallUp } from './walls.js';
 import { closeConfirm, confirmOpen, isAlly } from './diplomacy.js';
 import { expandAll, landDown, landMove, landUp } from './land.js';
 import { cycleStance, orderAt, pickSquadOf, selectAllSquads, squadKey, toggleBuild } from './bar.js';
@@ -9,7 +9,7 @@ import { sendMsg } from './net.js';
 import { clearSelection } from './overlay.js';
 import { resize } from './render.js';
 import { join, specNext, startSpectating } from './screens.js';
-import { S, $, C, cam, canvas, keys, towerInHex, mini, mouse, players, scale, selUnits, terr, toWorld } from './state.js';
+import { S, $, C, cam, canvas, HEX, keys, towerInHex, mini, mouse, players, scale, selUnits, terr, toWorld } from './state.js';
 import { orderTargetAt } from './targets.js';
 import { hideTip } from './ui.js';
 import { setDrawer } from './dock.js';
@@ -64,11 +64,29 @@ canvas.addEventListener('mousedown', (e) => {
     return;
   }
 
+  // Left-click one of my workers: pick it (right-click then sends it to work).
+  let wk = null;
+  let wkD = 0.6;
+  for (const u of S.units.values()) {
+    if (u.owner !== S.myId || u.kind !== 'worker') continue;
+    const d = Math.hypot(u.rx - mouse.wx, u.ry - mouse.wy);
+    if (d < wkD) {
+      wkD = d;
+      wk = u;
+    }
+  }
+  if (wk) {
+    clearSelection();
+    S.selWorker = wk.id;
+    return;
+  }
+  S.selWorker = null;
+
   // Left-click a troop: pick its squad (Shift: add its squad). Otherwise select a tower or ruin.
   let hit = null;
   let hitD = 0.6;
   for (const u of S.units.values()) {
-    if (u.owner !== S.myId || u.kind === 'caravan') continue;
+    if (u.owner !== S.myId || u.kind === 'caravan' || u.kind === 'worker') continue;
     const d = Math.hypot(u.rx - mouse.wx, u.ry - mouse.wy);
     if (d < hitD) {
       hitD = d;
@@ -125,6 +143,10 @@ window.addEventListener('mouseup', (e) => {
       return;
     }
     updateMouseWorld();
+    if (S.selWorker) {
+      sendWorkerAt(mouse.wx, mouse.wy);
+      return;
+    }
     const tg = orderTargetAt(mouse.wx, mouse.wy);
     if (tg) orderAt(tg);
     else if (mouse.wx >= 0 && mouse.wy >= 0 && mouse.wx < C.MAP_W && mouse.wy < C.MAP_H) {
@@ -135,6 +157,23 @@ window.addEventListener('mouseup', (e) => {
 });
 
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// Right-click with a worker picked: put it to work on what's there (a building or wall of mine, my
+// core, a forest, or an open hex of my land). The server says if it can't.
+function sendWorkerAt(wx, wy) {
+  if (wx < 0 || wy < 0 || wx >= C.MAP_W || wy >= C.MAP_H) return;
+  let target = null;
+  const t = towerInHex(wx, wy);
+  const me = players.get(S.myId);
+  const e = edgeNear(wx, wy, 0.5);
+  const w = e && wallAtEdge(e.a, e.b);
+  if (w && w.owner === S.myId) target = { k: 'w', id: w.id };
+  else if (t && t.owner === S.myId) target = { k: 't', id: t.id };
+  else if (me && HEX.tileHex[Math.floor(wy) * C.MAP_W + Math.floor(wx)] === HEX.tileHex[me.y * C.MAP_W + me.x]) target = { k: 'c', id: S.myId };
+  else target = { k: 'h', id: HEX.tileHex[Math.floor(wy) * C.MAP_W + Math.floor(wx)] };
+  sendMsg({ t: 'work', id: S.selWorker, target });
+  S.effects.push({ k: 'ping', x: wx, y: wy, born: performance.now() });
+}
 
 // Double-click outside your land: expand your land outward all round (buying the border ring).
 canvas.addEventListener('dblclick', (e) => {
@@ -204,6 +243,8 @@ window.addEventListener('keydown', (e) => {
   if (k === 'b') toggleBuild('tower');
   if (k === 'r') toggleBuild('barracks');
   if (k === 't') toggleBuild('trade');
+  if (k === 'k') toggleBuild('workshop');
+  if (k === 'j') setDrawer('workers');
   if (k === 'v') toggleBuild('wall');
   if (k === 'l') toggleBuild('land');
   // the dock's drawers
@@ -213,7 +254,7 @@ window.addEventListener('keydown', (e) => {
   if (k === 'p') setDrawer('diplo');
   if (k === 'escape') {
     // Esc cancels what's going on; with nothing to cancel it closes the open drawer, then opens the menu
-    const busy = S.buildKind || S.selectedId || selUnits.size || S.selCaravan || S.selWall || S.landDrag || S.wallDrag;
+    const busy = S.buildKind || S.selectedId || selUnits.size || S.selCaravan || S.selWall || S.selWorker || S.landDrag || S.wallDrag;
     S.buildKind = null;
     clearSelection();
     if (!busy && S.drawer) setDrawer(null);

@@ -12,6 +12,31 @@
     // Economy: land pays a trickle; most gold comes from fighting (troop kills, jungle camps,
     // taking towers and cores - see the *_BOUNTY settings and each monster's bounty).
     START_GOLD: 200,
+    START_WOOD: 120,
+
+    // ---- Workers: they build, repair, chop wood and farm. Separate from the army (no squad, no army
+    // slots). You have BASE_WORKERS plus WORKSHOP_WORKERS per Workshop; fallen ones respawn with the
+    // troops. Each job has a priority (0 off, 1 low, 2 high): workers take the highest-priority job
+    // that has work, sharing out jobs of equal priority.
+    BASE_WORKERS: 3,
+    WORKSHOP_WORKERS: 2,
+    MAX_WORKSHOPS: 3,
+    WORKER_JOBS: ['build', 'repair', 'gather', 'farm'],
+    START_JOBS: { build: 2, repair: 2, gather: 1, farm: 1 },
+    BUILD_TIME: { tower: 20, barracks: 30, trade: 25, workshop: 15 }, // worker-seconds to put one up
+    WALL_BUILD_TIME: 3,
+    SITE_WORKERS: 3, // at most this many workers on one building site
+    SITE_START_HP: 0.1, // a site starts at this share of its HP and grows as it rises
+    REPAIR_RATE: 30, // HP a second one worker repairs...
+    REPAIR_GOLD_PER_HP: 0.05, // ...for this much gold per HP
+    REPAIR_WORKERS: 2, // at most this many on one damaged building
+    FOREST_WOOD: 200, // wood in a forest hex (it regrows slowly once chopped)
+    FOREST_REGROW: 0.4, // wood a second
+    CHOP_RATE: 0.8, // wood a second one worker chops...
+    WORKER_CARRY: 10, // ...until it carries this much back to the core or a workshop
+    TREE_WORKERS: 2, // at most this many chopping one forest hex
+    FARM_GOLD: 0.3, // gold a second each farming worker earns
+    WORKER_BOUNTY: 20, // gold for killing an enemy worker (plus any wood it carried)
     BASE_INCOME: 1.5, // gold per second
     INCOME_PER_TILE: 0.015, // extra gold per second for each owned tile...
     INCOME_FULL_TILES: 400, // ...for the first this many tiles; beyond that each tile pays
@@ -165,6 +190,7 @@
     // ---- Walls: built on the edges between your hexes and land that isn't yours. They block everyone's
     // troops and caravans; gates let yours and your allies' through.
     WALL_COST: 15,
+    WALL_WOOD: 5, // wood a wall segment takes too
     WALL_HP: 600, // every wall is the same (no upgrades)
     WALL_GATE_COST: 40,
     WALL_REFUND: 0.6, // gold back when a wall is knocked down or ends up inside your land
@@ -196,6 +222,11 @@
       },
       // Not a troop you pick: a trade post sends one along its trade route. Its stats grow with the
       // post's level; its two guards (drawn riding along) fight back with this damage and range.
+      // Not a troop either: workers (see BASE_WORKERS). They never fight.
+      worker: {
+        name: 'Worker', worker: true, hp: 160, speed: 2.6, sight: 4,
+        color: '#ffcc80', desc: 'Builds, repairs, chops wood and farms',
+      },
       caravan: {
         name: 'Caravan', caravan: true, hp: 500, range: 2.5, damage: 14, rate: 1, speed: 1.6, sight: 4,
         color: '#d9c7a0', desc: 'An ox wagon of barrels carrying trade goods to an ally. Two guards walk with it',
@@ -205,16 +236,20 @@
     // Fixed structures.
     TOWERS: {
       tower: {
-        name: 'Tower', key: 'B', cost: 120, hp: 2400, range: 5, damage: 58, dmgPerLevel: 0.2, rate: 1,
+        name: 'Tower', key: 'B', cost: 120, wood: 40, hp: 2400, range: 5, damage: 58, dmgPerLevel: 0.2, rate: 1,
         color: '#80deea', desc: 'Zaps enemy troops that come near. Build on your own land',
       },
       barracks: {
-        name: 'Barracks', key: 'R', cost: 250, hp: 1600, maxLevel: 1,
+        name: 'Barracks', key: 'R', cost: 250, wood: 80, hp: 1600, maxLevel: 1,
         color: '#9fb4c7', desc: `+4 troops in every wave, spawning here. Build on your own land`,
       },
       trade: {
-        name: 'Trade Post', key: 'T', cost: 220, hp: 900, maxLevel: 3,
+        name: 'Trade Post', key: 'T', cost: 220, wood: 60, hp: 900, maxLevel: 3,
         color: '#ffd54f', desc: 'Sends a caravan to an ally\'s trade post every 30s: you both get paid when it arrives',
+      },
+      workshop: {
+        name: 'Workshop', key: 'K', cost: 150, wood: 30, hp: 1100, maxLevel: 1,
+        color: '#ffb74d', desc: '+2 workers (they respawn here too), and a place to drop off wood',
       },
     },
 

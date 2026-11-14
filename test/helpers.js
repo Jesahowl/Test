@@ -12,13 +12,14 @@ function seeded(seed) {
 }
 
 // A game with two players far apart: rich, past spawn protection, and no automatic waves
-// (tests spawn troops themselves).
+// (tests spawn troops themselves). Buildings go up at once (no workers needed).
 function duel(seed = 1) {
-  const g = new Game({ botTarget: 0, rand: seeded(seed) });
+  const g = new Game({ botTarget: 0, rand: seeded(seed), instantBuild: true, mapSeed: seed });
   const a = g.addPlayer('A');
   const b = g.addPlayer('B');
   for (const p of [a, b]) {
     p.gold = 1e6;
+    p.wood = 1e6;
     p.spawnTime = -1000;
     p.nextWaveAt = Infinity;
   }

@@ -263,7 +263,27 @@ function drawWalls() {
   // farther (higher up) walls first so nearer ones overlap them
   list.sort((p, q) => p.ends[0][1] + p.ends[1][1] - q.ends[0][1] - q.ends[1][1]);
   const hover = S.myId && !S.buildKind ? edgeNear(mouse.wx, mouse.wy, 0.5) : null;
-  const runs = chainsOf(list.map((w) => ({ A: w.ends[0], B: w.ends[1], w })));
+  // walls still being built: a dashed line along the edge, filling in solid as workers build it
+  for (const w of list) {
+    if (!(w.progress < 1)) continue;
+    const [ax, ay] = toScreen(w.ends[0][0], w.ends[0][1]);
+    const [bx, by] = toScreen(w.ends[1][0], w.ends[1][1]);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = colorOf(w.owner, 65, 0.45);
+    ctx.lineWidth = Math.max(2, s * 0.14);
+    ctx.setLineDash([s * 0.25, s * 0.2]);
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = colorOf(w.owner, 65, 0.95);
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax + (bx - ax) * w.progress, ay + (by - ay) * w.progress);
+    ctx.stroke();
+  }
+  const runs = chainsOf(list.filter((w) => !(w.progress < 1)).map((w) => ({ A: w.ends[0], B: w.ends[1], w })));
   // farther runs first (by their lowest point) so nearer walls overlap them
   runs.sort((p, q) => Math.max(...p.map((x) => Math.max(x.A[1], x.B[1]))) - Math.max(...q.map((x) => Math.max(x.A[1], x.B[1]))));
   for (const run of runs) drawRun(run, s, now);
@@ -271,6 +291,7 @@ function drawWalls() {
     const [mx, my] = toScreen(w.x, w.y);
     if (mx < -s * 4 || my < -s * 4 || mx > ctx.canvas.width + s * 4 || my > ctx.canvas.height + s * 4) continue;
     const hovered = hover && wallAtEdge(hover.a, hover.b) === w;
+    if (w.progress < 1 && w.id !== S.selWall) continue;
     if (w.id === S.selWall || hovered || w.hp < w.maxHp) {
       if (w.id === S.selWall) {
         ctx.strokeStyle = 'rgba(255,255,255,0.9)';
@@ -398,4 +419,4 @@ function wallsBuilt(n, gold) {
   toast(`+${n} wall${n === 1 ? '' : 's'} (−${gold}g)`, true);
 }
 
-export { drawWallMode, drawWalls, pickWall, placeWall, wallDown, wallMove, wallPanel, wallUp, wallsBuilt };
+export { drawWallMode, drawWalls, edgeNear, wallAtEdge, pickWall, placeWall, wallDown, wallMove, wallPanel, wallUp, wallsBuilt };

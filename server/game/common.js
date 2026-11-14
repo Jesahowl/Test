@@ -13,7 +13,7 @@ const BOT_NAMES = [
 
 const KIND_KEYS = Object.keys(C.TOWERS);
 // troop types you can put in a wave (not caravans); ALL_UNIT_KEYS also has caravans, for snapshots
-const UNIT_KEYS = Object.keys(C.UNITS).filter((k) => !C.UNITS[k].caravan);
+const UNIT_KEYS = Object.keys(C.UNITS).filter((k) => !C.UNITS[k].caravan && !C.UNITS[k].worker);
 const ALL_UNIT_KEYS = Object.keys(C.UNITS);
 const CREEP_KEYS = Object.keys(C.CREEPS);
 const CAMP_KEYS = Object.keys(C.CAMP_TYPES);

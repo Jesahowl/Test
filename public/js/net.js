@@ -180,7 +180,7 @@ function applyState(msg) {
   for (const [id, p] of np) players.set(id, p);
 
   S.walls = merge(S.walls, msg.walls, (a, old) => {
-    const w = { id: a[0], a: a[1], b: a[2], owner: a[3], hp: a[4], maxHp: a[5], gate: !!a[6] };
+    const w = { id: a[0], a: a[1], b: a[2], owner: a[3], hp: a[4], maxHp: a[5], gate: !!a[6], progress: (a[7] ?? 100) / 100 };
     if (old && old.a === w.a && old.b === w.b) {
       w.ends = old.ends;
       w.x = old.x;
@@ -190,7 +190,8 @@ function applyState(msg) {
   });
   if (S.selWall && !S.walls.has(S.selWall)) S.selWall = null;
   S.towers = merge(S.towers, msg.towers, (a, old) => {
-    const t = { id: a[0], kind: KIND_KEYS[a[1]], x: a[2], y: a[3], owner: a[4], level: a[5], hp: a[6], maxHp: a[7], ruinOf: a[8] || '', partner: a[9] || 0, road: a[10] || null };
+    const t = { id: a[0], kind: KIND_KEYS[a[1]], x: a[2], y: a[3], owner: a[4], level: a[5], hp: a[6], maxHp: a[7], ruinOf: a[8] || '', partner: a[9] || 0, road: a[10] || null,
+      progress: (a[11] ?? 100) / 100 };
     t.ruin = !t.owner;
     if (old) {
       // remember render state: when it was last hit, when it changed hands, where its turret points
@@ -217,8 +218,9 @@ function applyState(msg) {
     const kind = ALL_UNIT_KEYS[a[1]];
     const x = a[2] / 10;
     const y = a[3] / 10;
+    const wc = a[11] || 0; // workers: job (0 idle, 1 build, 2 repair, 3 gather, 4 farm), +8 carrying wood, +16 at work
     return { id: a[0], kind, x, y, owner: a[4], level: a[5], hp: a[6], maxHp: C.towerStats(kind, a[5]).hp, anchor: a[7], attack: a[8] || '', sq: a[9] || 0, from: a[10] || 0,
-      rx: old ? old.rx : x, ry: old ? old.ry : y, samples: addSample(old, x, y) };
+      job: wc & 7, carry: !!(wc & 8), working: !!(wc & 16), rx: old ? old.rx : x, ry: old ? old.ry : y, samples: addSample(old, x, y) };
   });
   for (const u of S.units.values()) if (!moved.has(u.id)) addSample(u, u.x, u.y);
   for (const id of selUnits) if (!S.units.has(id)) selUnits.delete(id);
@@ -233,6 +235,9 @@ function applyState(msg) {
   });
   for (const c of S.creeps.values()) if (!moved.has(c.id)) addSample(c, c.x, c.y);
 
+  // Forest hexes that have been chopped: hex -> wood left in fifths (missing = full).
+  S.forestLeft = merge(S.forestLeft, msg.forest, (a) => a[1]);
+  if (S.selWorker && !S.units.has(S.selWorker)) S.selWorker = null;
   S.campMap = merge(S.campMap, msg.camps, (a) => ({ id: a[0], x: a[1], y: a[2], type: CAMP_KEYS[a[3]], alive: !!a[4], respawn: a[5] }));
   S.camps = [...S.campMap.values()];
   if (msg.exp) setExplored(msg.exp);

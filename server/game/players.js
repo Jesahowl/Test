@@ -38,13 +38,15 @@ module.exports = {
       alive: true,
       ...this.pickColour(),
       gold: C.START_GOLD,
+      wood: C.START_WOOD,
+      jobs: { ...C.START_JOBS }, // worker job priorities (see workers.js)
       core: { x: pos.x, y: pos.y, hp: C.CORE_HP, maxHp: C.CORE_HP, cd: 0 },
       territory: 0,
       peakTerritory: 0,
       kills: 0,
       coresDestroyed: 0,
       towersDestroyed: 0,
-      earned: { income: 0, troops: 0, camps: 0, towers: 0, cores: 0, trade: 0 }, // gold by source
+      earned: { income: 0, troops: 0, camps: 0, towers: 0, cores: 0, trade: 0, farm: 0 }, // gold by source
       spawnTime: this.time,
       buffUntil: 0, // jungle buff active until this time
       vis: new Uint8Array(this.w * this.h), // fog of war: what this player sees now
@@ -254,7 +256,7 @@ module.exports = {
     const defectors = conquered ? this.smallestSquad(killer) : null; // the squad they join
     for (const u of this.units.values()) {
       if (u.owner !== p.id) continue;
-      if (!conquered || u.trade) {
+      if (!conquered || u.trade || u.worker) {
         this.units.delete(u.id);
         continue;
       }

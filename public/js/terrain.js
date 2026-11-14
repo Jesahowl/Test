@@ -1,6 +1,6 @@
 // The ground: muted plains with patches of forest (little pine trees), drawn under everyone's land.
-// Purely a look for now (forests don't slow or hide troops). Where forests grow comes from the
-// round's map seed, so every player sees the same map.
+// Forests don't slow or hide troops; workers chop them for wood (each hex thins to stumps as it's
+// chopped, then grows back). Where forests grow comes from the round's map seed.
 
 import { S, C, HEX, ctx, players } from './state.js';
 
@@ -9,67 +9,53 @@ const FOREST = '#13281b';
 const TREE_DARK = '#22422b';
 const TREE_LIGHT = '#346343';
 const TREE_SHADOW = 'rgba(0,0,0,0.35)';
-const FOREST_AT = 0.64; // noise above this is forest (about one hex in six)
+const STUMP = '#4a3826';
 
-// ---- seeded value noise
-function hash(seed, x, y) {
-  let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(seed, 0x27d4eb2d);
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-}
-const smooth = (t) => t * t * (3 - 2 * t);
-function vnoise(seed, x, y) {
-  const xi = Math.floor(x);
-  const yi = Math.floor(y);
-  const xf = smooth(x - xi);
-  const yf = smooth(y - yi);
-  const a = hash(seed, xi, yi);
-  const b = hash(seed, xi + 1, yi);
-  const c = hash(seed, xi, yi + 1);
-  const d = hash(seed, xi + 1, yi + 1);
-  return a + (b - a) * xf + (c - a) * yf + (a - b - c + d) * xf * yf;
-}
-const fbm = (seed, x, y) => 0.6 * vnoise(seed, x, y) + 0.3 * vnoise(seed + 1, x * 2.1, y * 2.1) + 0.1 * vnoise(seed + 2, x * 4.3, y * 4.3);
+const { hash, isForest } = window.TD_TERRAIN; // shared with the server (shared/terrain.js)
 
 // ---- the forest, built once per map (in tile units)
 let built = null;
 
-function pine(paths, x, y, s) {
-  paths.shadow.moveTo(x + s * 0.7, y + 0.04);
-  paths.shadow.ellipse(x, y + 0.04, s * 0.7, s * 0.22, 0, 0, Math.PI * 2);
+// One small pine at (x, y), size s, as three paths (shadow, dark side, lit side).
+function pine(x, y, s) {
+  const t = { x, y, s, shadow: new Path2D(), dark: new Path2D(), light: new Path2D() };
+  t.shadow.ellipse(x, y + 0.04, s * 0.7, s * 0.22, 0, 0, Math.PI * 2);
   for (const [dy, w] of [[-s * 0.2, s * 0.75], [-s * 0.75, s * 0.55]]) {
     const top = y + dy - s * 0.9;
-    paths.dark.moveTo(x, top);
-    paths.dark.lineTo(x + w, y + dy);
-    paths.dark.lineTo(x - w, y + dy);
-    paths.dark.closePath();
-    paths.light.moveTo(x, top);
-    paths.light.lineTo(x - w, y + dy);
-    paths.light.lineTo(x - w * 0.15, y + dy);
-    paths.light.closePath();
+    t.dark.moveTo(x, top);
+    t.dark.lineTo(x + w, y + dy);
+    t.dark.lineTo(x - w, y + dy);
+    t.dark.closePath();
+    t.light.moveTo(x, top);
+    t.light.lineTo(x - w, y + dy);
+    t.light.lineTo(x - w * 0.15, y + dy);
+    t.light.closePath();
   }
+  return t;
 }
 
 function build(seed) {
   const fill = new Path2D();
-  const trees = [];
+  const forests = [];
   for (const h of HEX.hexes) {
-    if (fbm(seed, h.cx / 10, h.cy / 10) <= FOREST_AT) continue;
+    if (!isForest(seed, h)) continue;
     const cs = HEX.corners(h);
     fill.moveTo(cs[0][0], cs[0][1]);
     for (let k = 1; k < 6; k++) fill.lineTo(cs[k][0], cs[k][1]);
     fill.closePath();
-    const paths = { i: h.i, x: h.cx, y: h.cy, shadow: new Path2D(), dark: new Path2D(), light: new Path2D() };
-    // five small trees, each in its own slice of the hex, nudged a little at random
-    const spots = [[0, 0], [-1.05, -0.65], [1.05, -0.6], [-0.95, 0.8], [1.0, 0.85]].map(([dx, dy], k) => [
-      h.cx + dx + (hash(seed, h.i * 7 + k, 11) - 0.5) * 0.6,
-      h.cy + dy + (hash(seed, h.i, 91 + k) - 0.5) * 0.5 + 0.2,
-      0.38 + hash(seed, k, h.i) * 0.14]);
-    spots.sort((a, b) => a[1] - b[1]);
-    for (const [x, y, s] of spots) pine(paths, x, y, s);
-    trees.push(paths);
+    // five small trees, each in its own slice of the hex, nudged a little at random; `cut` is the
+    // order they fall in as the hex is chopped
+    const trees = [[0, 0], [-1.05, -0.65], [1.05, -0.6], [-0.95, 0.8], [1.0, 0.85]].map(([dx, dy], k) => {
+      const t = pine(h.cx + dx + (hash(seed, h.i * 7 + k, 11) - 0.5) * 0.6, h.cy + dy + (hash(seed, h.i, 91 + k) - 0.5) * 0.5 + 0.2, 0.38 + hash(seed, k, h.i) * 0.14);
+      t.cut = hash(seed, h.i, 400 + k);
+      return t;
+    });
+    const order = [...trees].sort((a, b) => a.cut - b.cut);
+    order.forEach((t, n) => { t.rank = n; }); // trees with rank >= wood left are gone
+    trees.sort((a, b) => a.y - b.y);
+    forests.push({ i: h.i, x: h.cx, y: h.cy, trees });
   }
-  return { seed, fill, trees };
+  return { seed, fill, forests };
 }
 
 // Draw the ground under the map rectangle at screen (ox, oy), s pixels per tile.
@@ -95,14 +81,25 @@ function drawTerrain(ox, oy, s) {
     const y0 = -oy / s - 3;
     const x1 = x0 + ctx.canvas.width / s + 6;
     const y1 = y0 + ctx.canvas.height / s + 6;
-    for (const t of built.trees) {
-      if (t.x < x0 || t.x > x1 || t.y < y0 || t.y > y1 || taken.has(t.i)) continue;
-      ctx.fillStyle = TREE_SHADOW;
-      ctx.fill(t.shadow);
-      ctx.fillStyle = TREE_DARK;
-      ctx.fill(t.dark);
-      ctx.fillStyle = TREE_LIGHT;
-      ctx.fill(t.light);
+    for (const f of built.forests) {
+      if (f.x < x0 || f.x > x1 || f.y < y0 || f.y > y1 || taken.has(f.i)) continue;
+      const left = S.forestLeft.has(f.i) ? S.forestLeft.get(f.i) : 5; // trees still standing
+      for (const t of f.trees) {
+        if (t.rank >= left) {
+          // chopped: a stump
+          ctx.fillStyle = STUMP;
+          ctx.beginPath();
+          ctx.ellipse(t.x, t.y - 0.05, t.s * 0.22, t.s * 0.12, 0, 0, Math.PI * 2);
+          ctx.fill();
+          continue;
+        }
+        ctx.fillStyle = TREE_SHADOW;
+        ctx.fill(t.shadow);
+        ctx.fillStyle = TREE_DARK;
+        ctx.fill(t.dark);
+        ctx.fillStyle = TREE_LIGHT;
+        ctx.fill(t.light);
+      }
     }
   }
   ctx.restore();

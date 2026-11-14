@@ -25,6 +25,15 @@ module.exports = {
       return;
     }
     const p = this.players.get(byPid);
+    if (u.worker) {
+      // a raided worker: a little gold, and the wood it was carrying
+      if (p && p.alive && byPid !== u.owner) {
+        this.award(p, C.WORKER_BOUNTY, 'troops', u.x, u.y);
+        p.wood += Math.floor(u.carry || 0);
+        p.kills++;
+      }
+      return;
+    }
     if (p && p.alive && byPid !== u.owner) {
       this.award(p, C.TROOP_BOUNTY + C.TROOP_BOUNTY_PER_LEVEL * (u.level - 1), 'troops', u.x, u.y);
       p.kills++;
@@ -108,7 +117,7 @@ module.exports = {
   updateStructures(dt) {
     const shooters = [];
     for (const t of this.towers.values()) {
-      if (!t.owner) continue;
+      if (!t.owner || t.progress < 1) continue; // building sites don't shoot
       const s = C.towerStats(t.kind, t.level);
       if (!s.damage) continue; // barracks don't shoot
       shooters.push({ obj: t, x: t.x + 0.5, y: t.y + 0.5, owner: t.owner, range: s.range, damage: s.damage, rate: s.rate });

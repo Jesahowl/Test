@@ -11,7 +11,7 @@ const C = TD_CONFIG;
 const KIND_KEYS = Object.keys(C.TOWERS);
 
 // troop types you can put in a wave (not caravans); ALL_UNIT_KEYS also has caravans, for snapshots
-const UNIT_KEYS = Object.keys(C.UNITS).filter((k) => !C.UNITS[k].caravan);
+const UNIT_KEYS = Object.keys(C.UNITS).filter((k) => !C.UNITS[k].caravan && !C.UNITS[k].worker);
 const ALL_UNIT_KEYS = Object.keys(C.UNITS);
 
 const CREEP_KEYS = Object.keys(C.CREEPS);
@@ -58,6 +58,8 @@ S.creeps = new Map(); // id -> jungle monster (with rx/ry render positions)
 S.camps = [];
 
 S.campMap = new Map();
+S.forestLeft = new Map(); // chopped forest hexes: hex -> wood left in fifths
+S.selWorker = null; // the worker picked (right-click sends it to work)
 
 S.effects = [];
 
@@ -93,7 +95,7 @@ function hexSpot(tx, ty) {
 // base (rune circle) sits right on the hex centre.
 function baseLift(kind, level = 1) {
   if (kind === 'core') return 0.375;
-  if (kind === 'barracks' || kind === 'trade') return 0.576;
+  if (kind === 'barracks' || kind === 'trade' || kind === 'workshop') return 0.576;
   if (kind === 'tower') return 0.396 * (1 + 0.07 * (level - 1));
   return 0;
 }

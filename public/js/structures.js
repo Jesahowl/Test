@@ -553,6 +553,121 @@ function drawRuin(t, x, y, s) {
   ctx.globalAlpha = 1;
 }
 
+// A workshop: a timber hut with a roof stripe in the owner's colour, a cog sign and a log pile.
+function drawWorkshopSprite(t, x, y, s, now) {
+  const r = s * 0.78;
+  const by = r * 0.72; // ground level
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(r * 0.1, by, r * 1.3, r * 0.42, 0, 0, Math.PI * 2);
+  ctx.fill();
+  runeEllipse(0, by, r * 1.3, r * 0.48, t.owner, now / 3500 + t.id, 0.7);
+  const lw = Math.max(1, s * 0.03);
+  ctx.lineWidth = lw;
+  ctx.strokeStyle = '#22272d';
+  // log pile on the right
+  for (const [lx, ly] of [[0.75, 0.58], [1.0, 0.58], [0.87, 0.42]]) {
+    ctx.fillStyle = '#7a5535';
+    ctx.beginPath();
+    ctx.ellipse(r * lx, by - r * (0.72 - ly) - r * 0.08, r * 0.14, r * 0.12, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#c49a6c';
+    ctx.beginPath();
+    ctx.ellipse(r * lx, by - r * (0.72 - ly) - r * 0.08, r * 0.07, r * 0.06, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // timber walls
+  const wTop = -r * 0.15;
+  const wL = -r * 0.95;
+  const wR = r * 0.55;
+  ctx.fillStyle = '#7a5535';
+  ctx.fillRect(wL, wTop, wR - wL, by - wTop);
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let xx = wL + r * 0.25; xx < wR; xx += r * 0.25) {
+    ctx.moveTo(xx, wTop);
+    ctx.lineTo(xx, by);
+  }
+  ctx.stroke();
+  ctx.lineWidth = lw;
+  ctx.strokeStyle = '#22272d';
+  ctx.strokeRect(wL, wTop, wR - wL, by - wTop);
+  // big door
+  ctx.fillStyle = '#2b1d12';
+  ctx.fillRect(-r * 0.55, by - r * 0.55, r * 0.5, r * 0.55);
+  // roof, with a stripe in the owner's colour
+  ctx.fillStyle = '#5c3f27';
+  ctx.beginPath();
+  ctx.moveTo(wL - r * 0.15, wTop);
+  ctx.lineTo(wL + r * 0.2, -r * 0.65);
+  ctx.lineTo(wR - r * 0.2, -r * 0.65);
+  ctx.lineTo(wR + r * 0.15, wTop);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = colorOf(t.owner, 60, 0.95);
+  ctx.fillRect(wL - r * 0.05, wTop - r * 0.12, wR - wL + r * 0.1, r * 0.1);
+  // cog sign over the door
+  const cx = -r * 0.3;
+  const cy = -r * 0.42;
+  ctx.fillStyle = '#b9c2cc';
+  ctx.beginPath();
+  for (let k = 0; k < 16; k++) {
+    const a = (k / 16) * Math.PI * 2;
+    const rr = k % 2 ? r * 0.17 : r * 0.12;
+    ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#5c3f27';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.05, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// A building site: the building rises from the ground as it's built (a faint outline of the rest),
+// with wooden scaffolding round it and a progress bar.
+function drawSite(t, x, y, s, now, draw) {
+  const p = Math.max(0, Math.min(1, t.progress));
+  const ground = y + s * 0.6;
+  const height = s * 2.2;
+  ctx.save();
+  ctx.globalAlpha = 0.22;
+  draw();
+  ctx.restore();
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x - s * 2, ground - height * p, s * 4, height * p + s);
+  ctx.clip();
+  draw();
+  ctx.restore();
+  // scaffolding
+  ctx.strokeStyle = '#8a6a48';
+  ctx.lineWidth = Math.max(1, s * 0.05);
+  ctx.beginPath();
+  for (const dx of [-0.85, 0, 0.85]) {
+    ctx.moveTo(x + dx * s, ground);
+    ctx.lineTo(x + dx * s, ground - height * 0.85);
+  }
+  for (const f of [0.3, 0.6]) {
+    ctx.moveTo(x - 0.95 * s, ground - height * f);
+    ctx.lineTo(x + 0.95 * s, ground - height * f);
+  }
+  ctx.stroke();
+  // progress bar
+  const w = s * 1.4;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(x - w / 2, ground + s * 0.12, w, 5);
+  ctx.fillStyle = '#f2c14e';
+  ctx.fillRect(x - w / 2, ground + s * 0.12, w * p, 5);
+}
+
 function drawTowers(dt) {
   const s = scale();
   const now = performance.now();
@@ -592,9 +707,14 @@ function drawTowers(dt) {
     ctx.beginPath();
     ctx.ellipse(x, gy, s * 1.4, s * 0.75, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (t.kind === 'barracks') drawBarracksSprite(t, x, y, s, now);
-    else if (t.kind === 'trade') drawTradeSprite(t, x, y, s, now);
-    else drawTowerSprite(t, x, y, s, now);
+    const draw = () => {
+      if (t.kind === 'barracks') drawBarracksSprite(t, x, y, s, now);
+      else if (t.kind === 'trade') drawTradeSprite(t, x, y, s, now);
+      else if (t.kind === 'workshop') drawWorkshopSprite(t, x, y, s, now);
+      else drawTowerSprite(t, x, y, s, now);
+    };
+    if (t.progress < 1) drawSite(t, x, y, s, now, draw);
+    else draw();
     structBar(t, x, y - r * (t.kind === 'tower' ? 2.1 : 1.4), s * 1.0, now, t.id === S.selectedId || t.id === hover, dt);
   }
 }

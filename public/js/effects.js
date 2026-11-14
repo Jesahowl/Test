@@ -261,6 +261,19 @@ function drawEffects(now) {
         if (f.o === S.myId) label('EMPOWERED!', x, y - s * (1.6 + p * 1.5), Math.max(13, Math.round(s * 0.6)), '#ffab40');
         break;
       }
+      case 'built': {
+        // a building finished: a puff of golden sparks
+        const [x, y] = toScreen(f.x, f.y);
+        const p = Math.min(1, age / 0.45);
+        ctx.fillStyle = `rgba(242, 193, 78, ${0.9 * (1 - p)})`;
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.arc(x + Math.cos(a) * s * (0.4 + p * 1.2), y - s * 0.4 + Math.sin(a) * s * (0.3 + p * 0.8), Math.max(1.5, s * 0.07), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+      }
       case 'wave': {
         const [x, y] = toScreen(f.x, f.y);
         const p = age / 0.7;

@@ -13,7 +13,7 @@ module.exports = {
   // ---- army size and squad mixes
 
   armySize(p) {
-    return C.armySize(p.territory, this.countOwned(p.id, 'barracks'));
+    return C.armySize(p.territory, this.countBuilt(p.id, 'barracks'));
   },
 
   mixSlots(mix) {
@@ -292,7 +292,7 @@ module.exports = {
   // How many of each kind squad q is missing (its mix minus its living troops).
   missingOf(p, q) {
     const alive = {};
-    for (const u of this.units.values()) if (u.owner === p.id && u.sq === q.id && !u.trade) alive[u.kind] = (alive[u.kind] || 0) + 1;
+    for (const u of this.units.values()) if (u.owner === p.id && u.sq === q.id && !u.trade && !u.worker) alive[u.kind] = (alive[u.kind] || 0) + 1;
     const out = [];
     for (const k of UNIT_KEYS) for (let i = alive[k] || 0; i < (q.mix[k] || 0); i++) out.push(k);
     return out;
@@ -303,9 +303,10 @@ module.exports = {
   // Never more troops alive than the army size (extra troops, e.g. defectors, count too).
   spawnWave(p) {
     this.tidySquadOrders(p);
+    this.spawnWorkers(p);
     let room = this.armySize(p);
-    for (const u of this.units.values()) if (u.owner === p.id && !u.trade) room -= C.slotsOf(u.kind);
-    const barracks = [...this.towers.values()].filter((t) => t.owner === p.id && t.kind === 'barracks')
+    for (const u of this.units.values()) if (u.owner === p.id && !u.trade && !u.worker) room -= C.slotsOf(u.kind);
+    const barracks = [...this.towers.values()].filter((t) => t.owner === p.id && t.kind === 'barracks' && !(t.progress < 1))
       .sort((a, b) => a.id - b.id).slice(0, C.MAX_BARRACKS);
     const spots = [null, ...barracks];
     let spawned = 0;

@@ -6,6 +6,7 @@
 //   medic:   Field nurse (white cap and tunic with crosses, healing staff)
 //   archer:  Hunter (felt hat with a feather, short bow)
 //   caravan: Ox wagon (an open wagon of barrels behind a horned ox)
+//   worker:  hard hat and apron, with a hammer / wrench / axe / hoe for its job
 // Troops are drawn from a cache of little pre-drawn images (one per type, colour and zoom).
 
 import { colorOf } from './state.js';
@@ -195,6 +196,80 @@ const FIGURES = {
   }),
 };
 
+// Workers: a hard hat (a straw hat when farming), an apron, and the tool for the job: a hammer to
+// build, a wrench to repair, an axe to chop (with logs on the back when carrying wood), a hoe to farm.
+function workerFigure(T, job, carry) {
+  const farming = job === 4;
+  body(T, {
+    back: carry ? () => {
+      for (const [y, l] of [[-0.18, 0.95], [0.02, 0.85]]) {
+        g.save();
+        g.translate(-0.42, y);
+        g.rotate(-0.35);
+        rr(-l / 2, -0.1, l, 0.2, 0.1);
+        fillOut('#8a5a32');
+        circ(l / 2 - 0.04, 0, 0.07);
+        fillOut('#c49a6c');
+        g.restore();
+      }
+    } : null,
+    head() {
+      if (farming) {
+        ell(0, -0.86, 0.78, 0.15);
+        fillOut('#d9b25f');
+        begin();
+        g.arc(0, -0.9, 0.38, Math.PI, 0);
+        g.closePath();
+        fillOut('#d9b25f');
+        g.fillStyle = T.c;
+        g.fillRect(-0.38, -0.97, 0.76, 0.08);
+      } else {
+        begin();
+        g.arc(0, -0.62, 0.55, Math.PI, 0);
+        g.closePath();
+        fillOut('#f2c14e');
+        rr(-0.62, -0.68, 1.24, 0.1, 0.05);
+        fillOut('#f2c14e');
+        g.fillStyle = T.c;
+        g.fillRect(-0.53, -0.82, 1.06, 0.1);
+      }
+    },
+    front() {
+      // apron
+      rr(-0.3, 0.05, 0.6, 0.6, 0.12);
+      fillOut('#8a6a48');
+      if (job === 1) {
+        // hammer
+        outlined([[0.6, 0.45], [0.6, -0.35]], WOOD, 0.08);
+        rr(0.42, -0.5, 0.36, 0.18, 0.04);
+        fillOut(METAL_D);
+      } else if (job === 2) {
+        // wrench
+        outlined([[0.6, 0.45], [0.6, -0.25]], METAL, 0.09);
+        circ(0.6, -0.35, 0.14);
+        fillOut(METAL);
+        circ(0.6, -0.42, 0.06);
+        g.fillStyle = '#1b1f27';
+        g.fill();
+      } else if (job === 3) {
+        // axe
+        outlined([[0.58, 0.5], [0.58, -0.45]], WOOD, 0.08);
+        begin();
+        g.moveTo(0.58, -0.45);
+        g.quadraticCurveTo(0.95, -0.42, 0.9, -0.12);
+        g.lineTo(0.58, -0.18);
+        g.closePath();
+        fillOut(METAL);
+      } else if (job === 4) {
+        // hoe
+        outlined([[0.62, 0.8], [0.62, -0.8]], WOOD, 0.08);
+        rr(0.38, -0.88, 0.3, 0.12, 0.03);
+        fillOut(METAL_D);
+      }
+    },
+  });
+}
+
 // The colours a player's troops are dressed in.
 function teamOf(owner) {
   return { c: colorOf(owner, 55), d: colorOf(owner, 32), l: colorOf(owner, 80) };
@@ -212,7 +287,8 @@ function teamFromHex(hex) {
 
 // Draw troop `kind` on context `ctx` with its feet's centre near (x, y), k pixels per unit.
 function drawFigure(ctx, kind, x, y, k, T, face = 1) {
-  const fn = FIGURES[kind];
+  // workers come as 'worker<job>' or 'worker<job>c' (carrying wood)
+  const fn = kind.startsWith('worker') ? (t) => workerFigure(t, Number(kind[6]) || 0, kind.endsWith('c')) : FIGURES[kind];
   if (!fn) return;
   const prevG = g;
   g = ctx;

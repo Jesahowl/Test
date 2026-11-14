@@ -36,6 +36,7 @@
             <button id="tower-button" class="tile"></button>
             <button id="barracks-button" class="tile"></button>
             <button id="trade-button" class="tile"></button>
+            <button id="workshop-button" class="tile"></button>
             <button id="wall-button" class="tile"></button>
             <button id="land-button" class="tile"></button>
           </div>
@@ -56,6 +57,11 @@
             </div>
           </div>
         </section>
+        <section class="dr" data-dr="workers">
+          <div class="dr-head"><b>Workers</b><span class="muted" id="workers-hint"></span></div>
+          <div id="jobs"></div>
+          <div class="muted small-note">Click a worker, then right-click a building site, a damaged building, a forest or your land to send it there.</div>
+        </section>
         <section class="dr" data-dr="diplo">
           <div class="dr-head"><b>Diplomacy</b><span class="muted" id="diplo-hint"></span></div>
           <div id="diplo"></div>
@@ -66,6 +72,7 @@
         <button class="dock-btn" data-dr="army" data-tip="Level up your troop types and see who's respawning <kbd>X</kbd>">Army<kbd>X</kbd></button>
         <div id="wave-timer" data-tip="Every 20 seconds, fallen troops respawn and rejoin their squads"></div>
         <button class="dock-btn" data-dr="squads" data-tip="Your four squads: their troops, stance and orders <kbd>C</kbd>">Squads<kbd>C</kbd><span class="badge hot" id="squads-badge" data-tip="Free troop slots: add troops to a squad"></span></button>
+        <button class="dock-btn" data-dr="workers" data-tip="Workers: what they build, repair, chop and farm <kbd>J</kbd>">Workers<kbd>J</kbd><span class="badge" id="workers-badge"></span></button>
         <button class="dock-btn" data-dr="diplo" data-tip="Alliances: offer, accept or break <kbd>P</kbd>">Diplomacy<kbd>P</kbd><span class="badge hot" id="diplo-badge"></span></button>
       </div>
     </div>
@@ -108,6 +115,8 @@
         <div><kbd>Double-click</kbd> outside your land<span>Grow your land one hex outward all round</span></div>
         <div><kbd>B</kbd><span>Build a tower</span></div>
         <div><kbd>R</kbd><span>Build a barracks</span></div>
+        <div><kbd>K</kbd><span>Build a workshop (+2 workers)</span></div>
+        <div><kbd>J</kbd><span>Workers: job priorities</span></div>
         <div><kbd>U</kbd> / <kbd>Del</kbd><span>Upgrade / sell selected building</span></div>
         <div><kbd>WASD</kbd><span>Move camera (or right-drag)</span></div>
         <div><kbd>Wheel</kbd><span>Zoom</span></div>
@@ -198,6 +207,7 @@
   <script src="shared/config.js"></script>
   <script src="shared/vision.js"></script>
   <script src="shared/hex.js"></script>
+  <script src="shared/terrain.js"></script>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

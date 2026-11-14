@@ -76,8 +76,27 @@ module.exports = {
       this.botBuyLand(p, n);
     }
 
+    // Workers: chop wood first when short of it, and put up a workshop or two for more workers.
+    // (short of wood: chopping comes first; plenty of it: farming gold does)
+    const gather = p.wood < 90 ? 2 : p.wood > 300 ? 0 : 1;
+    const farm = p.wood > 300 ? 2 : 1;
+    if (p.jobs.gather !== gather) this.setJobPriority(p.id, 'gather', gather);
+    if (p.jobs.farm !== farm) this.setJobPriority(p.id, 'farm', farm);
+    const shops = structures.filter((t) => t.kind === 'workshop').length;
+    if (towers.length >= 1 && shops < Math.min(C.MAX_WORKSHOPS, 1 + Math.floor(age / 300)) && p.gold >= C.TOWERS.workshop.cost + 60
+      && p.wood >= C.TOWERS.workshop.wood && roll < 0.5) {
+      for (let i = 0; i < 25; i++) {
+        const ang = this.rand() * Math.PI * 2;
+        const r = 2 + this.rand() * 3;
+        const x = Math.round(p.core.x + Math.cos(ang) * r);
+        const y = Math.round(p.core.y + Math.sin(ang) * r);
+        if (this.inBounds(x, y) && this.build(p.id, x, y, 'workshop') === null) break;
+      }
+      return;
+    }
+
     // Trade: with an ally, put up a trade post near the core (the route opens by itself).
-    if (wantTrade && p.gold >= C.TOWERS.trade.cost && roll < 0.7) {
+    if (wantTrade && p.gold >= C.TOWERS.trade.cost && p.wood >= C.TOWERS.trade.wood && roll < 0.7) {
       for (let i = 0; i < 25; i++) {
         const ang = this.rand() * Math.PI * 2;
         const r = 3 + this.rand() * 3;
@@ -89,7 +108,7 @@ module.exports = {
     }
 
     // Defend: towers inside the land, towards the border.
-    if (!this.suddenDeath() && towers.length < Math.min(5, 1 + Math.floor(age / 60)) && p.gold >= C.TOWERS.tower.cost + 40 + (wantTrade ? C.TOWERS.trade.cost : 0) && roll < 0.4) {
+    if (!this.suddenDeath() && towers.length < Math.min(5, 1 + Math.floor(age / 60)) && p.gold >= C.TOWERS.tower.cost + 40 + (wantTrade ? C.TOWERS.trade.cost : 0) && p.wood >= C.TOWERS.tower.wood && roll < 0.4) {
       const bases = [p.core, ...towers];
       const base = bases[Math.floor(this.rand() * bases.length)];
       for (let i = 0; i < 30; i++) {
@@ -104,7 +123,7 @@ module.exports = {
 
     // Bigger waves: build barracks near the core once a couple of towers are up.
     const bCost = C.buildCost('barracks', barracks);
-    if (barracks < C.MAX_BARRACKS && towers.length >= Math.min(2, 1 + barracks) && p.gold >= bCost && roll < 0.6) {
+    if (barracks < C.MAX_BARRACKS && towers.length >= Math.min(2, 1 + barracks) && p.gold >= bCost && p.wood >= C.TOWERS.barracks.wood && roll < 0.6) {
       for (let i = 0; i < 25; i++) {
         const ang = this.rand() * Math.PI * 2;
         const r = 2 + this.rand() * 3;
@@ -123,7 +142,7 @@ module.exports = {
     }
 
     // Walls on the side facing the nearest enemy, with a gate toward them.
-    if (towers.length >= 2 && p.gold >= 150 && roll < 0.35 && !this.suddenDeath()) this.botWalls(p);
+    if (towers.length >= 2 && p.gold >= 150 && p.wood >= 40 && roll < 0.35 && !this.suddenDeath()) this.botWalls(p);
 
     // Upgrade towers when rich.
     if (p.gold > 400 && towers.length && roll < 0.2) {

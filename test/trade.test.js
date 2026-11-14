@@ -68,10 +68,11 @@ test('no route without an alliance; when it ends, caravans on the road vanish', 
 });
 
 test('raiders who destroy a caravan take half its cargo', () => {
-  const g = new Game({ botTarget: 0, rand: seeded(62) });
+  const g = new Game({ botTarget: 0, rand: seeded(62), instantBuild: true });
   const [a, b, c] = ['A', 'B', 'C'].map((n) => g.addPlayer(n));
   for (const p of [a, b, c]) {
     p.gold = 1e6;
+    p.wood = 1e6;
     p.spawnTime = -1000;
     p.nextWaveAt = Infinity;
   }

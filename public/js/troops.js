@@ -58,7 +58,7 @@ function drawUnits(dt) {
     const onBuilding = !selUnits.has(u.id) && overBuilding(u.rx, u.ry);
     if (onBuilding) ctx.globalAlpha = 0.6;
     // picked single troops: white ring; troops of the picked squads (when not all): gold ring
-    const picked = selUnits.has(u.id);
+    const picked = selUnits.has(u.id) || S.selWorker === u.id;
     const inSquad = mine && !selUnits.size && squadPicked(u.sq);
     if (picked || inSquad) {
       // a ring on the ground round its feet
@@ -80,9 +80,11 @@ function drawUnits(dt) {
       ctx.lineWidth = Math.max(1.5, s * 0.05);
       ctx.stroke();
     }
-    const bob = u.moving ? -Math.abs(Math.sin(now / 95 + u.id)) * r * 0.12 : 0;
-    drawTroop(ctx, u.kind, u.owner, x, y + bob, r * 1.12, u.face || 1);
-    for (let i = 0; i < u.level; i++) {
+    // workers bob as they hammer, chop or hoe; troops as they march
+    const bob = u.working ? -Math.abs(Math.sin(now / 160 + u.id)) * r * 0.16 : u.moving ? -Math.abs(Math.sin(now / 95 + u.id)) * r * 0.12 : 0;
+    const look = u.kind === 'worker' ? `worker${u.job}${u.carry ? 'c' : ''}` : u.kind;
+    drawTroop(ctx, look, u.owner, x, y + bob, r * (u.kind === 'worker' ? 0.95 : 1.12), u.face || 1);
+    for (let i = 0; i < (u.kind === 'worker' ? 0 : u.level); i++) {
       ctx.fillStyle = '#ffd54f';
       ctx.beginPath();
       ctx.arc(x + (i - (u.level - 1) / 2) * r * 0.42, y + r * 1.45, Math.max(1.5, s * 0.055), 0, Math.PI * 2);

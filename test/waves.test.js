@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const C = require('../shared/config');
 const { Game, seeded, duel, edgeTile, outpost, troops, run } = require('./helpers');
 
-const mine = (g, p) => [...g.units.values()].filter((u) => u.owner === p.id);
+const mine = (g, p) => [...g.units.values()].filter((u) => u.owner === p.id && !u.worker); // troops (not workers)
 
 // Give squad i of p this mix (the rest of the squads empty), e.g. { soldier: 4 }.
 function setMix(p, i, mix) {

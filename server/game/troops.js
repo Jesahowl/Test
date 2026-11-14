@@ -452,7 +452,7 @@ module.exports = {
     const groups = new Map();
     for (const u of this.units.values()) {
       const def = C.UNITS[u.kind];
-      if ((def.scout && !u.attack) || u.trade) continue;
+      if ((def.scout && !u.attack) || u.trade || u.worker) continue;
       let g = groups.get(u.sq);
       if (!g) groups.set(u.sq, (g = { x: 0, y: 0, n: 0, speed: Infinity }));
       g.x += u.x;
@@ -536,7 +536,7 @@ module.exports = {
     const byHex = new Map();
     for (const u of this.units.values()) {
       u.slotPos = null;
-      if ((C.UNITS[u.kind].scout && !u.attack) || u.trade) continue; // scouts off exploring; caravans
+      if ((C.UNITS[u.kind].scout && !u.attack) || u.trade || u.worker) continue; // scouts off exploring; caravans; workers
       const h = this.postHex(u);
       if (h < 0) continue;
       const key = `${u.owner}:${h}`;
@@ -677,6 +677,10 @@ module.exports = {
       if (u.hp <= 0 || !this.units.has(u.id)) continue;
       if (u.trade) {
         this.caravanTick(u, dt);
+        continue;
+      }
+      if (u.worker) {
+        this.workerTick(u, dt);
         continue;
       }
       const def = C.UNITS[u.kind];

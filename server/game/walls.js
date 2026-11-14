@@ -33,6 +33,7 @@ module.exports = {
 
   // Can a troop (or caravan) of `owner` pass wall w? Through gates of its own side only.
   wallOpenFor(w, owner) {
+    if (w.progress < 1) return true; // still being built: no wall yet
     return w.gate && !this.hostile(owner, w.owner);
   },
 
@@ -88,7 +89,12 @@ module.exports = {
         reason = 'Not enough gold';
         break;
       }
+      if (p.wood < C.WALL_WOOD) {
+        reason = 'Not enough wood';
+        break;
+      }
       p.gold -= C.WALL_COST;
+      p.wood -= C.WALL_WOOD;
       this.addWall(pid, a, b);
       this.lastWalls++;
     }
@@ -102,8 +108,10 @@ module.exports = {
     const hp = C.WALL_HP;
     const w = {
       isWall: true, id, owner: pid, a: Math.min(a, b), b: Math.max(a, b), hp, maxHp: hp, gate: false,
+      progress: this.instantBuild ? 1 : 0, // a site until workers build it (see workers.js)
       x: (ha.cx + hb.cx) / 2, y: (ha.cy + hb.cy) / 2, // the middle of the edge
     };
+    if (w.progress < 1) w.hp = Math.round(hp * C.SITE_START_HP);
     this.walls.set(id, w);
     this.wallAt.set(this.edgeKey(a, b), w);
     this.structVersion++; // paths change

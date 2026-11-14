@@ -410,3 +410,19 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 .pause-btns kbd { font-size: 10px; }
 .card button.danger { background: #b62324; }
 .card button.danger:hover { background: #da3633; }
+
+/* ---------------------------------------------------------------- wood and workers */
+#stats .wood-row { font-weight: 800; font-size: 15px; color: #e3b98a; display: flex; align-items: center; gap: 4px; }
+.tile .cost .wd { color: #e3b98a; margin-left: 2px; }
+.tile .cost .wd.short { color: var(--bad-soft); }
+#drawer [data-dr="workers"] { width: 460px; }
+#jobs { display: flex; flex-direction: column; gap: 5px; }
+.job { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 9px; background: var(--raise); font-size: 12.5px; }
+.job .ic { font-size: 16px; width: 20px; text-align: center; }
+.job b { width: 84px; }
+.job .n { flex: 1; color: var(--muted); font-size: 11.5px; }
+.job .lv { display: flex; gap: 3px; }
+.job .lv button { min-width: 44px; height: 24px; border: 1px solid var(--line); border-radius: 6px; background: var(--raise-2); color: var(--muted); font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; }
+.job .lv button:hover { border-color: var(--accent); color: var(--text); }
+.job .lv button.on { border-color: var(--gold); color: var(--gold); background: #2a2612; }
+.small-note { font-size: 11px; }

@@ -173,6 +173,29 @@ function drawShape(kind, x, y, r, fill) {
       for (const yy of [0.1, 0.32]) ctx.fillRect(x - r * 0.95, y + r * yy, r * 1.9, Math.max(1, r * 0.05));
       break;
     }
+    case 'workshop': {
+      // a cog with a hammer across it
+      for (let k = 0; k < 16; k++) {
+        const a = (k / 16) * Math.PI * 2;
+        const rr = k % 2 ? r * 0.75 : r * 0.55;
+        ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.beginPath();
+      ctx.arc(x, y, r * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(-Math.PI / 4);
+      ctx.fillStyle = '#8a5a32';
+      ctx.fillRect(-r * 0.08, -r * 0.2, r * 0.16, r * 1.0);
+      ctx.fillStyle = '#d0d7de';
+      ctx.fillRect(-r * 0.32, -r * 0.42, r * 0.64, r * 0.26);
+      ctx.restore();
+      break;
+    }
     case 'trade': {
       // market hall: a roofed stall with a striped awning and a coin on top
       ctx.fillRect(x - r * 0.8, y - r * 0.05, r * 1.6, r * 0.8);

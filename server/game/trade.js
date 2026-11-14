@@ -43,7 +43,7 @@ module.exports = {
   // and move them.
   updateTrade() {
     const posts = [];
-    for (const t of this.towers.values()) if (t.kind === 'trade' && t.owner && !t.ruin) posts.push(t);
+    for (const t of this.towers.values()) if (t.kind === 'trade' && t.owner && !t.ruin && !(t.progress < 1)) posts.push(t);
     for (const t of posts) {
       const cur = this.towers.get(t.partner);
       if (t.partner && !this.canTradeWith(t, cur)) {

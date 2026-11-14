@@ -27,7 +27,8 @@ class Game {
     this.rounds = !!opts.rounds;
     this.round = opts.round || 1;
     // Seeds the look of the map (where the forests grow); every client draws the same terrain from it.
-    this.mapSeed = Math.floor(Math.random() * 2147483647);
+    this.mapSeed = opts.mapSeed ?? Math.floor(Math.random() * 2147483647);
+    this.instantBuild = !!opts.instantBuild; // (tests) buildings and walls go up at once, no workers needed
     this.phase = 'playing';
     this.winner = null;
     this.roster = new Map(); // everyone who played this round: id -> standings entry
@@ -47,6 +48,7 @@ class Game {
     // the hex grid land is bought and drawn in (each hex covers a patch of tiles)
     this.hex = Hex.build(this.w, this.h, C.HEX_R);
     this.hexOwner = new Int32Array(this.hex.hexes.length);
+    this.initForest(); // where the forests are, and the wood in them (see game/workers.js)
     this.terrDirty = true;
     this.terrVersion = 0;
 
@@ -140,6 +142,7 @@ class Game {
     this.updateDiplomacy();
     this.updateWaves();
     this.updateTrade();
+    this.updateWorkers(dt);
     this.buildUnitGrid();
     this.updateBots();
     for (const u of this.units.values()) {
@@ -177,14 +180,15 @@ class Game {
     }
     const towers = [];
     for (const t of this.towers.values()) {
-      towers.push([t.id, KIND_KEYS.indexOf(t.kind), t.x, t.y, t.owner, t.level, Math.ceil(t.hp), t.maxHp, t.ruinOf || 0, t.partner || 0, t.road || 0]);
+      towers.push([t.id, KIND_KEYS.indexOf(t.kind), t.x, t.y, t.owner, t.level, Math.ceil(t.hp), t.maxHp, t.ruinOf || 0, t.partner || 0, t.road || 0,
+        t.progress < 1 ? Math.floor(t.progress * 100) : 100]);
     }
     const units = [];
     for (const u of this.units.values()) {
       const a = u.attack;
       // positions in tenths of a tile; max HP follows from kind + level on the client
       units.push([u.id, ALL_UNIT_KEYS.indexOf(u.kind), Math.round(u.x * 10), Math.round(u.y * 10), u.owner, u.level, Math.ceil(u.hp), u.anchor,
-        a ? `${a.k}:${a.id}` : 0, u.sq || 0, u.trade ? u.trade.from : 0]);
+        a ? `${a.k}:${a.id}` : 0, u.sq || 0, u.trade ? u.trade.from : 0, u.worker ? this.workerCode(u) : 0]);
     }
     const creeps = [];
     for (const c of this.creeps.values()) {
@@ -193,8 +197,8 @@ class Game {
     const camps = this.camps.map((c) => [c.id, c.x, c.y, CAMP_KEYS.indexOf(c.type), c.alive ? 1 : 0,
       c.alive ? 0 : Math.max(0, Math.ceil(c.respawnAt - this.time))]);
     const walls = [];
-    for (const w of this.walls.values()) walls.push([w.id, w.a, w.b, w.owner, Math.ceil(w.hp), w.maxHp, w.gate ? 1 : 0]);
-    const snap = { players, towers, walls, units, creeps, camps, fx: this.fx, feed: this.feed };
+    for (const w of this.walls.values()) walls.push([w.id, w.a, w.b, w.owner, Math.ceil(w.hp), w.maxHp, w.gate ? 1 : 0, w.progress < 1 ? Math.floor(w.progress * 100) : 100]);
+    const snap = { players, towers, walls, units, creeps, camps, forest: this.forestRows(), fx: this.fx, feed: this.feed };
     if (this.rounds) {
       snap.round = {
         n: this.round, phase: this.phase, t: Math.floor(this.time), seed: this.mapSeed,
@@ -215,6 +219,8 @@ class Game {
     return {
       id: p.id,
       gold: Math.floor(p.gold),
+      wood: Math.floor(p.wood),
+      workers: [this.workerCap(p), C.WORKER_JOBS.map((j) => p.jobs[j])],
       nextWave: Math.max(0, Math.ceil(p.nextWaveAt - this.time)),
       armySize: this.armySize(p),
       levels: p.levels,
@@ -230,6 +236,7 @@ Object.assign(Game.prototype,
   require('./game/territory'),
   require('./game/structures'),
   require('./game/army'),
+  require('./game/workers'),
   require('./game/jungle'),
   require('./game/combat'),
   require('./game/troops'),

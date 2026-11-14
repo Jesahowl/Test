@@ -14,7 +14,7 @@ const Game = require('./game');
 const SEND_EVERY = Math.max(1, Math.round(C.TICK_RATE / C.SNAPSHOT_RATE));
 // Buildings, players and camps are the same for everyone; troops, monsters and effects are
 // filtered per player by fog of war (spectators see everything).
-const COLLECTIONS = ['players', 'towers', 'walls', 'camps'];
+const COLLECTIONS = ['players', 'towers', 'walls', 'camps', 'forest'];
 const PRIVATE = ['units', 'creeps'];
 
 // Remembers the last rows sent for one entity list (rows are arrays whose first item is the id)
@@ -228,6 +228,12 @@ class Room {
         if (msg.op === 'decline') return game.declineAlliance(client.pid, other);
         if (msg.op === 'break') return game.breakAlliance(client.pid, other);
         return null;
+      }
+      case 'jobs':
+        return game.setJobPriority(client.pid, String(msg.job), Number(msg.level));
+      case 'work': {
+        const target = msg.target && typeof msg.target === 'object' ? { k: String(msg.target.k), id: Number(msg.target.id) } : null;
+        return game.sendWorker(client.pid, Number(msg.id), target);
       }
       case 'trade':
         return game.setTradePartner(client.pid, Number(msg.id), Number(msg.partner));

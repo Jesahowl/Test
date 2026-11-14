@@ -49,6 +49,7 @@ function clearSelection() {
   S.selectedId = null;
   S.selCaravan = null;
   S.selWall = null;
+  S.selWorker = null;
   selUnits.clear();
 }
 
@@ -234,8 +235,17 @@ function drawOverlay() {
     }
   }
 
+  // With a worker picked: what right-clicking would put it to work on.
+  if (S.myId && S.selWorker && !S.buildKind) {
+    const w = S.units.get(S.selWorker);
+    if (w) {
+      const [wx, wy] = toScreen(w.rx, w.ry);
+      label('Right-click: send this worker there', wx, wy - s * 1.1, 11, '#f2c14e');
+    }
+  }
+
   // Hover feedback for right-click orders.
-  if (S.myId && !S.buildKind) {
+  if (S.myId && !S.buildKind && !S.selWorker) {
     const tg = orderTargetAt(mouse.wx, mouse.wy);
     if (tg) {
       const pos = targetPos(`${tg.k}:${tg.id}`);

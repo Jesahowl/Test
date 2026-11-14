@@ -25,13 +25,18 @@ module.exports = {
     const owned = this.countOwned(pid, kind);
     if (kind === 'barracks' && owned >= C.MAX_BARRACKS) return `You can have at most ${C.MAX_BARRACKS} barracks`;
     if (kind === 'trade' && owned >= C.MAX_TRADE_POSTS) return `You can have at most ${C.MAX_TRADE_POSTS} trade posts`;
+    if (kind === 'workshop' && owned >= C.MAX_WORKSHOPS) return `You can have at most ${C.MAX_WORKSHOPS} workshops`;
     const cost = C.buildCost(kind, owned);
     if (p.gold < cost) return 'Not enough gold';
+    if (p.wood < (def.wood || 0)) return 'Not enough wood';
     p.gold -= cost;
+    p.wood -= def.wood || 0;
     const id = this.nextId++;
     const stats = C.towerStats(kind, 1);
+    // A building site: workers put it up (see workers.js); until then it does nothing.
+    const progress = this.instantBuild ? 1 : 0;
     this.towers.set(id, {
-      isTower: true, id, kind, x, y, owner: pid, level: 1, hp: stats.hp, maxHp: stats.hp, cd: 0, ruin: false,
+      isTower: true, id, kind, x, y, owner: pid, level: 1, hp: progress ? stats.hp : Math.round(stats.hp * C.SITE_START_HP), maxHp: stats.hp, cd: 0, ruin: false, progress,
     });
     this.grid[k] = id;
     this.structVersion++;
@@ -57,6 +62,13 @@ module.exports = {
     return n;
   },
 
+  // ...counting only finished ones (not building sites).
+  countBuilt(pid, kind) {
+    let n = 0;
+    for (const t of this.towers.values()) if (t.owner === pid && t.kind === kind && !(t.progress < 1)) n++;
+    return n;
+  },
+
   // Does pid own the hex at tile (x, y)?
   ownsBlock(pid, x, y) {
     return this.inBounds(x, y) && this.hexOwner[this.hexAt(x, y)] === pid;
@@ -66,6 +78,7 @@ module.exports = {
     const p = this.players.get(pid);
     const t = this.towers.get(id);
     if (!p || !p.alive || !t || t.owner !== pid) return 'Invalid upgrade';
+    if (t.progress < 1) return 'Finish building it first';
     if (t.level >= C.maxLevel(t.kind)) return t.kind === 'tower' ? 'Already max level' : `A ${C.TOWERS[t.kind].name} can't be upgraded`;
     const cost = C.upgradeCost(t.kind, t.level);
     if (p.gold < cost) return 'Not enough gold';

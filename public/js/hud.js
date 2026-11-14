@@ -8,7 +8,7 @@ import { sendMsg } from './net.js';
 import { escapeHtml, updateRound } from './screens.js';
 import { S, $, C, colorOf, feed, players, selUnits, terr, UNIT_KEYS } from './state.js';
 import { targetName } from './targets.js';
-import { updateTips } from './tips.js';
+import { tipDone, updateTips } from './tips.js';
 import { iconURL, refreshTip } from './ui.js';
 import { updateDock } from './dock.js';
 import { allSquads } from './squads.js';
@@ -87,6 +87,7 @@ function updateHud() {
 function buildStats() {
   $('stats').innerHTML = `
     <span class="who"><span class="dot"></span><span class="name"></span><span class="rank" data-tip="Your place on the land leaderboard"></span></span>
+    <span class="wood-row" data-tip="<span class='t'>Wood</span>Your workers chop it from forests next to your land and carry it to the core or a workshop. Towers, barracks, trade posts, workshops and walls need it.">🪵 <span class="wood"></span></span>
     <span class="gold-row" data-tip="<span class='t'>Gold</span>Earned from land (a trickle) and mostly from fighting: troop kills, jungle camps, towers and cores. Spend it on towers, barracks and troop levels.">
       <span class="coin"></span><span class="gold"></span><span class="income"></span></span>
     <span class="chip land" data-tip="Tiles you own. More land = more income and room for more troops.">🗺 <b></b> land</span>
@@ -102,6 +103,7 @@ function updateStats(p, gold, rank, n) {
   el.querySelector('.who .name').textContent = p.name;
   el.querySelector('.who .rank').textContent = `#${rank} of ${n}`;
   el.querySelector('.gold').textContent = gold.toLocaleString();
+  el.querySelector('.wood').textContent = (S.me.wood || 0).toLocaleString();
   el.querySelector('.income').textContent = `+${C.income(p.territory).toFixed(1)}/s`;
   el.querySelector('.chip.land b').textContent = p.territory;
   el.querySelector('.chip.kills b').textContent = p.kills;
@@ -171,35 +173,32 @@ function updateDiplomacy(sorted) {
 // Build buttons (tower, barracks, land), squads and the army panel.
 function updateTowerAndArmy(gold) {
   updateSquadsUi();
-  const tb = $('tower-button');
-  tb.classList.toggle('active', S.buildKind === 'tower');
-  tb.classList.toggle('poor', gold < C.TOWERS.tower.cost);
+  const wood = S.me.wood || 0;
+  // a building tile: lit while placing it, dimmed when you can't afford it (or have the most)
+  const tile = (id, kind, goldCost, woodCost, count, max) => {
+    const el = $(id);
+    const maxed = max !== undefined && count >= max;
+    el.classList.toggle('active', S.buildKind === kind);
+    el.classList.toggle('poor', maxed || gold < goldCost || wood < woodCost);
+    const html = maxed ? 'max' : `${goldCost}g${woodCost ? ` <span class="wd${wood < woodCost ? ' short' : ''}">🪵${woodCost}</span>` : ''}`;
+    const c = el.querySelector('.cost');
+    if (c.innerHTML !== html) c.innerHTML = html;
+    c.classList.toggle('max', maxed);
+    if (max !== undefined) el.querySelector('.count').textContent = `${count}/${max}`;
+  };
+  const mine = (kind) => [...S.towers.values()].filter((t) => t.owner === S.myId && t.kind === kind).length;
+  tile('tower-button', 'tower', C.TOWERS.tower.cost, C.TOWERS.tower.wood);
+  const barracks = mine('barracks');
+  tile('barracks-button', 'barracks', C.buildCost('barracks', barracks), C.TOWERS.barracks.wood, barracks, C.MAX_BARRACKS);
+  tile('trade-button', 'trade', C.TOWERS.trade.cost, C.TOWERS.trade.wood, mine('trade'), C.MAX_TRADE_POSTS);
+  tile('workshop-button', 'workshop', C.TOWERS.workshop.cost, C.TOWERS.workshop.wood, mine('workshop'), C.MAX_WORKSHOPS);
+  tile('wall-button', 'wall', C.WALL_COST, C.WALL_WOOD);
   const lb = $('land-button');
   const hexCost = Math.round(C.landCost((players.get(S.myId) || { territory: 0 }).territory) * 2.598 * C.HEX_R * C.HEX_R);
   lb.classList.toggle('active', S.buildKind === 'land');
   lb.classList.toggle('poor', gold < hexCost);
   lb.querySelector('.cost').textContent = `~${hexCost}g/hex`;
-  const bb = $('barracks-button');
-  const owned = [...S.towers.values()].filter((t) => t.owner === S.myId && t.kind === 'barracks').length;
-  const bCost = C.buildCost('barracks', owned);
-  const maxed = owned >= C.MAX_BARRACKS;
-  bb.classList.toggle('active', S.buildKind === 'barracks');
-  bb.classList.toggle('poor', maxed || gold < bCost);
-  const costEl = bb.querySelector('.cost');
-  costEl.textContent = maxed ? 'max' : `${bCost}g`;
-  costEl.classList.toggle('max', maxed);
-  bb.querySelector('.count').textContent = `${owned}/${C.MAX_BARRACKS}`;
-  const xb = $('trade-button');
-  const posts = [...S.towers.values()].filter((t) => t.owner === S.myId && t.kind === 'trade').length;
-  const xMax = posts >= C.MAX_TRADE_POSTS;
-  xb.classList.toggle('active', S.buildKind === 'trade');
-  xb.classList.toggle('poor', xMax || gold < C.TOWERS.trade.cost);
-  xb.querySelector('.cost').textContent = xMax ? 'max' : `${C.TOWERS.trade.cost}g`;
-  xb.querySelector('.cost').classList.toggle('max', xMax);
-  xb.querySelector('.count').textContent = `${posts}/${C.MAX_TRADE_POSTS}`;
-  const wb = $('wall-button');
-  wb.classList.toggle('active', S.buildKind === 'wall');
-  wb.classList.toggle('poor', gold < C.WALL_COST);
+  updateWorkersUi();
   // Troop cards: how many are in squads, level and its price.
   const inSquads = {};
   for (const q of allSquads()) for (const k of UNIT_KEYS) inSquads[k] = (inSquads[k] || 0) + q.mix[k];
@@ -223,6 +222,42 @@ function updateTowerAndArmy(gold) {
     up.dataset.tip = s2
       ? `<span class="t">Level ${C.UNITS[kind].name}s up to ${lvl + 1}: ${upCost}g</span>HP ${s1.hp} → <b>${s2.hp}</b>${s1.damage ? ` · damage ${Math.round(s1.damage)} → <b>${Math.round(s2.damage)}</b>` : ''}${s1.heal ? ` · healing ${Math.round(s1.heal)} → <b>${Math.round(s2.heal)}</b>` : ''}<br><span class="m">Applies to troops that respawn after.</span>`
       : 'Max level';
+  }
+}
+
+// ---- the Workers drawer: how many workers, and each job's priority (off / low / high).
+const JOBS = [
+  ['build', '🔨', 'Build', 'Put up building sites and walls you place'],
+  ['repair', '🔧', 'Repair', `Fix damaged buildings, walls and your core (${C.REPAIR_GOLD_PER_HP}g per HP)`],
+  ['gather', '🪓', 'Chop wood', 'Chop forests in or next to your land and carry the wood home'],
+  ['farm', '🌾', 'Farm', `Work open hexes of your land: +${C.FARM_GOLD}g/s each`],
+];
+const LEVELS = ['Off', 'Low', 'High'];
+let jobsBound = false;
+function updateWorkersUi() {
+  const [cap, prio] = S.me.workers || [0, [0, 0, 0, 0]];
+  const mine = [...S.units.values()].filter((u) => u.owner === S.myId && u.kind === 'worker');
+  const busy = [0, 0, 0, 0, 0];
+  for (const u of mine) busy[u.job]++;
+  $('workers-badge').textContent = busy[0] && mine.length ? String(busy[0]) : '';
+  $('workers-badge').dataset.tip = 'Idle workers';
+  if (S.drawer !== 'workers') return;
+  tipDone('workers');
+  const hint = `${mine.length} / ${cap} workers · ${busy[0]} idle · +${C.WORKSHOP_WORKERS} per workshop`;
+  if ($('workers-hint').textContent !== hint) $('workers-hint').textContent = hint;
+  const box = $('jobs');
+  const key = `${prio.join(',')}|${busy.join(',')}`;
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.innerHTML = JOBS.map(([job, ic, name, what], i) => `<div class="job" data-tip="<span class='t'>${name}</span>${what}">
+    <span class="ic">${ic}</span><b>${name}</b><span class="n">${busy[i + 1]} working</span>
+    <span class="lv">${LEVELS.map((l, lv) => `<button data-job="${job}" data-lv="${lv}" class="${prio[i] === lv ? 'on' : ''}">${l}</button>`).join('')}</span></div>`).join('');
+  if (!jobsBound) {
+    jobsBound = true;
+    box.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-job]');
+      if (b) sendMsg({ t: 'jobs', job: b.dataset.job, level: Number(b.dataset.lv) });
+    });
   }
 }
 
@@ -251,6 +286,18 @@ function updateSelectionPanel(gold) {
         <div>${u.attack ? `⚔ ${escapeHtml(targetName(u.attack))}` : '🛡 defending'}</div>`;
     } else {
       $('sel-info').innerHTML = '';
+    }
+    return;
+  }
+  if (S.selWorker && S.units.has(S.selWorker)) {
+    const u = S.units.get(S.selWorker);
+    panel.classList.remove('hidden');
+    const job = ['Idle', 'Building', 'Repairing', 'Chopping wood', 'Farming'][u.job] + (u.carry ? ' (carrying wood home)' : '');
+    const key = `wk:${u.id}:${job}`;
+    if (panel.dataset.key !== key) {
+      panel.dataset.key = key;
+      panel.innerHTML = `<h4><img src="${iconURL('worker')}" alt="">Your worker</h4><div class="stats"><div style="grid-column:span 2">${job}</div></div>
+        <div class="muted">Right-click a building site, a damaged building or wall, a forest, or an open hex of your land to send it there. <kbd>Esc</kbd> to let it choose.</div>`;
     }
     return;
   }
@@ -309,7 +356,9 @@ function updateSelectionPanel(gold) {
     $('sel-capture').disabled = !inLand || gold < C.RUIN_CAPTURE_COST;
   } else {
     const garrison = [...S.units.values()].filter((u) => u.owner === t.owner && u.anchor === t.id && !u.attack).length;
-    $('sel-info').innerHTML = `<div>HP <b>${t.hp}/${t.maxHp}</b></div><div>Guards <b>${garrison}</b></div>`;
+    $('sel-info').innerHTML = t.progress < 1
+      ? `<div style="grid-column:span 2">🔨 Being built: <b>${Math.round(t.progress * 100)}%</b>${t.owner === S.myId ? ' · your workers put it up' : ''}</div>`
+      : `<div>HP <b>${t.hp}/${t.maxHp}</b></div><div>Guards <b>${garrison}</b></div>`;
     if (t.owner === S.myId && t.kind !== 'barracks') $('sel-up').disabled = t.level >= C.maxLevel(t.kind) || gold < C.upgradeCost(t.kind, t.level);
   }
 }
