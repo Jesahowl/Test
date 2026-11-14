@@ -53,6 +53,19 @@ function clearSelection() {
   selUnits.clear();
 }
 
+// Has squad/troop `who` reached the target of its current order? Once it has, it stays "arrived"
+// until its order changes, so the marker doesn't flicker as it shuffles about at the spot.
+const arrived = new Map();
+function arrivedAt(who, order, dist, near) {
+  if (arrived.get(who) === order) return true;
+  if (dist > near) {
+    if (arrived.has(who)) arrived.delete(who);
+    return false;
+  }
+  arrived.set(who, order);
+  return true;
+}
+
 // An animated marker on an order target: red crosshair for attack, green shield ring for defend.
 function drawTargetMarker(pos, attack, strong, size = 1) {
   const s = scale() * size;
@@ -184,11 +197,18 @@ function drawOverlay() {
       if (!byTarget.has(q.status)) byTarget.set(q.status, []);
       byTarget.get(q.status).push(q);
     }
-    for (const [status, list] of byTarget) {
+    for (const [status, all] of byTarget) {
       const [type, key] = status.split(' ');
       if (type === 'defend' && key === `c:${S.myId}`) continue; // home: nothing to point out
       const pos = targetPos(key);
       if (!pos) continue;
+      // Once a squad gets there its marker goes (until it's given a new order).
+      const list = all.filter((q) => {
+        const d = Math.hypot(q.cx - pos.x, q.cy - pos.y);
+        const settled = d < 4.5 && q.units.every((u) => !u.moving); // stopped in formation round the spot
+        return !arrivedAt(q.id, status, settled ? 0 : d, type === 'attack' && !pos.unit ? 4 : 2.5);
+      });
+      if (!list.length) continue;
       const picked = list.some((q) => squadPicked(q.id)) && !selUnits.size;
       drawTargetMarker(pos, type === 'attack', picked);
       const [mx, my] = toScreen(pos.x, pos.y);
@@ -211,6 +231,7 @@ function drawOverlay() {
     const key = u.attack || (u.anchor ? `t:${u.anchor}` : `c:${u.owner}`);
     const pos = targetPos(key);
     if (!pos) continue;
+    if (arrivedAt(`u${u.id}`, key, Math.hypot(u.rx - pos.x, u.ry - pos.y), pos.unit ? 1 : 1.8)) continue;
     const [ux, uy] = toScreen(u.rx, u.ry);
     const [ax, ay] = toScreen(pos.x, pos.y);
     ctx.strokeStyle = u.attack ? 'rgba(255,123,114,0.6)' : 'rgba(126,231,135,0.35)';
@@ -233,6 +254,24 @@ function drawOverlay() {
       const pos = targetPos(u.attack);
       if (pos) drawTargetMarker(pos, true, false, 0.6);
     }
+  }
+
+  // Where I sent workers by hand, until they get there (or start the job).
+  for (const [id, m] of S.workerSent) {
+    const w = S.units.get(id);
+    if (!w || w.working || performance.now() - m.at > 60000 || Math.hypot(w.rx - m.x, w.ry - m.y) < 1.2) {
+      S.workerSent.delete(id);
+      continue;
+    }
+    const [wx, wy] = toScreen(w.rx, w.ry);
+    const [ax, ay] = toScreen(m.x, m.y);
+    ctx.strokeStyle = 'rgba(242,193,78,0.45)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(wx, wy);
+    ctx.lineTo(ax, ay);
+    ctx.stroke();
+    drawTargetMarker(m, false, S.selWorker === id, 0.6);
   }
 
   // With a worker picked: what right-clicking would put it to work on.

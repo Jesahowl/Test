@@ -173,6 +173,7 @@ function sendWorkerAt(wx, wy) {
   else target = { k: 'h', id: HEX.tileHex[Math.floor(wy) * C.MAP_W + Math.floor(wx)] };
   sendMsg({ t: 'work', id: S.selWorker, target });
   S.effects.push({ k: 'ping', x: wx, y: wy, born: performance.now() });
+  S.workerSent.set(S.selWorker, { x: wx, y: wy, at: performance.now() });
 }
 
 // Double-click outside your land: expand your land outward all round (buying the border ring).

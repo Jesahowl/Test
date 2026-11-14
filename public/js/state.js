@@ -60,6 +60,7 @@ S.camps = [];
 S.campMap = new Map();
 S.forestLeft = new Map(); // chopped forest hexes: hex -> wood left in fifths
 S.selWorker = null; // the worker picked (right-click sends it to work)
+S.workerSent = new Map(); // worker id -> { x, y, at }: where I sent it by hand (marked until it gets there)
 
 S.effects = [];
 
