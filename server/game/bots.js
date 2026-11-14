@@ -65,16 +65,31 @@ module.exports = {
     const troops = [...this.units.values()].filter((u) => u.owner === p.id && !u.trade);
     const roll = this.rand();
 
+    // With an ally and a tower up, a trade post comes next (saved up for).
+    const wantTrade = towers.length >= 1 && this.alliesOf(p.id).length > 0 && !structures.some((t) => t.kind === 'trade');
+
     // Grow: buy land at the border, keeping some gold back for buildings and troops.
     const hexCost = C.landCost(p.territory) * 16; // about one hex
-    const keep = 60 + (towers.length < 2 ? C.TOWERS.tower.cost : 0);
+    const keep = 60 + (towers.length < 2 ? C.TOWERS.tower.cost : 0) + (wantTrade ? C.TOWERS.trade.cost : 0);
     if (p.gold >= keep + hexCost && roll < 0.75) {
       const n = Math.min(2, Math.floor((p.gold - keep) / hexCost));
       this.botBuyLand(p, n);
     }
 
+    // Trade: with an ally, put up a trade post near the core (the route opens by itself).
+    if (wantTrade && p.gold >= C.TOWERS.trade.cost && roll < 0.7) {
+      for (let i = 0; i < 25; i++) {
+        const ang = this.rand() * Math.PI * 2;
+        const r = 3 + this.rand() * 3;
+        const x = Math.round(p.core.x + Math.cos(ang) * r);
+        const y = Math.round(p.core.y + Math.sin(ang) * r);
+        if (this.inBounds(x, y) && this.build(p.id, x, y, 'trade') === null) break;
+      }
+      return;
+    }
+
     // Defend: towers inside the land, towards the border.
-    if (towers.length < Math.min(5, 1 + Math.floor(age / 60)) && p.gold >= C.TOWERS.tower.cost + 40 && roll < 0.4) {
+    if (towers.length < Math.min(5, 1 + Math.floor(age / 60)) && p.gold >= C.TOWERS.tower.cost + 40 + (wantTrade ? C.TOWERS.trade.cost : 0) && roll < 0.4) {
       const bases = [p.core, ...towers];
       const base = bases[Math.floor(this.rand() * bases.length)];
       for (let i = 0; i < 30; i++) {
@@ -96,19 +111,6 @@ module.exports = {
         const x = Math.round(p.core.x + Math.cos(ang) * r);
         const y = Math.round(p.core.y + Math.sin(ang) * r);
         if (this.inBounds(x, y) && this.build(p.id, x, y, 'barracks') === null) break;
-      }
-      return;
-    }
-
-    // Trade: with an ally, put up a trade post near the core (the route opens by itself).
-    const posts = structures.filter((t) => t.kind === 'trade').length;
-    if (posts < 1 && this.alliesOf(p.id).length && p.gold >= C.TOWERS.trade.cost + 60 && roll < 0.5) {
-      for (let i = 0; i < 25; i++) {
-        const ang = this.rand() * Math.PI * 2;
-        const r = 3 + this.rand() * 3;
-        const x = Math.round(p.core.x + Math.cos(ang) * r);
-        const y = Math.round(p.core.y + Math.sin(ang) * r);
-        if (this.inBounds(x, y) && this.build(p.id, x, y, 'trade') === null) break;
       }
       return;
     }
