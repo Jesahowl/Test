@@ -1,6 +1,7 @@
 // Rendering basics: canvas sizing, background, labels, health bars and simple shapes.
 
 import { S, C, canvas, ctx, HEX, scale, toScreen } from './state.js';
+import { drawTerrain } from './terrain.js';
 import { drawTerritoryShapes } from './territory.js';
 
 // ------------------------------------------------------------------ rendering
@@ -29,8 +30,7 @@ function drawBackground() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   const s = scale();
   const [ox, oy] = toScreen(0, 0);
-  ctx.fillStyle = '#121820';
-  ctx.fillRect(ox, oy, C.MAP_W * s, C.MAP_H * s);
+  drawTerrain(ox, oy, s); // plains and forests
 
   // the hex grid: a faint outline round every hex, built once (in tiles) and drawn scaled
   if (s >= 6) {
@@ -40,7 +40,7 @@ function drawBackground() {
     ctx.clip();
     ctx.translate(ox, oy);
     ctx.scale(s, s);
-    ctx.strokeStyle = 'rgba(255,255,255,0.055)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.045)';
     ctx.lineWidth = 1 / s;
     ctx.stroke(hexGridPath());
     ctx.restore();

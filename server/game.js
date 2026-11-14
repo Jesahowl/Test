@@ -26,6 +26,8 @@ class Game {
     // wins and the game freezes with phase 'over'. Without rounds, players come and go freely.
     this.rounds = !!opts.rounds;
     this.round = opts.round || 1;
+    // Seeds the look of the map (where the forests grow); every client draws the same terrain from it.
+    this.mapSeed = Math.floor(Math.random() * 2147483647);
     this.phase = 'playing';
     this.winner = null;
     this.roster = new Map(); // everyone who played this round: id -> standings entry
@@ -195,7 +197,7 @@ class Game {
     const snap = { players, towers, walls, units, creeps, camps, fx: this.fx, feed: this.feed };
     if (this.rounds) {
       snap.round = {
-        n: this.round, phase: this.phase, t: Math.floor(this.time),
+        n: this.round, phase: this.phase, t: Math.floor(this.time), seed: this.mapSeed,
         join: Math.max(0, Math.ceil(C.ROUND_JOIN_WINDOW - this.time)),
         sd: Math.ceil(C.ROUND_SUDDEN_DEATH - this.time), // <= 0: sudden death is on
       };
