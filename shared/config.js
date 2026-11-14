@@ -187,7 +187,6 @@
     // it (for anyone to buy), and destroying a core wins all of that player's land.
     LAND_BASE_COST: 5,
     LAND_COST_PER_TILE: 0.07,
-    LAND_BREACH: 1, // hex rings round a taken tower whose land opens up
     LAND_BUY_MAX: 120, // hexes one buy message may ask for (a drag, or a whole ring of border)
 
     // ---- Jungle: neutral camps that sit still, fight back when attacked, and pay out when cleared.

@@ -142,7 +142,7 @@ function drawLandMode() {
     ctx.fill();
   } else if (hh) {
     const o = ownerOf(hover);
-    text = o === S.myId ? 'Your land: claim hexes at its edge' : o ? "Someone else's land: take their towers to open it up" : 'Too far: land must touch yours';
+    text = o === S.myId ? 'Your land: claim hexes at its edge' : o ? "Someone else's land: can't be claimed" : 'Too far: land must touch yours';
     color = '#8b949e';
   }
   if (text) label(text, mouse.sx + 18 + text.length * 3.3, mouse.sy + 26, 12, color);

@@ -24,7 +24,7 @@ function buildBar() {
   bb.innerHTML = `<kbd>${bd.key}</kbd><span class="count"></span><img src="${iconURL('barracks')}" alt="">${bd.name}<span class="cost"></span>`;
   bb.onclick = () => toggleBuild('barracks');
   const lb = $('land-button');
-  lb.dataset.tip = `<span class="t">Claim land <kbd>L</kbd></span>Click an empty <b>hex</b> touching your border, or <b>drag along it</b> to claim a strip. <b>Double-click</b> outside your land to grow it one hex outward all round. A hex costs more the more land you own. <span class="m">Land = more gold and a bigger army. Enemy land can't be claimed: take their towers to open it up.</span>`;
+  lb.dataset.tip = `<span class="t">Claim land <kbd>L</kbd></span>Click an empty <b>hex</b> touching your border, or <b>drag along it</b> to claim a strip. <b>Double-click</b> outside your land to grow it one hex outward all round. A hex costs more the more land you own. <span class="m">Land = more gold and a bigger army. Enemy land can't be claimed: take their buildings or destroy their core.</span>`;
   lb.innerHTML = `<kbd>L</kbd><img src="${iconURL('land')}" alt="">Land<span class="cost"></span>`;
   lb.onclick = () => toggleBuild('land');
 

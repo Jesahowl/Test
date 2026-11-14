@@ -81,7 +81,7 @@ test('land is claimed hex by hex at the border, pricier as you grow', () => {
   assert.match(g.buyLand(a.id, [g.hex.hexes.find((h) => g.canBuyHex(a.id, h.i)).i]), /gold/);
 });
 
-test('taking a tower opens up the hexes round it', () => {
+test('taking a tower gives the captor only its hex; the land round it stays the old owner\'s', () => {
   const { g, a, b } = duel(5);
   const t = outpost(g, b);
   const th = g.hex.hexes[g.hexAt(t.x, t.y)];
@@ -89,9 +89,8 @@ test('taking a tower opens up the hexes round it', () => {
   assert.ok(ringOwned.length, 'b owns hexes round its tower');
   g.transferTower(t, a.id);
   assert.strictEqual(g.hexOwner[th.i], a.id, "the captor gets the tower's hex");
-  assert.ok(ringOwned.every((j) => g.hexOwner[j] === 0 || g.buildingHexes()[j] === b.id), "b's hexes next to it open up");
-  const open = ringOwned.find((j) => g.hexOwner[j] === 0);
-  assert.strictEqual(g.buyLand(a.id, [open]), null, 'and the captor can claim them');
+  assert.ok(ringOwned.every((j) => g.hexOwner[j] === b.id), "b keeps the hexes next to it");
+  assert.notStrictEqual(g.buyLand(a.id, [ringOwned[0]]), null, "and they can't be bought");
 });
 
 test('spawn protection keeps a new core and its towers from taking damage', () => {

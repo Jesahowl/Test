@@ -2,8 +2,8 @@
 
 // Territory on the hex grid: which player owns each hex. Each hex covers a patch of fine tiles
 // (game.terr per tile is kept in step, for movement, fog and drawing). A new core starts with its
-// hex and the six around it; players buy empty hexes that touch their land; land opens up around a
-// tower when it's taken, and a destroyed core's land all goes to whoever destroyed it.
+// hex and the six around it; players buy empty hexes that touch their land;
+// whoever takes a building gets the hex it stands on, and a destroyed core's land all goes to whoever destroyed it.
 // These methods are mixed into Game (see ../game.js), so `this` is the game.
 
 const { C } = require('./common');
@@ -113,7 +113,7 @@ module.exports = {
     for (const i of hexes.slice(0, C.LAND_BUY_MAX)) {
       if (!Number.isInteger(i) || i < 0 || i >= this.hexOwner.length) continue;
       if (!this.canBuyHex(pid, i)) {
-        if (!reason) reason = this.hexOwner[i] > 0 && this.hexOwner[i] !== pid ? "You can't buy someone else's land: take their towers" : 'Land must be empty and touch your land';
+        if (!reason) reason = this.hexOwner[i] > 0 && this.hexOwner[i] !== pid ? "You can't buy someone else's land" : 'Land must be empty and touch your land';
         continue;
       }
       const cost = this.hexCost(i, land);
