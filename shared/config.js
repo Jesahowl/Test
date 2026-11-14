@@ -77,6 +77,11 @@
     // side of the border.
     HOME_ALERT: 16,
     HOME_EDGE: 1,
+    // Alliances: allies don't fight and share vision. Offers run out after ALLY_OFFER_TIME seconds.
+    MAX_ALLIES: 2,
+    ALLY_OFFER_TIME: 30,
+    BOT_OFFER_FIRST: 90, // bots start offering alliances to players after this (+ up to a minute)
+    BOT_OFFER_EVERY: 120,
     PROVOKE_TIME: 3, // troops shot by someone out of reach go after the shooter for this long...
     PROVOKE_RANGE: 7, // ...if it's within their range + this
     // Fog of war: you see your own land plus what your core, buildings and troops can see.

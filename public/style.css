@@ -333,3 +333,28 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 @media (min-width: 1200px) and (min-height: 680px) { :root { --ui-zoom: 1.1; } }
 @media (min-width: 1450px) and (min-height: 820px) { :root { --ui-zoom: 1.18; } }
 @media (min-width: 1700px) and (min-height: 950px) { :root { --ui-zoom: 1.25; } }
+
+/* ---------------------------------------------------------------- alliances */
+#leaderboard { width: 250px; }
+#leaderboard button.dip { border: 1px solid var(--line); background: var(--raise-2, #21262d); color: var(--text); border-radius: 6px;
+  font-size: 11px; padding: 1px 6px; cursor: pointer; line-height: 1.5; white-space: nowrap; }
+#leaderboard button.dip:hover:not(:disabled) { border-color: var(--accent); }
+#leaderboard button.dip:disabled { opacity: 0.45; cursor: default; }
+#leaderboard button.dip.ally { background: rgba(63, 185, 80, 0.22); border-color: rgba(63, 185, 80, 0.6); }
+#leaderboard button.dip.offer { background: #238636; border-color: #2ea043; color: #fff; font-weight: 700; animation: dip-pulse 1.2s infinite; }
+@keyframes dip-pulse { 50% { box-shadow: 0 0 0 3px rgba(46, 160, 67, 0.35); } }
+#leaderboard .allied { font-size: 11px; }
+#leaderboard .allied i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-left: 2px; vertical-align: middle; }
+#leaderboard .offers { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; display: flex; flex-direction: column; gap: 5px; }
+#leaderboard .offer-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 12px; }
+#leaderboard .offer-row span:last-child { display: flex; gap: 4px; }
+#help-toggle { right: 272px; }
+#confirm { position: fixed; inset: 0; background: rgba(1, 4, 9, 0.55); display: none; align-items: center; justify-content: center; z-index: 50; }
+#confirm.show { display: flex; }
+#confirm .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; max-width: 380px;
+  box-shadow: var(--shadow); font-size: 13.5px; line-height: 1.5; }
+#confirm h3 { margin: 0 0 8px; font-size: 16px; }
+#confirm p { margin: 0 0 8px; }
+#confirm .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+#confirm button { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--raise-2, #21262d); color: var(--text); font-weight: 600; cursor: pointer; }
+#confirm button.yes { background: #da3633; border-color: #f85149; color: #fff; }

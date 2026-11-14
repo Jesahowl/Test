@@ -33,8 +33,10 @@ module.exports = {
     let best = null;
     let bestD = Infinity;
     for (const p of this.players.values()) {
-      if (!p.alive || p.id === excludeId || (skipShielded && this.isShielded(p))) continue;
-      const d = dist(x, y, p.core.x, p.core.y);
+      if (!p.alive || !this.hostile(excludeId, p.id) || (skipShielded && this.isShielded(p))) continue;
+      // a bot goes after whoever betrayed it first
+      const grudge = this.players.get(excludeId)?.bot?.grudge?.has(p.id) ? 0.5 : 1;
+      const d = dist(x, y, p.core.x, p.core.y) * grudge;
       if (d < bestD) {
         bestD = d;
         best = p;
@@ -122,7 +124,7 @@ module.exports = {
     // Orders.
     if (this.time < p.bot.nextOrder) return;
     p.bot.nextOrder = this.time + 8 + this.rand() * 6;
-    const intruders = [...this.units.values()].filter((u) => u.owner !== p.id
+    const intruders = [...this.units.values()].filter((u) => this.hostile(p.id, u.owner)
       && this.terr[this.idx(Math.floor(u.x), Math.floor(u.y))] === p.id);
     if (intruders.length >= 3) {
       // Defend whichever of our structures is closest to the intruders.

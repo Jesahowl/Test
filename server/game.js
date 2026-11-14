@@ -29,6 +29,7 @@ class Game {
     this.phase = 'playing';
     this.winner = null;
     this.roster = new Map(); // everyone who played this round: id -> standings entry
+    this.initDiplomacy();
 
     this.players = new Map();
     this.towers = new Map();
@@ -133,6 +134,7 @@ class Game {
       if (p.alive) this.award(p, C.income(p.territory) * dt, 'income');
     }
 
+    this.updateDiplomacy();
     this.updateWaves();
     this.buildUnitGrid();
     this.updateBots();
@@ -161,7 +163,7 @@ class Game {
     for (const p of this.players.values()) {
       players.push([p.id, p.name, p.hue, p.core.x, p.core.y, Math.max(0, Math.round(p.core.hp)), p.core.maxHp,
         p.territory, p.kills, p.isBot ? 1 : 0, this.isShielded(p) ? Math.ceil(C.SPAWN_SHIELD - (this.time - p.spawnTime)) : 0,
-        Math.max(0, Math.ceil(p.buffUntil - this.time))]);
+        Math.max(0, Math.ceil(p.buffUntil - this.time)), this.alliesOf(p.id)]);
     }
     const towers = [];
     for (const t of this.towers.values()) {
@@ -209,6 +211,8 @@ class Game {
       squads,
       newWaves: p.newWaves,
       follow,
+      offersIn: this.offersTo(p.id),
+      offersOut: this.offersFrom(p.id),
     };
   }
 }
@@ -223,6 +227,7 @@ Object.assign(Game.prototype,
   require('./game/troops'),
   require('./game/fog'),
   require('./game/bots'),
+  require('./game/diplomacy'),
 );
 
 Game.KIND_KEYS = KIND_KEYS;

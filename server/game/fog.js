@@ -26,11 +26,21 @@ module.exports = {
     }
     for (const [pid, list] of sources) {
       const p = this.players.get(pid);
-      if (!p.vis) {
-        p.vis = new Uint8Array(n);
-        p.explored = new Uint8Array(n);
+      if (!p.vis) p.vis = new Uint8Array(n);
+      if (!p.ownVis) p.ownVis = new Uint8Array(n);
+      if (!p.explored) p.explored = new Uint8Array(n);
+      Vision.computeVision(p.ownVis, this.w, this.h, pid, this.terr, list);
+    }
+    // Allies share what they see.
+    for (const pid of sources.keys()) {
+      const p = this.players.get(pid);
+      p.vis.set(p.ownVis);
+      for (const aid of this.alliesOf(pid)) {
+        const a = this.players.get(aid);
+        if (!a || !a.ownVis || !sources.has(aid)) continue;
+        const av = a.ownVis;
+        for (let k = 0; k < n; k++) if (av[k]) p.vis[k] = 1;
       }
-      Vision.computeVision(p.vis, this.w, this.h, pid, this.terr, list);
       for (let k = 0; k < n; k++) {
         if (p.vis[k] && !p.explored[k]) {
           p.explored[k] = 1;

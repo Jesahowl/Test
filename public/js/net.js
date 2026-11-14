@@ -1,6 +1,7 @@
 // Network: the WebSocket connection, incoming messages, and smooth (interpolated) movement.
 
 import { resetFog, setExplored, updateFog } from './fog.js';
+import { newOffers } from './diplomacy.js';
 import { formError, onLeft, onRoom } from './lobby.js';
 import { clearSelection } from './overlay.js';
 import { showDeath, showMenu, showRoundOver, startSpectating, stopSpectating, toast } from './screens.js';
@@ -87,6 +88,9 @@ function handle(msg) {
       toast(`+${msg.n} hex${msg.n === 1 ? "" : "es"} of land (−${msg.gold}g)`, true);
       tipDone('land');
       break;
+    case 'info':
+      toast(msg.m, true);
+      break;
     case 'ordered':
       if (S.pendingOrder) toast(S.pendingOrder(msg.n), true);
       S.pendingOrder = null;
@@ -140,6 +144,7 @@ function interpPos(o, rt) {
 
 function applyState(msg) {
   S.me = msg.me;
+  newOffers(toast);
   const now = performance.now();
   stampSnapshot(now, msg.tk);
   if (msg.round) S.round = msg.round;
@@ -163,7 +168,7 @@ function applyState(msg) {
 
   const np = merge(players, msg.players, (a, old) => {
     const p = { id: a[0], name: a[1], hue: a[2], x: a[3], y: a[4], hp: a[5], maxHp: a[6], territory: a[7], kills: a[8], isBot: !!a[9],
-      shield: a[10] || 0, buff: a[11] || 0, hitAt: old ? old.hitAt : 0, trail: old ? old.trail : undefined, shotAt: old ? old.shotAt : 0 };
+      shield: a[10] || 0, buff: a[11] || 0, allies: a[12] || [], hitAt: old ? old.hitAt : 0, trail: old ? old.trail : undefined, shotAt: old ? old.shotAt : 0 };
     if (old && p.hp < old.hp) p.hitAt = now;
     return p;
   });

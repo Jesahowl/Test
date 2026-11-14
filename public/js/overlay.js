@@ -1,5 +1,6 @@
 // Overlays: build and land previews (in hexes), order lines and markers, and the minimap.
 
+import { isAlly } from './diplomacy.js';
 import { squadsLabel } from './bar.js';
 import { mySquads, squadPicked } from './squads.js';
 import { drawShape, label } from './render.js';
@@ -240,7 +241,8 @@ function drawOverlay() {
       const verb = mine ? 'defend' : tg.k === 'j' ? campVerb(tg.id) : tg.k === 'u' ? `hunt ${targetName(`u:${tg.id}`)}` : 'attack';
       const [hx, hy] = toScreen(pos.x, pos.y);
       if (tg.k === 'u') drawTargetMarker(pos, true, false, 0.6);
-      label(`Right-click: ${who} ${verb}`, hx, hy - s * (tg.k === 'u' ? 1.2 : 2.4), 12, mine ? '#7ee787' : '#ffa198');
+      const ally = !mine && allyOfTarget(tg);
+      label(`Right-click: ${who} ${verb}${ally ? ' (⚠ your ally: breaks the alliance)' : ''}`, hx, hy - s * (tg.k === 'u' ? 1.2 : 2.4), 12, mine ? '#7ee787' : ally ? '#ffd54f' : '#ffa198');
     }
   }
 
@@ -370,3 +372,8 @@ function drawMinimap() {
 }
 
 export { clearSelection, drawMinimap, drawOverlay };
+
+function allyOfTarget(tg) {
+  const owner = tg.k === 'c' ? tg.id : tg.k === 't' ? S.towers.get(tg.id)?.owner : tg.k === 'u' ? S.units.get(tg.id)?.owner : 0;
+  return !!owner && isAlly(owner);
+}

@@ -218,6 +218,19 @@ class Room {
         if (!err) send(client, { t: 'ordered', n: game.lastOrderCount });
         return err;
       }
+      case 'ally': {
+        const other = Number(msg.id);
+        if (msg.op === 'propose') {
+          const err = game.proposeAlliance(client.pid, other);
+          const q = game.players.get(other);
+          if (!err && q && !game.allied(client.pid, other)) send(client, { t: 'info', m: `Alliance offered to ${q.name}` });
+          return err;
+        }
+        if (msg.op === 'accept') return game.acceptAlliance(client.pid, other);
+        if (msg.op === 'decline') return game.declineAlliance(client.pid, other);
+        if (msg.op === 'break') return game.breakAlliance(client.pid, other);
+        return null;
+      }
       case 'squad':
         if (msg.op === 'assign' || msg.op === 'merge') {
           const err = msg.op === 'assign'
@@ -343,6 +356,10 @@ class Room {
         client.terrVersion = game.terrVersion;
       }
       const me = p ? JSON.stringify(game.personal(p)) : 'null';
+      if (p && p.notices && p.notices.length) {
+        for (const m of p.notices) send(client, { t: 'info', m });
+        p.notices = [];
+      }
       client.ws.send(`{"t":"s","me":${me},${extra}${body}${shared}}`);
     }
   }

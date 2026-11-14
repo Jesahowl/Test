@@ -1,5 +1,6 @@
 // Input: mouse, keyboard, minimap and help window.
 
+import { closeConfirm, confirmOpen } from './diplomacy.js';
 import { expandAll, landDown, landMove, landUp } from './land.js';
 import { newSquadFromPicked, orderAt, pickSquadOf, selectAllSquads, squadKey, toggleBuild, toggleNewWaves } from './bar.js';
 import { sendMsg } from './net.js';
@@ -147,6 +148,11 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   const k = e.key.toLowerCase();
+  if (confirmOpen()) {
+    // the "break alliance?" box takes the keyboard: Esc cancels (Enter presses its focused button)
+    if (k === 'escape') closeConfirm();
+    return;
+  }
   keys.add(k);
   if (S.spectating) {
     if (k === 'tab') {

@@ -62,13 +62,13 @@ module.exports = {
     }
     if (a.k === 'u') {
       let v = this.units.get(a.id);
-      if (!v || v.owner === u.owner) {
+      if (!v || !this.hostile(u.owner, v.owner)) {
         // The hunted troop is down (or changed sides): go after the nearest of its squadmates
         // around where it fell; if there are none, the hunt is over.
         v = null;
         let best = C.HUNT_ROLL_RANGE;
         for (const o of this.nearUnits(a.lx, a.ly, C.HUNT_ROLL_RANGE)) {
-          if (o.owner !== a.owner || o.owner === u.owner) continue;
+          if (o.owner !== a.owner || !this.hostile(u.owner, o.owner)) continue;
           const d = dist(a.lx, a.ly, o.x, o.y);
           if (d <= best) {
             best = d;
@@ -93,6 +93,7 @@ module.exports = {
       return { x: p.core.x + 0.5, y: p.core.y + 0.5, goal: this.idx(p.core.x, p.core.y), struct: true };
     }
     const t = this.towers.get(a.id);
+    if (this.allied(u.owner, a.owner)) return null; // we made peace
     if (t && t.owner === a.owner && t.owner !== u.owner) {
       return { x: t.x + 0.5, y: t.y + 0.5, goal: this.idx(t.x, t.y), struct: true };
     }
@@ -118,7 +119,7 @@ module.exports = {
     let best = null;
     let bestScore = Infinity;
     for (const v of this.nearUnits(u.x, u.y, reach)) {
-      if (v.owner === u.owner) continue;
+      if (!this.hostile(u.owner, v.owner)) continue;
       const d = dist(u.x, u.y, v.x, v.y);
       if (d > reach) continue;
       if (d < bestScore) {
@@ -139,7 +140,7 @@ module.exports = {
     }
     if (best || !structures) return best;
     for (const t of this.towers.values()) {
-      if (!t.owner || t.owner === u.owner || this.isShielded(this.players.get(t.owner))) continue;
+      if (!this.hostile(u.owner, t.owner) || this.isShielded(this.players.get(t.owner))) continue;
       const d = dist(u.x, u.y, t.x + 0.5, t.y + 0.5);
       if (d > reach) continue;
       if (d < bestScore) {
@@ -148,7 +149,7 @@ module.exports = {
       }
     }
     for (const p of this.players.values()) {
-      if (!p.alive || p.id === u.owner || this.isShielded(p)) continue;
+      if (!p.alive || !this.hostile(u.owner, p.id) || this.isShielded(p)) continue;
       const d = dist(u.x, u.y, p.core.x + 0.5, p.core.y + 0.5);
       if (d > reach) continue;
       if (d < bestScore) {
@@ -453,7 +454,7 @@ module.exports = {
       for (const v of this.nearUnits(u.x, u.y, C.UNIT_SPACING)) {
         if (v.id <= u.id) continue;
         // friends keep their full spacing; enemies may close in, so front lines meet
-        const R = v.owner === u.owner ? C.UNIT_SPACING : C.ENEMY_SPACING;
+        const R = this.hostile(u.owner, v.owner) ? C.ENEMY_SPACING : C.UNIT_SPACING;
         let dx = v.x - u.x;
         let dy = v.y - u.y;
         let d = Math.hypot(dx, dy);
@@ -529,7 +530,7 @@ module.exports = {
     let foe = null;
     let best = C.HOME_ALERT;
     for (const v of this.nearUnits(u.x, u.y, C.HOME_ALERT)) {
-      if (v.owner === u.owner) continue;
+      if (!this.hostile(u.owner, v.owner)) continue;
       const d = dist(u.x, u.y, v.x, v.y);
       if (d < best && this.nearHome(u.owner, v.x, v.y)) {
         best = d;
@@ -624,13 +625,13 @@ module.exports = {
           if (!foe && u.provoker && this.time - u.provokedAt < C.PROVOKE_TIME) {
             // Being shot from out of reach (an archer): turn on the shooter if it's close enough.
             const v = this.units.get(u.provoker);
-            if (v && v.owner !== u.owner && dist(u.x, u.y, v.x, v.y) <= s.range + C.PROVOKE_RANGE) foe = v;
+            if (v && this.hostile(u.owner, v.owner) && dist(u.x, u.y, v.x, v.y) <= s.range + C.PROVOKE_RANGE) foe = v;
           }
           if (!foe && tgt.hold) {
             // ...and go after any enemy troop that steps within HOLD_LEASH of it.
             let best = C.HOLD_LEASH;
             for (const v of this.nearUnits(tgt.x, tgt.y, C.HOLD_LEASH)) {
-              if (v.owner === u.owner) continue;
+              if (!this.hostile(u.owner, v.owner)) continue;
               const d = dist(v.x, v.y, tgt.x, tgt.y);
               if (d <= best) {
                 best = d;
@@ -725,9 +726,9 @@ module.exports = {
       const y = Math.max(2, Math.min(this.h - 3, p.core.y + Math.sin(a) * r));
       let danger = false;
       for (const t of this.towers.values()) {
-        if (t.owner && t.owner !== p.id && dist(x, y, t.x, t.y) < C.structSight(t.kind, t.level)) danger = true;
+        if (this.hostile(p.id, t.owner) && dist(x, y, t.x, t.y) < C.structSight(t.kind, t.level)) danger = true;
       }
-      for (const q of this.players.values()) if (q.id !== p.id && dist(x, y, q.core.x, q.core.y) < C.CORE_RANGE + 2) danger = true;
+      for (const q of this.players.values()) if (this.hostile(p.id, q.id) && dist(x, y, q.core.x, q.core.y) < C.CORE_RANGE + 2) danger = true;
       if (danger) continue;
       let unseen = 0;
       for (let dy = -4; dy <= 4; dy += 2) {

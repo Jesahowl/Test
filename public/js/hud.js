@@ -1,6 +1,7 @@
 // HUD panels: player card, wave info, leaderboard, feed and selection panel.
 
 import { orderAt, squadsLabel, updateSquadsUi } from './bar.js';
+import { allyButton, offersHtml } from './diplomacy.js';
 import { sendMsg } from './net.js';
 import { escapeHtml, updateRound } from './screens.js';
 import { S, $, C, colorOf, feed, players, selUnits, terr, UNIT_KEYS } from './state.js';
@@ -121,6 +122,12 @@ function updateStats(p, gold, rank, n) {
   el.querySelector('.meter span').textContent = `Core ${p.hp.toLocaleString()} / ${p.maxHp.toLocaleString()}`;
 }
 
+// Who q is allied with, as coloured dots (everyone can see alliances).
+function allyMarks(q) {
+  if (!q.allies || !q.allies.length) return '';
+  return ` <span class="allied" data-tip="Allied with ${escapeHtml(q.allies.map((id) => players.get(id)?.name || '?').join(', '))}">🤝${q.allies.map((id) => `<i style="background:${colorOf(id, 55)}"></i>`).join('')}</span>`;
+}
+
 // Leaderboard and kill feed (shown to players and spectators).
 function updateBoards() {
   const sorted = [...players.values()].sort((a, b) => b.territory - a.territory);
@@ -129,7 +136,8 @@ function updateBoards() {
   $('leaderboard').innerHTML = `<h3><span>Players</span><span>land</span></h3>` + sorted.slice(0, 10).map((q, i) =>
     `<div class="row${q.id === focus ? ' me' : ''}"><span class="bg" style="width:${(100 * q.territory) / top}%;background:${colorOf(q.id, 55)}"></span>`
     + `<span class="pos">${i + 1}</span><span class="dot" style="background:${colorOf(q.id, 55)}"></span>`
-    + `<span class="n">${escapeHtml(q.name)}${q.isBot ? ' <span class="muted">· bot</span>' : ''}${q.buff ? ' 🔥' : ''}${q.shield ? ' 🛡' : ''}</span><span class="v">${q.territory}</span></div>`).join('');
+    + `<span class="n">${escapeHtml(q.name)}${q.isBot ? ' <span class="muted">· bot</span>' : ''}${q.buff ? ' 🔥' : ''}${q.shield ? ' 🛡' : ''}${allyMarks(q)}</span>${allyButton(q)}<span class="v">${q.territory}</span></div>`).join('')
+    + offersHtml();
   const now = performance.now();
   $('feed').innerHTML = feed.filter((f) => now - f.born < 9000).map((f) =>
     `<div style="opacity:${Math.min(1, (9000 - (now - f.born)) / 1500)}">${escapeHtml(f.text)}</div>`).join('');

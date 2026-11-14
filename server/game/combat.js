@@ -118,7 +118,7 @@ module.exports = {
       let target = null;
       let bestD = Infinity;
       for (const u of this.nearUnits(sh.x, sh.y, sh.range)) {
-        if (u.owner === sh.owner) continue;
+        if (!this.hostile(sh.owner, u.owner)) continue;
         const d = dist(sh.x, sh.y, u.x, u.y);
         if (d <= sh.range && d < bestD) {
           bestD = d;
@@ -137,7 +137,7 @@ module.exports = {
         let next = null;
         let nd = C.CHAIN_RANGE;
         for (const u of this.nearUnits(from.x, from.y, C.CHAIN_RANGE)) {
-          if (u.owner === sh.owner || hit.has(u.id)) continue;
+          if (!this.hostile(sh.owner, u.owner) || hit.has(u.id)) continue;
           const d = dist(from.x, from.y, u.x, u.y);
           if (d <= nd) {
             nd = d;

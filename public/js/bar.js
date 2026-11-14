@@ -1,5 +1,6 @@
 // Command bar: build tiles, wave/troop cards and the squads.
 
+import { checkAllyOrder } from './diplomacy.js';
 import { buildStats } from './hud.js';
 import { sendMsg } from './net.js';
 import { clearSelection } from './overlay.js';
@@ -217,6 +218,10 @@ function toggleBuild(kind) {
 // picked squads, else every squad. opts.everyone: every squad (Defend home / H).
 function orderAt(tg, opts = {}) {
   if (!S.myId || !tg) return;
+  checkAllyOrder(tg, () => sendOrder(tg, opts));
+}
+
+function sendOrder(tg, opts) {
   const ids = selUnits.size && !opts.everyone ? [...selUnits] : null;
   const everyone = opts.everyone || S.allSquads;
   const squads = everyone ? null : [...S.selSquads];

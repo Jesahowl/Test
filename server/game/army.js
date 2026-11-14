@@ -73,12 +73,14 @@ module.exports = {
       if (!t) return 'No such tower';
       if (t.owner === pid) return { type: 'defend', anchor: t.id };
       if (!t.owner) return 'That tower is a ruin';
+      if (this.allied(pid, t.owner)) return 'That is your ally: break the alliance first';
       return { type: 'attack', target: { k: 't', id: t.id, owner: t.owner } };
     }
     if (k === 'c') {
       if (id === pid) return { type: 'defend', anchor: 0 };
       const enemy = this.players.get(id);
       if (!enemy || !enemy.alive) return 'No such core';
+      if (this.allied(pid, id)) return 'That is your ally: break the alliance first';
       return { type: 'attack', target: { k: 'c', id } };
     }
     if (k === 'j') {
@@ -96,6 +98,7 @@ module.exports = {
       const v = this.units.get(id);
       if (!v) return 'That troop is gone';
       if (v.owner === pid) return 'That is your own troop';
+      if (this.allied(pid, v.owner)) return 'That is your ally: break the alliance first';
       return { type: 'attack', target: { k: 'u', id, owner: v.owner, lx: v.x, ly: v.y } };
     }
     return 'Invalid target';
