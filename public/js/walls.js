@@ -1,4 +1,4 @@
-// Walls in the browser: drawing them along hex edges (palisade, stone, rune wall; gates), building
+// Walls in the browser: drawing them along hex edges (the border lifted into a band of light; gates), building
 // them by dragging along your border (press V), and the panel for a selected wall.
 
 import { label } from './render.js';
@@ -7,8 +7,7 @@ import { sendMsg } from './net.js';
 import { S, $, C, colorOf, ctx, explored, HEX, mouse, players, scale, terr, toScreen } from './state.js';
 import { iconURL } from './ui.js';
 
-const OUT = '#22272d';
-const TIER = ['Palisade', 'Stone wall', 'Rune wall'];
+const TIER = ['Light wall', 'Strong wall', 'Rune wall'];
 
 S.walls = new Map();
 S.wallDrag = null; // { list: [[a, b]...], set: Set of keys } while dragging
@@ -91,189 +90,96 @@ function wallUp() {
 
 // ---- drawing
 
-// One wall segment from world point A to B (A, B: [x, y]). style 0 palisade, 1 stone, 2 rune.
+// Height of a wall of this tier on screen (s = pixels per tile).
+const wallHeight = (level, s) => s * [0.42, 0.62, 0.82][level - 1];
+
+// One wall segment from world point A to B: the border lifted up into a see-through band of light
+// in its owner's colour, taller and brighter for each tier. The band has a little thickness, so it
+// shows a lit top from any angle. A gate is the same band opened up: a hollow top frame on two
+// bright posts, joined to the walls either side.
 function drawSegment(A, B, w, s, now, ghost) {
   const [ax, ay] = toScreen(A[0], A[1]);
   const [bx, by] = toScreen(B[0], B[1]);
-  const len = Math.hypot(bx - ax, by - ay);
-  const lw = Math.max(1, s * 0.05);
-  const style = w.level - 1;
-  const ht = s * (style === 0 ? 0.62 : 0.55); // height of the wall on screen
   const owner = w.owner;
+  const tier = w.level;
+  const h = wallHeight(tier, s);
   const dmg = w.maxHp ? 1 - w.hp / w.maxHp : 0;
-  if (ghost) ctx.globalAlpha = 0.45;
-  if (w.gate) {
-    drawGate(ax, ay, bx, by, w, s, lw, ht);
-    ctx.globalAlpha = 1;
-    return;
+  const pulse = tier === 3 ? 0.85 + 0.15 * Math.sin(now / 450 + w.id) : 1;
+  const flicker = dmg > 0.5 ? 0.55 + 0.45 * Math.abs(Math.sin(now / 90 + w.id)) : 1;
+  // half the band's thickness, across the edge (pointing toward the viewer)
+  const len = Math.hypot(bx - ax, by - ay) || 1;
+  let nx = -(by - ay) / len;
+  let ny = (bx - ax) / len;
+  if (ny < 0 || (ny === 0 && nx < 0)) {
+    nx = -nx;
+    ny = -ny;
   }
-  if (style === 0) {
-    // wooden palisade: pointed stakes with a rope band in the owner's colour
-    const n = Math.max(3, Math.round(len / (s * 0.24)));
-    for (let i = 0; i <= n; i++) {
-      const t = i / n;
-      const x = ax + (bx - ax) * t;
-      const y = ay + (by - ay) * t;
-      const sh = ht * (0.85 + 0.15 * Math.sin(i * 2.7 + w.id));
-      const hw = s * 0.11;
-      ctx.fillStyle = i % 2 ? '#7a5434' : '#9a7048';
-      ctx.strokeStyle = OUT;
-      ctx.lineWidth = Math.max(0.8, lw * 0.7);
-      ctx.beginPath();
-      ctx.moveTo(x - hw, y + hw * 0.8);
-      ctx.lineTo(x - hw, y - sh);
-      ctx.lineTo(x, y - sh - s * 0.16);
-      ctx.lineTo(x + hw, y - sh);
-      ctx.lineTo(x + hw, y + hw * 0.8);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-    }
-    ctx.strokeStyle = colorOf(owner, 55);
-    ctx.lineWidth = Math.max(1.2, s * 0.08);
+  const th = s * 0.09;
+  const A0 = [ax - nx * th, ay - ny * th];
+  const B0 = [bx - nx * th, by - ny * th];
+  const A1 = [ax + nx * th, ay + ny * th];
+  const B1 = [bx + nx * th, by + ny * th];
+  const up = (p) => [p[0], p[1] - h];
+  const poly = (pts) => {
     ctx.beginPath();
-    ctx.moveTo(ax, ay - ht * 0.45);
-    ctx.lineTo(bx, by - ht * 0.45);
-    ctx.stroke();
-  } else {
-    // stone: a front face, a top face and battlements; the rune wall glows in the owner's colour
-    const ux = (bx - ax) / len;
-    const uy = (by - ay) / len;
-    const th = s * 0.2;
-    const nx = -uy * th / 2;
-    const ny = ux * th / 2;
-    const A0 = [ax - nx, ay - ny];
-    const B0 = [bx - nx, by - ny];
-    const A1 = [ax + nx, ay + ny];
-    const B1 = [bx + nx, by + ny];
-    const up = (p, h = ht) => [p[0], p[1] - h];
-    const quad = (pts, fill) => {
-      ctx.fillStyle = fill;
-      ctx.beginPath();
-      pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = OUT;
-      ctx.lineWidth = lw;
-      ctx.stroke();
-    };
-    quad([A1, B1, up(B1), up(A1)], style === 2 ? '#4a525c' : '#5a626c');
-    quad([up(A0), up(B0), up(B1), up(A1)], '#79828d');
-    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(A1[0], A1[1] - ht / 2);
-    ctx.lineTo(B1[0], B1[1] - ht / 2);
-    ctx.stroke();
-    const n = Math.max(2, Math.round(len / (s * 0.4)));
-    for (let i = 0; i < n; i++) {
-      const t1 = (i + 0.25) / n;
-      const t2 = (i + 0.65) / n;
-      const p1 = [A1[0] + (B1[0] - A1[0]) * t1, A1[1] + (B1[1] - A1[1]) * t1 - ht];
-      const p2 = [A1[0] + (B1[0] - A1[0]) * t2, A1[1] + (B1[1] - A1[1]) * t2 - ht];
-      quad([p1, p2, [p2[0], p2[1] - s * 0.16], [p1[0], p1[1] - s * 0.16]], '#79828d');
-    }
-    if (style === 2) {
-      ctx.strokeStyle = colorOf(owner, 70, 0.9);
-      ctx.lineWidth = Math.max(1, s * 0.07);
-      ctx.beginPath();
-      ctx.moveTo(A1[0], A1[1] - s * 0.08);
-      ctx.lineTo(B1[0], B1[1] - s * 0.08);
-      ctx.stroke();
-      const pulse = 0.75 + 0.25 * Math.sin(now / 500 + w.id);
-      for (let i = 0; i < 2; i++) {
-        const t = (i + 0.5) / 2;
-        const x = A1[0] + (B1[0] - A1[0]) * t;
-        const y = A1[1] + (B1[1] - A1[1]) * t - ht * 0.55;
-        const g = ctx.createRadialGradient(x, y, 0, x, y, s * 0.35);
-        g.addColorStop(0, colorOf(owner, 70, 0.7 * pulse));
-        g.addColorStop(1, colorOf(owner, 70, 0));
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(x, y, s * 0.35, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = colorOf(owner, 85);
-        ctx.beginPath();
-        ctx.moveTo(x, y - s * 0.15);
-        ctx.lineTo(x + s * 0.1, y);
-        ctx.lineTo(x, y + s * 0.15);
-        ctx.lineTo(x - s * 0.1, y);
-        ctx.closePath();
-        ctx.fill();
-      }
-    }
-  }
-  if (dmg > 0.35) {
-    // cracks
-    const mx = (ax + bx) / 2;
-    const my = (ay + by) / 2 - ht * 0.7;
-    ctx.strokeStyle = 'rgba(0,0,0,0.65)';
-    ctx.lineWidth = Math.max(1, s * 0.05);
-    ctx.beginPath();
-    ctx.moveTo(mx, my);
-    ctx.lineTo(mx + s * 0.12, my + s * 0.18);
-    ctx.lineTo(mx + s * 0.04, my + s * 0.34);
-    if (dmg > 0.65) {
-      ctx.moveTo(mx + s * 0.12, my + s * 0.18);
-      ctx.lineTo(mx + s * 0.3, my + s * 0.22);
-    }
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
-}
-
-// A gate: two small gate towers with banners, and a raised portcullis between them.
-function drawGate(ax, ay, bx, by, w, s, lw, ht) {
-  const wood = w.level === 1;
-  for (const [x, y] of [[ax, ay], [bx, by]]) {
-    ctx.fillStyle = wood ? '#7a5434' : '#5a626c';
-    ctx.strokeStyle = OUT;
-    ctx.lineWidth = lw;
-    ctx.fillRect(x - s * 0.17, y - ht * 1.6, s * 0.34, ht * 1.6 + s * 0.06);
-    ctx.strokeRect(x - s * 0.17, y - ht * 1.6, s * 0.34, ht * 1.6 + s * 0.06);
-    ctx.fillStyle = wood ? '#9a7048' : '#79828d';
-    ctx.fillRect(x - s * 0.22, y - ht * 1.6 - s * 0.12, s * 0.44, s * 0.13);
-    ctx.strokeRect(x - s * 0.22, y - ht * 1.6 - s * 0.12, s * 0.44, s * 0.13);
-    ctx.fillStyle = colorOf(w.owner, 55);
-    ctx.beginPath();
-    ctx.moveTo(x, y - ht * 1.6 - s * 0.12);
-    ctx.lineTo(x, y - ht * 1.6 - s * 0.5);
-    ctx.lineTo(x + s * 0.22, y - ht * 1.6 - s * 0.4);
-    ctx.lineTo(x, y - ht * 1.6 - s * 0.32);
-    ctx.fill();
-    ctx.strokeStyle = OUT;
-    ctx.lineWidth = Math.max(0.8, lw * 0.6);
-    ctx.beginPath();
-    ctx.moveTo(x, y - ht * 1.6 - s * 0.12);
-    ctx.lineTo(x, y - ht * 1.6 - s * 0.5);
-    ctx.stroke();
-  }
-  // the raised portcullis: bar ends showing under the arch
-  ctx.strokeStyle = '#2a2f35';
-  ctx.lineWidth = Math.max(1, s * 0.06);
-  for (let i = 1; i < 5; i++) {
-    const t = i / 5;
-    const x = ax + (bx - ax) * t;
-    const y = ay + (by - ay) * t;
-    ctx.beginPath();
-    ctx.moveTo(x, y - ht * 1.35);
-    ctx.lineTo(x, y - ht * 1.05);
-    ctx.stroke();
-  }
-  ctx.strokeStyle = wood ? '#9a7048' : '#79828d';
-  ctx.lineWidth = Math.max(1.5, s * 0.12);
+    pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.closePath();
+  };
+  ctx.save();
+  if (ghost) ctx.globalAlpha = 0.55;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  // the face toward the viewer: glassy, fainter toward the top (a gate's doorway is nearly clear)
+  const g = ctx.createLinearGradient(0, Math.max(A1[1], B1[1]), 0, Math.min(A1[1], B1[1]) - h);
+  g.addColorStop(0, colorOf(owner, 60, (w.gate ? 0.06 : 0.14 + tier * 0.11) * pulse));
+  g.addColorStop(1, colorOf(owner, 70, (w.gate ? 0.03 : 0.04 + tier * 0.08) * pulse));
+  ctx.fillStyle = g;
+  poly([A1, B1, up(B1), up(A1)]);
+  ctx.fill();
+  // the foot, where it meets the ground (dashed through a gate's doorway)
+  ctx.strokeStyle = colorOf(owner, 70, 0.8);
+  ctx.lineWidth = Math.max(1, s * 0.05);
+  if (w.gate) ctx.setLineDash([s * 0.2, s * 0.18]);
   ctx.beginPath();
-  ctx.moveTo(ax, ay - ht * 1.4);
-  ctx.lineTo(bx, by - ht * 1.4);
+  ctx.moveTo(A1[0], A1[1]);
+  ctx.lineTo(B1[0], B1[1]);
   ctx.stroke();
-  if (w.level === 3) {
-    ctx.strokeStyle = colorOf(w.owner, 70, 0.9);
-    ctx.lineWidth = Math.max(1, s * 0.05);
-    ctx.beginPath();
-    ctx.moveTo(ax, ay - ht * 1.4);
-    ctx.lineTo(bx, by - ht * 1.4);
-    ctx.stroke();
+  ctx.setLineDash([]);
+  if (w.gate) {
+    // the posts at the gate's ends, standing a little proud of the wall
+    for (const [x, y] of [[ax, ay], [bx, by]]) {
+      ctx.strokeStyle = colorOf(owner, 70, 0.35 * pulse);
+      ctx.lineWidth = Math.max(5, s * 0.3);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x, y - h - s * 0.12);
+      ctx.stroke();
+      ctx.strokeStyle = colorOf(owner, 85);
+      ctx.lineWidth = Math.max(2.5, s * 0.13);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x, y - h - s * 0.12);
+      ctx.stroke();
+    }
   }
+  // the top: a glow, then the lit surface (a gate's top is an open frame); a battered wall flickers
+  const top = [up(A0), up(B0), up(B1), up(A1)];
+  ctx.strokeStyle = colorOf(owner, 70, 0.25 * pulse * flicker);
+  ctx.lineWidth = Math.max(4, s * (0.2 + tier * 0.04));
+  poly(top);
+  ctx.stroke();
+  if (!w.gate) {
+    ctx.fillStyle = colorOf(owner, 80, (0.55 + 0.12 * tier) * flicker);
+    poly(top);
+    ctx.fill();
+  }
+  ctx.strokeStyle = colorOf(owner, 85, flicker);
+  ctx.lineWidth = Math.max(1.2, s * (0.04 + tier * 0.01));
+  if (dmg > 0.5) ctx.setLineDash([s * 0.35, s * 0.12]);
+  poly(top);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
 }
 
 function seenWall(w) {
@@ -311,9 +217,9 @@ function drawWalls() {
       if (w.hp < w.maxHp || hovered || w.id === S.selWall) {
         const bw = s * 0.9;
         ctx.fillStyle = 'rgba(0,0,0,0.6)';
-        ctx.fillRect(mx - bw / 2, my - s * 1.25, bw, Math.max(3, s * 0.1));
+        ctx.fillRect(mx - bw / 2, my - wallHeight(w.level, s) - s * 0.45, bw, Math.max(3, s * 0.1));
         ctx.fillStyle = w.hp / w.maxHp > 0.5 ? '#3fb950' : w.hp / w.maxHp > 0.25 ? '#d29922' : '#f85149';
-        ctx.fillRect(mx - bw / 2, my - s * 1.25, bw * Math.max(0, w.hp / w.maxHp), Math.max(3, s * 0.1));
+        ctx.fillRect(mx - bw / 2, my - wallHeight(w.level, s) - s * 0.45, bw * Math.max(0, w.hp / w.maxHp), Math.max(3, s * 0.1));
       }
     }
   }
@@ -393,7 +299,7 @@ function wallPanel(panel, gold) {
   panel.classList.remove('hidden');
   const mine = w.owner === S.myId;
   const key = `w:${w.id}:${w.level}:${w.gate}:${w.owner}`;
-  const name = `${w.gate ? `${TIER[w.level - 1]} gate` : TIER[w.level - 1]}`;
+  const name = w.gate ? `gate (${TIER[w.level - 1].toLowerCase()})` : TIER[w.level - 1].toLowerCase();
   if (panel.dataset.key !== key) {
     panel.dataset.key = key;
     const who = mine ? 'Your' : `${escapeHtml((players.get(w.owner) || { name: '?' }).name)}'s`;
