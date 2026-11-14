@@ -9,8 +9,7 @@
 //   priority. A worker sent somewhere by hand (sendWorker) sticks to that until it's done.
 // - build: buildings and walls are sites that rise as workers work on them (BUILD_TIME worker-
 //   seconds); unfinished ones don't shoot, train, trade or block. repair: damaged buildings, walls
-//   and the core, for a little gold. gather: chop forest hexes (not an enemy's, near the core or a
-//   workshop) and carry
+//   and the core, for a little gold. gather: chop forest hexes anywhere (nearest first) and carry
 //   the wood to the core or a workshop. farm: work a plain hex of your land for gold. scout: run
 //   off exploring the fog (fast, seeing far, keeping clear of enemy guns); at most SCOUT_WORKERS.
 // These methods are mixed into Game (see ../game.js), so `this` is the game.
@@ -123,25 +122,16 @@ module.exports = {
     }
     if (k === 'h') {
       if (!Number.isInteger(id) || !this.hex.hexes[id]) return 'Invalid spot';
-      if (this.forest.has(id)) return this.canChop(p, id) ? { type: 'gather', k: 'h', id } : 'Workers chop forests near your core or a workshop (not an enemy\'s)';
+      if (this.forest.has(id)) return this.canChop(p, id) ? { type: 'gather', k: 'h', id } : 'That forest has been chopped bare: it\'s growing back';
       return this.canFarm(p, id) ? { type: 'farm', k: 'h', id } : 'Workers farm open hexes of your own land';
     }
     return 'Invalid target';
   },
 
-  // Forests a player's workers may chop: their own, or nobody's, within GATHER_RANGE of their core
-  // or one of their finished workshops.
+  // Forests a player's workers may chop: any with wood left, anywhere on the map (they take the
+  // nearest ones first).
   canChop(p, i) {
-    if (!this.forest.has(i) || this.forest.get(i) < 1) return false;
-    const owner = this.hexOwner[i];
-    if (owner === p.id) return true;
-    if (owner) return false;
-    const h = this.hex.hexes[i];
-    if (dist(h.cx, h.cy, p.core.x + 0.5, p.core.y + 0.5) <= C.GATHER_RANGE) return true;
-    for (const t of this.towers.values()) {
-      if (t.owner === p.id && t.kind === 'workshop' && !(t.progress < 1) && dist(h.cx, h.cy, t.x + 0.5, t.y + 0.5) <= C.GATHER_RANGE) return true;
-    }
-    return false;
+    return this.forest.has(i) && this.forest.get(i) >= 1;
   },
 
   canFarm(p, i) {
@@ -300,11 +290,20 @@ module.exports = {
       u.job = null;
       return;
     }
-    // each worker takes its own spot round the target
+    // each worker takes its own spot round the target (kept inside the map). One that's close but
+    // can't quite get onto its spot (crowded, or up against something) gets to work where it is.
     const a = (u.id * 2.39996) % (Math.PI * 2);
-    const tx = at.x + Math.cos(a) * at.r * 0.8;
-    const ty = at.y + Math.sin(a) * at.r * 0.8;
-    if (dist(u.x, u.y, tx, ty) > 0.5) {
+    const tx = Math.max(0.6, Math.min(this.w - 0.6, at.x + Math.cos(a) * at.r * 0.8));
+    const ty = Math.max(0.6, Math.min(this.h - 0.6, at.y + Math.sin(a) * at.r * 0.8));
+    const d = dist(u.x, u.y, tx, ty);
+    const key = `${job.k}:${job.id}`;
+    if (u.spotKey !== key || d < u.spotBest - 0.05) {
+      u.spotKey = key;
+      u.spotBest = d;
+      u.spotAt = this.time;
+    }
+    const stuck = this.time - u.spotAt > 1.5 && dist(u.x, u.y, at.x, at.y) <= at.r + 0.8;
+    if (d > 0.5 && !stuck) {
       this.stepToward(u, tx, ty, 0.3, speed, dt);
       return;
     }

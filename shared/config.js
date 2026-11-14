@@ -38,7 +38,6 @@
     CHOP_RATE: 0.8, // wood a second one worker chops...
     WORKER_CARRY: 10, // ...until it carries this much back to the core or a workshop
     TREE_WORKERS: 2, // at most this many chopping one forest hex
-    GATHER_RANGE: 16, // workers chop forests (not an enemy's) this close to their core or a workshop
     FARM_GOLD: 0.3, // gold a second each farming worker earns
     WORKER_BOUNTY: 20, // gold for killing an enemy worker (plus any wood it carried)
     BASE_INCOME: 1.5, // gold per second
