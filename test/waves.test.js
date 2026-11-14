@@ -722,13 +722,14 @@ test('pillage: only camps that have been discovered; a camp back nearer home com
   const q = a.squads[0];
   const near = (c) => Math.hypot(c.x - a.core.x, c.y - a.core.y);
   const camps = g.camps.filter((c) => c.alive).sort((x, y) => near(x) - near(y));
-  // nothing discovered: the squad stays home
+  // nothing discovered: the squad goes searching the fog
   a.explored.fill(0);
   g.squadStance(a.id, q.id, 'pillage');
   run(g, 1.5);
   a.explored.fill(0);
+  a.pillageAt = 0;
   g.updatePillage(a);
-  assert.strictEqual(q.order.type, 'defend', 'no camp in sight: it waits at home');
+  assert.deepStrictEqual([q.order.type, q.order.target.k], ['attack', 'p'], 'no camp in sight: it goes looking for one');
   // discover only the second-nearest: it goes there, not to the (unseen) nearest
   const [first, second] = camps;
   a.explored.fill(0);
@@ -793,4 +794,21 @@ test('defensive squads stay inside the border; aggressive ones at home go out af
   assert.strictEqual(def.stance, 'defensive');
   g.order(a.id, null, { k: 'c', id: b.id }, [def.id]);
   assert.strictEqual(def.stance, 'aggressive');
+});
+
+test('pillage: with no camp in sight the squad searches the fog until it finds one', () => {
+  const { g, a } = duel(44);
+  setMix(g, a, 0, { soldier: 6 });
+  respawn(g, a);
+  const q = a.squads[0];
+  const seen = (c) => a.explored[g.idx(c.x, c.y)];
+  g.squadStance(a.id, q.id, 'pillage');
+  // forget every camp seen so far, keep the squad's own surroundings
+  for (const c of g.camps) for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) {
+    if (g.inBounds(c.x + dx, c.y + dy)) a.explored[g.idx(c.x + dx, c.y + dy)] = 0;
+  }
+  assert.ok(g.camps.every((c) => !seen(c)));
+  const found = run(g, 150, () => q.order.type === 'attack' && q.order.target.k === 'j');
+  assert.ok(found, 'it searched, discovered a camp, and went for it');
+  assert.ok(seen(g.camps[q.order.target.id]), 'one it has now seen');
 });

@@ -127,6 +127,7 @@
     TOWER_SIGHT_BONUS: 2, // towers see this much past their range
     BARRACKS_SIGHT: 5,
     SCOUT_RANGE: 45, // scouting workers explore up to this far from their core
+    PILLAGE_SEARCH_TIME: 40, // a pillaging squad searching for camps picks a new place to look after this long
     SCOUT_LEG_TIME: 25, // seconds before a scout picks a new place to explore // troops on the march engage enemies within (attack range + this)
     TROOP_BOUNTY: 14, // gold for killing an enemy troop
     TROOP_BOUNTY_PER_LEVEL: 6, // extra gold per level of the troop killed

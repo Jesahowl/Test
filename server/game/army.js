@@ -314,7 +314,7 @@ module.exports = {
   // Pillaging squads: about once a second, one that isn't already after a live camp heads for the
   // nearest live camp it has discovered (from where the squad is), or if none is up, the nearest
   // discovered one coming back (it waits there). Camps hidden in fog don't count until they've been
-  // seen. And when a camp comes back nearer home than the one a squad is heading for, the squad
+  // seen: with none discovered, the squad goes searching the fog for one. And when a camp comes back nearer home than the one a squad is heading for, the squad
   // goes there first (unless it's already fighting at its camp).
   updatePillage(p) {
     if (this.time < (p.pillageAt || 0)) return;
@@ -346,16 +346,53 @@ module.exports = {
         }
       }
       if (!best) {
-        // no camp discovered yet: wait at home
-        if (o.type !== 'defend') {
-          q.order = { type: 'defend', anchor: 0 };
-          for (const u of mine) this.applyOrder(u, q.order);
+        // No camp discovered yet: go searching. Head for ground nobody of ours has seen (clear of
+        // enemy guns), and pick somewhere new on arriving or after PILLAGE_SEARCH_TIME.
+        const spot = o.type === 'attack' && o.target.k === 'p' ? o.target.id : -1;
+        const arrived = spot >= 0 && dist(fx, fy, (spot % this.w) + 0.5, Math.floor(spot / this.w) + 0.5) < 3;
+        if (spot < 0 || arrived || this.time >= (q.searchUntil || 0)) {
+          const to = this.pickSearchSpot(fx, fy, p);
+          const ord = { type: 'attack', target: { k: 'p', id: this.idx(Math.floor(to.x), Math.floor(to.y)) } };
+          q.order = ord;
+          q.searchUntil = this.time + C.PILLAGE_SEARCH_TIME;
+          for (const u of mine) this.applyOrder(u, ord);
         }
         continue;
       }
       if (cur === best) continue;
       this.pillageTo(p, q, best);
     }
+  },
+
+  // Where a squad searching for camps looks next: the spot 10-30 tiles from it with the most ground
+  // nobody of ours has seen around it, nearer ones preferred, clear of enemy guns.
+  pickSearchSpot(fx, fy, p) {
+    let best = null;
+    let bestScore = -Infinity;
+    for (let i = 0; i < 28; i++) {
+      const a = this.rand() * Math.PI * 2;
+      const r = 10 + this.rand() * 20;
+      const x = Math.max(3, Math.min(this.w - 4, fx + Math.cos(a) * r));
+      const y = Math.max(3, Math.min(this.h - 4, fy + Math.sin(a) * r));
+      let danger = false;
+      for (const t of this.towers.values()) if (t.owner && this.hostile(p.id, t.owner) && dist(x, y, t.x, t.y) < C.structSight(t.kind, t.level)) danger = true;
+      for (const q of this.players.values()) if (this.hostile(p.id, q.id) && dist(x, y, q.core.x, q.core.y) < C.CORE_RANGE + 2) danger = true;
+      if (danger) continue;
+      let unseen = 0;
+      for (let dy = -6; dy <= 6; dy += 2) {
+        for (let dx = -6; dx <= 6; dx += 2) {
+          const tx = Math.floor(x + dx);
+          const ty = Math.floor(y + dy);
+          if (this.inBounds(tx, ty) && !p.explored[this.idx(tx, ty)]) unseen++;
+        }
+      }
+      const score = unseen * 10 - dist(fx, fy, x, y) * 0.5 + this.rand() * 5;
+      if (score > bestScore) {
+        bestScore = score;
+        best = { x, y };
+      }
+    }
+    return best || { x: p.core.x + 0.5, y: p.core.y + 0.5 };
   },
 
   // Send pillaging squad q at camp c.
