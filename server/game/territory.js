@@ -67,7 +67,7 @@ module.exports = {
     }
   },
 
-  // The hex at tile (x, y) becomes pid's (the ground a captured building stands on), unless
+  // The hex at tile (x, y) becomes pid's (the site of a conquered core), unless
   // someone else's building is in it.
   grantBlock(pid, x, y) {
     const i = this.hexAt(x, y);

@@ -749,8 +749,14 @@ module.exports = {
       if (def.heal) {
         if (this.medicTick(u, def, s, tgt, speed, dt)) continue;
       } else {
-        // In range of something? Stand and fight.
-        const shoot = this.pickTarget(u, def, s.range, true);
+        // In range of something? Stand and fight. (In sudden death, a troop sent at a building hits
+        // that building whenever it can reach it, defenders or not: cores are at 1 HP by then.)
+        let shoot = null;
+        if (tgt && tgt.struct && this.suddenDeath() && u.attack) {
+          const obj = u.attack.k === 'c' ? this.players.get(u.attack.id) : this.towers.get(u.attack.id);
+          if (obj && dist(u.x, u.y, tgt.x, tgt.y) <= s.range + 0.6 && !this.isShielded(u.attack.k === 'c' ? obj : this.players.get(obj.owner))) shoot = obj;
+        }
+        if (!shoot) shoot = this.pickTarget(u, def, s.range, true);
         if (shoot) {
           u.path = [];
           u.dest = null;

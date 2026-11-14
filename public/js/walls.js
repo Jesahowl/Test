@@ -148,7 +148,7 @@ function drawRun(run, s, now, g = ctx) {
     const b = toScreen(B[0], B[1]);
     const h = wallHeight(s);
     const pulse = 1;
-    return { a, b, h, w, pulse, dmg: w.maxHp ? 1 - w.hp / w.maxHp : 0 };
+    return { a, b, h, w, pulse };
   });
   g.save();
   g.lineCap = 'round';
@@ -222,19 +222,6 @@ function drawRun(run, s, now, g = ctx) {
   g.lineWidth = Math.max(1, s * 0.05);
   topPath();
   g.stroke();
-  // per segment: battered walls flicker dark along their top
-  for (const { a, b, h, w, dmg } of P) {
-    if (dmg > 0.5 && !w.gate) {
-      g.strokeStyle = `rgba(13, 17, 23, ${0.55 * Math.abs(Math.sin(now / 90 + w.id))})`;
-      g.lineWidth = Math.max(2.5, s * 0.17);
-      g.setLineDash([s * 0.12, s * 0.3]);
-      g.beginPath();
-      g.moveTo(a[0], a[1] - h);
-      g.lineTo(b[0], b[1] - h);
-      g.stroke();
-      g.setLineDash([]);
-    }
-  }
   g.restore();
 }
 

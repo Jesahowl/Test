@@ -65,13 +65,15 @@ test('each barracks adds 4 troops to every wave, spawning at the barracks', () =
   assert.strictEqual(g.waveSize(a), C.BASE_WAVE + C.MAX_BARRACKS * C.BARRACKS_TROOPS);
 });
 
-test('losing a barracks shrinks your waves; the player who takes it gets the troops', () => {
+test('losing a barracks shrinks your waves; whoever destroys it gains nothing but the bounty', () => {
   const { g, a, b } = duel(17);
   const bar = barracksAt(g, a, 0);
-  assert.strictEqual(g.waveSize(b), C.BASE_WAVE);
-  g.transferTower(bar, b.id, 'destroyed');
+  const gold = b.gold;
+  g.damageTower(bar, 1e9, b.id);
+  assert.ok(!g.towers.has(bar.id), 'it is gone');
   assert.strictEqual(g.waveSize(a), C.BASE_WAVE);
-  assert.strictEqual(g.waveSize(b), C.BASE_WAVE + C.BARRACKS_TROOPS);
+  assert.strictEqual(g.waveSize(b), C.BASE_WAVE);
+  assert.ok(b.gold >= gold + C.TOWER_BOUNTY);
 });
 
 test('the army plan sets the wave mix for free (one slot per troop); levels cost gold', () => {
@@ -181,35 +183,30 @@ test('an attack marches across the map and takes an undefended tower', () => {
   const t = outpost(g, b);
   const squad = troops(g, a, 'soldier', 9, a.core.x + 0.5, a.core.y + 2);
   g.order(a.id, squad.map((u) => u.id), { k: 't', id: t.id });
-  assert.ok(run(g, 120, () => t.owner !== b.id), 'tower should fall');
-  assert.strictEqual(t.owner, a.id, 'the attackers destroy and claim it');
+  assert.ok(run(g, 120, () => !g.towers.has(t.id)), 'tower should fall');
   for (const u of squad.filter((v) => g.units.has(v.id))) {
-    assert.strictEqual(u.anchor, t.id, 'the attackers stay on as its garrison');
-    assert.strictEqual(u.attack, null);
+    assert.ok(u.attack && (u.attack.k === 'c' ? u.attack.id === b.id : u.attack.owner === b.id), 'the attackers push on to that player\'s next building');
   }
 });
 
-test('destroying a tower claims it for the attacker', () => {
+test('destroying a tower just destroys it: bounty, but no tower and no land', () => {
   const { g, a, b } = duel(6);
-  {
-    const t = outpost(g, b);
-    t.level = 2;
-    const landBefore = a.territory;
-    const squad = troops(g, a, 'soldier', 8, t.x - 3, t.y + 0.5, 3);
-    g.order(a.id, null, { k: 't', id: t.id });
-    const gold = a.gold;
-    assert.ok(run(g, 120, () => t.owner !== b.id), 'tower should fall');
-    assert.strictEqual(t.owner, a.id, 'the destroyer claims it');
-    assert.ok(!t.ruin);
-    assert.strictEqual(t.level, 2, 'it keeps its level');
-    assert.ok(t.hp > 0 && t.hp <= Math.round(t.maxHp * C.TOWER_CLAIM_HP) + 1, `patched up to ${C.TOWER_CLAIM_HP * 100}% (hp ${t.hp})`);
-    assert.ok(a.gold >= gold + C.TOWER_BOUNTY);
-    assert.strictEqual(a.towersDestroyed, 1);
-    g.update(0.05);
-    assert.ok(a.territory > landBefore, 'its land comes with it');
-    for (const u of squad.filter((v) => g.units.has(v.id))) assert.strictEqual(u.anchor, t.id, 'the attackers garrison it');
-    assert.deepStrictEqual(a.lastOrder, { type: 'attack', target: { k: 'c', id: b.id } }, 'the remembered order pushes on to the core');
-  }
+  const t = outpost(g, b);
+  const hexI = g.hexAt(t.x, t.y);
+  const landBefore = a.territory;
+  const bLand = b.territory;
+  troops(g, a, 'soldier', 8, t.x - 3, t.y + 0.5, 3);
+  g.order(a.id, null, { k: 't', id: t.id });
+  const gold = a.gold;
+  assert.ok(run(g, 120, () => !g.towers.has(t.id)), 'tower should fall');
+  assert.ok(![...g.towers.values()].some((o) => o.owner === a.id), 'nobody takes it over');
+  assert.ok(a.gold >= gold + C.TOWER_BOUNTY);
+  assert.strictEqual(a.towersDestroyed, 1);
+  g.update(0.05);
+  assert.strictEqual(g.hexOwner[hexI], b.id, 'its hex stays the owner\'s');
+  assert.strictEqual(a.territory, landBefore, 'the attacker gains no land');
+  assert.strictEqual(b.territory, bLand, 'the owner loses none');
+  assert.deepStrictEqual(a.lastOrder, { type: 'attack', target: { k: 'c', id: b.id } }, 'the remembered order pushes on to the core');
 });
 
 test("a destroyed core's towers go to the conqueror; with nobody to take them they fall to ruins", () => {
@@ -286,12 +283,12 @@ test('medics heal, and troops heal slowly on their own land', () => {
   assert.ok(homeGuard.hp > 100 && homeGuard.hp < 100 + homeGuard.maxHp * C.HOME_REGEN * 2.2, 'home regen');
 });
 
-test('the standing order rolls on to the next structure when its tower is taken', () => {
+test('the standing order rolls on to the next structure when its tower is destroyed', () => {
   const { g, a, b } = duel(12);
   const t1 = outpost(g, b, 1, 0);
   const t2 = outpost(g, b, 0, 1);
   g.order(a.id, null, { k: 't', id: t1.id });
-  g.transferTower(t1, a.id);
+  g.damageTower(t1, 1e9, a.id);
   assert.deepStrictEqual(a.lastOrder, { type: 'attack', target: { k: 't', id: t2.id, owner: b.id } });
   g.damageTower(t2, 1e9, a.id);
   assert.deepStrictEqual(a.lastOrder, { type: 'attack', target: { k: 'c', id: b.id } });

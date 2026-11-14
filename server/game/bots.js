@@ -89,7 +89,7 @@ module.exports = {
     }
 
     // Defend: towers inside the land, towards the border.
-    if (towers.length < Math.min(5, 1 + Math.floor(age / 60)) && p.gold >= C.TOWERS.tower.cost + 40 + (wantTrade ? C.TOWERS.trade.cost : 0) && roll < 0.4) {
+    if (!this.suddenDeath() && towers.length < Math.min(5, 1 + Math.floor(age / 60)) && p.gold >= C.TOWERS.tower.cost + 40 + (wantTrade ? C.TOWERS.trade.cost : 0) && roll < 0.4) {
       const bases = [p.core, ...towers];
       const base = bases[Math.floor(this.rand() * bases.length)];
       for (let i = 0; i < 30; i++) {

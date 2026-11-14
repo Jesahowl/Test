@@ -73,11 +73,13 @@ module.exports = {
     const p = this.players.get(byPid);
     this.fx.push({ k: 'boom', x: t.x + 0.5, y: t.y + 0.5, r: 1.2 });
     if (p && p.alive && p.id !== t.owner) {
-      // The player who brings a tower down claims it, patched up to a fraction of its health.
+      // Brought down by a player: it's simply gone. They get the bounty; the land stays its owner's.
       this.award(p, C.TOWER_BOUNTY, 'towers', t.x + 0.5, t.y + 0.5);
       p.towersDestroyed++;
-      t.hp = Math.max(1, Math.round(t.maxHp * C.TOWER_CLAIM_HP));
-      this.transferTower(t, p.id, 'destroyed');
+      if (owner) this.pushFeed(`${p.name} destroyed ${owner.name}'s ${C.TOWERS[t.kind].name.toLowerCase()} (+${C.TOWER_BOUNTY}g)`);
+      const ownerId = t.owner;
+      this.removeTower(t);
+      this.rollOnOrders(t, ownerId);
       return;
     }
     const ownerId = t.owner;

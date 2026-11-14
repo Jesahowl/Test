@@ -15,7 +15,7 @@ function buildBar() {
   const tb = $('tower-button');
   const d = C.TOWERS.tower;
   const st = C.towerStats('tower', 1);
-  tb.dataset.tip = `<span class="t">Tower <kbd>${d.key}</kbd></span>Zaps enemy troops that come near (${st.damage} dmg/s, range ${st.range}). Build on your own land, a tile in from the border. <span class="m">Towers hold land: if an enemy takes one, your land around it opens up.</span>`;
+  tb.dataset.tip = `<span class="t">Tower <kbd>${d.key}</kbd></span>Zaps enemy troops that come near (${st.damage} dmg/s, range ${st.range}). Build on your own land. <span class="m">If enemies destroy it, it's gone (they get ${C.TOWER_BOUNTY}g); your land stays yours.</span>`;
   tb.innerHTML = `<kbd>${d.key}</kbd><img src="${iconURL('tower')}" alt="">${d.name}<span class="cost">${d.cost}g</span>`;
   tb.onclick = () => toggleBuild('tower');
   const bb = $('barracks-button');
@@ -33,7 +33,7 @@ function buildBar() {
   wb.innerHTML = `<kbd>V</kbd><img src="${iconURL('wall')}" alt="">Wall<span class="cost">${C.WALL_COST}g</span>`;
   wb.onclick = () => toggleBuild('wall');
   const lb = $('land-button');
-  lb.dataset.tip = `<span class="t">Claim land <kbd>L</kbd></span>Click an empty <b>hex</b> touching your border, or <b>drag along it</b> to claim a strip. <b>Double-click</b> outside your land to grow it one hex outward all round. A hex costs more the more land you own. <span class="m">Land = more gold and a bigger army. Enemy land can't be claimed: take their buildings or destroy their core.</span>`;
+  lb.dataset.tip = `<span class="t">Claim land <kbd>L</kbd></span>Click an empty <b>hex</b> touching your border, or <b>drag along it</b> to claim a strip. <b>Double-click</b> outside your land to grow it one hex outward all round. A hex costs more the more land you own. <span class="m">Land = more gold and a bigger army. Enemy land can't be claimed: destroy their core to win it.</span>`;
   lb.innerHTML = `<kbd>L</kbd><img src="${iconURL('land')}" alt="">Land<span class="cost"></span>`;
   lb.onclick = () => toggleBuild('land');
 

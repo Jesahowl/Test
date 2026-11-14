@@ -125,3 +125,21 @@ test('pacing: cores are fortified early, and siege damage ramps up later', () =>
   assert.strictEqual(free.coreArmor(), 0);
   assert.strictEqual(free.siegeRamp(), 1);
 });
+
+test('in sudden death, troops sent at a core hit it when they reach it, even with defenders about', () => {
+  const g = new Game({ botTarget: 0, rand: seeded(31), rounds: true });
+  const a = g.addPlayer('A');
+  const b = g.addPlayer('B');
+  for (const p of [a, b]) { p.spawnTime = -1000; p.nextWaveAt = Infinity; }
+  g.update(0.05);
+  g.time = C.ROUND_SUDDEN_DEATH + 60;
+  b.core.hp = 1;
+  // b's defenders round its core, a's soldiers right at it
+  const guards = [];
+  for (let i = 0; i < 8; i++) { const u = g.spawnTroop(b, 'soldier'); u.hp = u.maxHp = 1e6; guards.push(u); }
+  const atk = [];
+  for (let i = 0; i < 3; i++) { const u = g.spawnTroop(a, 'soldier'); u.x = b.core.x + 0.5 + (i - 1) * 0.6; u.y = b.core.y + 1.6; u.hp = u.maxHp = 1e6; atk.push(u); }
+  g.buildUnitGrid();
+  g.order(a.id, atk.map((u) => u.id), { k: 'c', id: b.id });
+  assert.ok(run(g, 5, () => !b.alive), 'the core falls');
+});

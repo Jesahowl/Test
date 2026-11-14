@@ -101,7 +101,6 @@
     TROOP_BOUNTY: 14, // gold for killing an enemy troop
     TROOP_BOUNTY_PER_LEVEL: 6, // extra gold per level of the troop killed
     TOWER_BOUNTY: 150, // gold for destroying an enemy tower (which you then also own)
-    TOWER_CLAIM_HP: 0.7, // a destroyed tower becomes the destroyer's, at this fraction of max HP
     // Home turf: troops standing on their own land heal and hit harder, so defending is cheaper
     // than attacking and a big army can't simply steamroll a smaller one at its door.
     HOME_REGEN: 0.02, // fraction of max HP healed per second

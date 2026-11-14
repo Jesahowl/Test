@@ -118,28 +118,4 @@ module.exports = {
     }
   },
 
-  // Hand tower t to newOwner (claimed by destroying it).
-  transferTower(t, newOwner, how = 'captured') {
-    const winner = this.players.get(newOwner);
-    const loser = this.players.get(t.owner);
-    const loserId = t.owner;
-    t.owner = newOwner;
-    this.structVersion++;
-    // The new owner gets just the hex the building stands on; the land around it stays the old owner's.
-    this.grantBlock(newOwner, t.x, t.y);
-    this.fx.push({ k: 'capture', x: t.x + 0.5, y: t.y + 0.5, o: newOwner });
-    // Troops that were attacking it stay on as its garrison.
-    for (const u of this.units.values()) {
-      if (u.owner === newOwner && u.attack && u.attack.k === 't' && u.attack.id === t.id) {
-        u.attack = null;
-        u.anchor = t.id;
-      }
-    }
-    this.rollOnOrders(t, loserId);
-    if (winner && loser) {
-      this.pushFeed(how === 'destroyed'
-        ? `${winner.name} destroyed and claimed ${loser.name}'s tower (+${C.TOWER_BOUNTY}g)`
-        : `${winner.name} captured a tower from ${loser.name}`);
-    }
-  },
 };

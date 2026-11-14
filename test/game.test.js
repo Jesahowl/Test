@@ -81,16 +81,17 @@ test('land is claimed hex by hex at the border, pricier as you grow', () => {
   assert.match(g.buyLand(a.id, [g.hex.hexes.find((h) => g.canBuyHex(a.id, h.i)).i]), /gold/);
 });
 
-test('taking a tower gives the captor only its hex; the land round it stays the old owner\'s', () => {
+test('destroying a tower leaves all the land, its hex included, with its owner', () => {
   const { g, a, b } = duel(5);
   const t = outpost(g, b);
   const th = g.hex.hexes[g.hexAt(t.x, t.y)];
   const ringOwned = th.n.filter((j) => g.hexOwner[j] === b.id);
   assert.ok(ringOwned.length, 'b owns hexes round its tower');
-  g.transferTower(t, a.id);
-  assert.strictEqual(g.hexOwner[th.i], a.id, "the captor gets the tower's hex");
-  assert.ok(ringOwned.every((j) => g.hexOwner[j] === b.id), "b keeps the hexes next to it");
-  assert.notStrictEqual(g.buyLand(a.id, [ringOwned[0]]), null, "and they can't be bought");
+  g.damageTower(t, 1e9, a.id);
+  g.update(0.05);
+  assert.strictEqual(g.hexOwner[th.i], b.id, "the tower's hex stays b's");
+  assert.ok(ringOwned.every((j) => g.hexOwner[j] === b.id), 'and so do the hexes next to it');
+  assert.notStrictEqual(g.buyLand(a.id, [th.i]), null, "and they can't be bought");
 });
 
 test('spawn protection keeps a new core and its towers from taking damage', () => {
@@ -264,8 +265,8 @@ test("a building's hex stays its owner's: never released, claimed or granted awa
   const nj = th.n.find((j) => g.hexOwner[j] === b.id && g.hex.hexes[j].centre >= 0 && g.hex.hexes[j].full);
   const nh = g.hex.hexes[nj];
   assert.strictEqual(g.build(b.id, nh.centre % g.w, Math.floor(nh.centre / g.w), 'tower'), null);
-  g.transferTower(t, a.id);
-  assert.strictEqual(g.hexOwner[th.i], a.id, "the captor gets the captured tower's hex");
+  g.damageTower(t, 1e9, a.id);
+  assert.strictEqual(g.hexOwner[th.i], b.id, "the destroyed tower's hex stays b's");
   assert.strictEqual(g.hexOwner[nj], b.id, "b's other tower keeps its hex");
   // nobody can be granted the hex of someone else's building
   g.grantBlock(a.id, nh.centre % g.w, Math.floor(nh.centre / g.w));

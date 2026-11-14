@@ -298,7 +298,7 @@ function updateSelectionPanel(gold) {
       $('sel-defend').onclick = () => orderAt({ k: 't', id: t.id });
     } else {
       panel.innerHTML = `<h4>${img}${escapeHtml((players.get(t.owner) || { name: '?' }).name)}'s ${d.name}${t.kind === 'barracks' ? '' : ` · Lv ${t.level}`}</h4>
-        <div id="sel-info" class="stats"></div>${t.kind === 'trade' && isAlly(t.owner) ? `<div class="stats">${tradeInfo(t)}</div>` : ''}<div class="muted">Right-click it to attack. Destroy it and it becomes yours.</div>`;
+        <div id="sel-info" class="stats"></div>${t.kind === 'trade' && isAlly(t.owner) ? `<div class="stats">${tradeInfo(t)}</div>` : ''}<div class="muted">Right-click it to attack. Destroying it knocks it down for +${C.TOWER_BOUNTY}g; the land stays theirs.</div>`;
     }
   }
   if (ruined) {
