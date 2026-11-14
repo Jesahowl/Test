@@ -93,92 +93,163 @@ function wallUp() {
 // Height of a wall of this tier on screen (s = pixels per tile).
 const wallHeight = (level, s) => s * [0.42, 0.62, 0.82][level - 1];
 
-// One wall segment from world point A to B: the border lifted up into a see-through band of light
-// in its owner's colour, taller and brighter for each tier. The band has a little thickness, so it
-// shows a lit top from any angle. A gate is the same band opened up: a hollow top frame on two
-// bright posts, joined to the walls either side.
-function drawSegment(A, B, w, s, now, ghost) {
-  const [ax, ay] = toScreen(A[0], A[1]);
-  const [bx, by] = toScreen(B[0], B[1]);
-  const owner = w.owner;
-  const tier = w.level;
-  const h = wallHeight(tier, s);
-  const dmg = w.maxHp ? 1 - w.hp / w.maxHp : 0;
-  const pulse = tier === 3 ? 0.85 + 0.15 * Math.sin(now / 450 + w.id) : 1;
-  const flicker = dmg > 0.5 ? 0.55 + 0.45 * Math.abs(Math.sin(now / 90 + w.id)) : 1;
-  // half the band's thickness, across the edge (pointing toward the viewer)
-  const len = Math.hypot(bx - ax, by - ay) || 1;
-  let nx = -(by - ay) / len;
-  let ny = (bx - ax) / len;
-  if (ny < 0 || (ny === 0 && nx < 0)) {
-    nx = -nx;
-    ny = -ny;
+// Join wall segments ({ A, B, w }, A/B world points) that meet end to end into runs, each segment
+// turned to face along its run. Only segments with the same owner join (a border's walls never meet
+// more than two at a corner, so every run is a simple line or loop).
+function chainsOf(items) {
+  const key = ([x, y]) => `${Math.round(x * 100)},${Math.round(y * 100)}`;
+  const at = new Map();
+  for (const it of items) {
+    for (const p of [it.A, it.B]) {
+      const k = `${it.w.owner}|${key(p)}`;
+      if (!at.has(k)) at.set(k, []);
+      at.get(k).push(it);
+    }
   }
-  const th = s * 0.09;
-  const A0 = [ax - nx * th, ay - ny * th];
-  const B0 = [bx - nx * th, by - ny * th];
-  const A1 = [ax + nx * th, ay + ny * th];
-  const B1 = [bx + nx * th, by + ny * th];
-  const up = (p) => [p[0], p[1] - h];
-  const poly = (pts) => {
-    ctx.beginPath();
-    pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-    ctx.closePath();
+  const other = (it, p) => (key(it.A) === key(p) ? it.B : it.A);
+  const used = new Set();
+  const runs = [];
+  const walk = (start, from) => {
+    const run = [];
+    let it = start;
+    let p = from;
+    while (it && !used.has(it)) {
+      used.add(it);
+      const q = other(it, p);
+      run.push({ A: p, B: q, w: it.w });
+      p = q;
+      it = at.get(`${it.w.owner}|${key(p)}`).find((n) => !used.has(n));
+    }
+    return run;
   };
+  // open runs first (from an end), then loops
+  for (const it of items) {
+    if (used.has(it)) continue;
+    for (const p of [it.A, it.B]) {
+      if (at.get(`${it.w.owner}|${key(p)}`).length === 1) {
+        runs.push(walk(it, p));
+        break;
+      }
+    }
+  }
+  for (const it of items) if (!used.has(it)) runs.push(walk(it, it.A));
+  return runs;
+}
+
+// One run of wall: the border lifted up into a see-through band of light in its owner's colour,
+// taller and brighter for each tier. The face is filled segment by segment (they meet edge to
+// edge), and the top is ONE line through the whole run, stepping up or down where the tier changes,
+// so the run reads as a single wall. A gate is part of the same line: its face is left almost clear,
+// the ground under it dashed, with a bright post at each end.
+function drawRun(run, s, now, ghost) {
+  if (!run.length) return;
+  const owner = run[0].w.owner;
+  const P = run.map(({ A, B, w }) => {
+    const a = toScreen(A[0], A[1]);
+    const b = toScreen(B[0], B[1]);
+    const h = wallHeight(w.level, s);
+    const pulse = w.level === 3 ? 0.85 + 0.15 * Math.sin(now / 450 + w.id) : 1;
+    return { a, b, h, w, pulse, dmg: w.maxHp ? 1 - w.hp / w.maxHp : 0 };
+  });
   ctx.save();
   if (ghost) ctx.globalAlpha = 0.55;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  // the face toward the viewer: glassy, fainter toward the top (a gate's doorway is nearly clear)
-  const g = ctx.createLinearGradient(0, Math.max(A1[1], B1[1]), 0, Math.min(A1[1], B1[1]) - h);
-  g.addColorStop(0, colorOf(owner, 60, (w.gate ? 0.06 : 0.14 + tier * 0.11) * pulse));
-  g.addColorStop(1, colorOf(owner, 70, (w.gate ? 0.03 : 0.04 + tier * 0.08) * pulse));
-  ctx.fillStyle = g;
-  poly([A1, B1, up(B1), up(A1)]);
-  ctx.fill();
-  // the foot, where it meets the ground (dashed through a gate's doorway)
+  // faces
+  for (const { a, b, h, w, pulse } of P) {
+    const g = ctx.createLinearGradient(0, Math.max(a[1], b[1]), 0, Math.min(a[1], b[1]) - h);
+    g.addColorStop(0, colorOf(owner, 60, (w.gate ? 0.05 : 0.14 + w.level * 0.11) * pulse));
+    g.addColorStop(1, colorOf(owner, 70, (w.gate ? 0.02 : 0.04 + w.level * 0.08) * pulse));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(a[0], a[1]);
+    ctx.lineTo(b[0], b[1]);
+    ctx.lineTo(b[0], b[1] - h);
+    ctx.lineTo(a[0], a[1] - h);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // the foot along the ground: solid under walls, dashed through gates
   ctx.strokeStyle = colorOf(owner, 70, 0.8);
   ctx.lineWidth = Math.max(1, s * 0.05);
-  if (w.gate) ctx.setLineDash([s * 0.2, s * 0.18]);
-  ctx.beginPath();
-  ctx.moveTo(A1[0], A1[1]);
-  ctx.lineTo(B1[0], B1[1]);
-  ctx.stroke();
+  for (const gate of [false, true]) {
+    ctx.setLineDash(gate ? [s * 0.2, s * 0.18] : []);
+    ctx.beginPath();
+    for (const { a, b, w } of P) {
+      if (!!w.gate !== gate) continue;
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b[0], b[1]);
+    }
+    ctx.stroke();
+  }
   ctx.setLineDash([]);
-  if (w.gate) {
-    // the posts at the gate's ends, standing a little proud of the wall
-    for (const [x, y] of [[ax, ay], [bx, by]]) {
-      ctx.strokeStyle = colorOf(owner, 70, 0.35 * pulse);
+  // the top: one path through the run (a step where the height changes)
+  const topPath = () => {
+    ctx.beginPath();
+    P.forEach(({ a, b, h }, k) => {
+      if (k === 0) ctx.moveTo(a[0], a[1] - h);
+      else ctx.lineTo(a[0], a[1] - h);
+      ctx.lineTo(b[0], b[1] - h);
+    });
+    const first = P[0];
+    const last = P[P.length - 1];
+    const loop = P.length > 2 && Math.hypot(first.a[0] - last.b[0], first.a[1] - last.b[1]) < 0.5;
+    if (loop) ctx.lineTo(first.a[0], first.a[1] - first.h);
+  };
+  const lvl = Math.max(...P.map((p) => p.w.level));
+  ctx.strokeStyle = colorOf(owner, 70, 0.25);
+  ctx.lineWidth = Math.max(5, s * (0.3 + lvl * 0.04));
+  topPath();
+  ctx.stroke();
+  ctx.strokeStyle = colorOf(owner, 80, 0.75);
+  ctx.lineWidth = Math.max(2.5, s * 0.17);
+  topPath();
+  ctx.stroke();
+  ctx.strokeStyle = colorOf(owner, 90);
+  ctx.lineWidth = Math.max(1, s * 0.05);
+  topPath();
+  ctx.stroke();
+  // per segment: rune walls pulse brighter along their top, battered walls flicker dark
+  for (const { a, b, h, w, pulse, dmg } of P) {
+    if (w.level === 3 && !w.gate) {
+      ctx.strokeStyle = colorOf(owner, 92, 0.6 * pulse);
+      ctx.lineWidth = Math.max(1.5, s * 0.09);
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1] - h);
+      ctx.lineTo(b[0], b[1] - h);
+      ctx.stroke();
+    }
+    if (dmg > 0.5) {
+      ctx.strokeStyle = `rgba(13, 17, 23, ${0.55 * Math.abs(Math.sin(now / 90 + w.id))})`;
+      ctx.lineWidth = Math.max(2.5, s * 0.17);
+      ctx.setLineDash([s * 0.12, s * 0.3]);
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1] - h);
+      ctx.lineTo(b[0], b[1] - h);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+  // gate posts, as tall as the taller wall beside them, so the walls run straight into them
+  P.forEach(({ a, b, h, w }, k) => {
+    if (!w.gate) return;
+    const hPrev = k > 0 ? P[k - 1].h : h;
+    const hNext = k < P.length - 1 ? P[k + 1].h : h;
+    for (const [x, y, hh] of [[a[0], a[1], Math.max(h, hPrev)], [b[0], b[1], Math.max(h, hNext)]]) {
+      ctx.strokeStyle = colorOf(owner, 70, 0.35);
       ctx.lineWidth = Math.max(5, s * 0.3);
       ctx.beginPath();
       ctx.moveTo(x, y);
-      ctx.lineTo(x, y - h - s * 0.12);
+      ctx.lineTo(x, y - hh - s * 0.1);
       ctx.stroke();
-      ctx.strokeStyle = colorOf(owner, 85);
+      ctx.strokeStyle = colorOf(owner, 88);
       ctx.lineWidth = Math.max(2.5, s * 0.13);
       ctx.beginPath();
       ctx.moveTo(x, y);
-      ctx.lineTo(x, y - h - s * 0.12);
+      ctx.lineTo(x, y - hh - s * 0.1);
       ctx.stroke();
     }
-  }
-  // the top: a glow, then the lit surface (a gate's top is an open frame); a battered wall flickers
-  const top = [up(A0), up(B0), up(B1), up(A1)];
-  ctx.strokeStyle = colorOf(owner, 70, 0.25 * pulse * flicker);
-  ctx.lineWidth = Math.max(4, s * (0.2 + tier * 0.04));
-  poly(top);
-  ctx.stroke();
-  if (!w.gate) {
-    ctx.fillStyle = colorOf(owner, 80, (0.55 + 0.12 * tier) * flicker);
-    poly(top);
-    ctx.fill();
-  }
-  ctx.strokeStyle = colorOf(owner, 85, flicker);
-  ctx.lineWidth = Math.max(1.2, s * (0.04 + tier * 0.01));
-  if (dmg > 0.5) ctx.setLineDash([s * 0.35, s * 0.12]);
-  poly(top);
-  ctx.stroke();
-  ctx.setLineDash([]);
+  });
   ctx.restore();
 }
 
@@ -198,10 +269,13 @@ function drawWalls() {
   // farther (higher up) walls first so nearer ones overlap them
   list.sort((p, q) => p.ends[0][1] + p.ends[1][1] - q.ends[0][1] - q.ends[1][1]);
   const hover = S.myId && !S.buildKind ? edgeNear(mouse.wx, mouse.wy, 0.5) : null;
+  const runs = chainsOf(list.map((w) => ({ A: w.ends[0], B: w.ends[1], w })));
+  // farther runs first (by their lowest point) so nearer walls overlap them
+  runs.sort((p, q) => Math.max(...p.map((x) => Math.max(x.A[1], x.B[1]))) - Math.max(...q.map((x) => Math.max(x.A[1], x.B[1]))));
+  for (const run of runs) drawRun(run, s, now, false);
   for (const w of list) {
     const [mx, my] = toScreen(w.x, w.y);
     if (mx < -s * 4 || my < -s * 4 || mx > ctx.canvas.width + s * 4 || my > ctx.canvas.height + s * 4) continue;
-    drawSegment(w.ends[0], w.ends[1], w, s, now, false);
     const hovered = hover && wallAtEdge(hover.a, hover.b) === w;
     if (w.id === S.selWall || hovered || w.hp < w.maxHp) {
       if (w.id === S.selWall) {
@@ -257,11 +331,10 @@ function drawWallMode() {
     ctx.restore();
   }
   const now = performance.now();
-  if (d) {
-    for (const [a, b] of d.list) {
-      const e = edgeEnds(a, b);
-      if (e) drawSegment(e[0], e[1], { id: 0, owner: S.myId, level: 1, hp: 1, maxHp: 1 }, s, now, true);
-    }
+  if (d && d.list.length) {
+    const ghost = { id: 0, owner: S.myId, level: 1, hp: 1, maxHp: 1 };
+    const items = d.list.map(([a, b]) => edgeEnds(a, b)).filter(Boolean).map((e) => ({ A: e[0], B: e[1], w: ghost }));
+    for (const run of chainsOf(items)) drawRun(run, s, now, true);
   }
   const gold = S.me ? S.me.gold : 0;
   let text;
@@ -273,7 +346,7 @@ function drawWallMode() {
     text = gold < C.WALL_COST ? `${C.WALL_COST}g (not enough gold)` : `Wall: ${C.WALL_COST}g (drag along your border)`;
     if (gold < C.WALL_COST) color = '#ffa198';
     const e = edgeEnds(near.a, near.b);
-    if (e) drawSegment(e[0], e[1], { id: 0, owner: S.myId, level: 1, hp: 1, maxHp: 1 }, s, now, true);
+    if (e) drawRun([{ A: e[0], B: e[1], w: { id: 0, owner: S.myId, level: 1, hp: 1, maxHp: 1 } }], s, now, true);
   } else if (hh >= 0) {
     text = 'Walls go on your border: drag along its edge';
     color = '#8b949e';
