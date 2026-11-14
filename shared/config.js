@@ -109,6 +109,7 @@
     // side of the border.
     HOME_ALERT: 16,
     HOME_EDGE: 1,
+    RAID_RANGE: 6, // aggressive squads guarding home go out after enemy troops this close to their border
     // Alliances: allies don't fight and can see each other's bases. Offers run out after ALLY_OFFER_TIME seconds.
     MAX_ALLIES: 2,
     ALLY_OFFER_TIME: 30,

@@ -121,8 +121,9 @@ module.exports = {
     if (mine.length > q.mix[kind]) this.units.delete(mine[mine.length - 1].id);
   },
 
-  // A squad's stance: 'aggressive' (fights everything on the way), 'defensive' (marches past
-  // fights, fights at its target and at home), 'hold' (never chases: only fights what's in reach) or
+  // A squad's stance: 'aggressive' (fights everything on the way; at home it goes out after enemy
+  // troops within RAID_RANGE of the border), 'defensive' (stays inside your land and defends it;
+  // sending it outside makes it aggressive), 'hold' (never chases: only fights what's in reach) or
   // 'pillage' (hunts barbarian camps on its own, nearest first: see updatePillage).
   squadStance(pid, sq, stance) {
     const p = this.players.get(pid);
@@ -222,6 +223,8 @@ module.exports = {
       q.order = ord;
       // sending a pillaging squad anywhere but a camp: it stops pillaging and does as it's told
       if (q.stance === 'pillage' && ord.target?.k !== 'j') this.squadStance(pid, q.id, 'defensive');
+      // defensive squads stay inside your land: sending one outside it makes it aggressive
+      else if (q.stance === 'defensive' && ord.type === 'attack' && !this.orderAtHome(pid, ord)) this.squadStance(pid, q.id, 'aggressive');
     }
     let n = 0;
     for (const u of this.units.values()) {
@@ -231,6 +234,15 @@ module.exports = {
     }
     this.lastOrderCount = n;
     return null;
+  },
+
+  // Is where an order sends troops inside pid's land?
+  orderAtHome(pid, ord) {
+    const at = this.orderPos(pid, ord);
+    if (!at) return false;
+    const x = Math.floor(at.x);
+    const y = Math.floor(at.y);
+    return this.inBounds(x, y) && this.terr[this.idx(x, y)] === pid;
   },
 
   copyOrder(from, u) {

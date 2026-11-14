@@ -125,9 +125,9 @@ function centerOnSquad(id) {
 }
 
 const STANCES = [
-  ['aggressive', '⚔', 'Aggressive', 'Fights every enemy it meets on the way'],
-  ['defensive', '🛡', 'Defensive', 'Marches past fights; fights at its target and defends home'],
-  ['hold', '✋', 'Hold', 'Never chases: only fights what comes within reach'],
+  ['aggressive', '⚔', 'Aggressive', `Fights every enemy it meets on the way. At home it goes out after enemy troops within ${C.RAID_RANGE} tiles of your border`],
+  ['defensive', '🛡', 'Defensive', 'Stays inside your land and defends it, never leaving your border. Sending it outside your land makes it aggressive'],
+  ['hold', '✋', 'Hold', 'Never chases: marches past fights and only fights what comes within reach'],
   ['pillage', '🏕', 'Pillage', 'Hunts barbarian camps on its own: the nearest one you have discovered first, then the next (camps coming back nearer home first). Sending it anywhere else sets it back to defensive'],
 ];
 

@@ -456,7 +456,7 @@ test('cleared fog stays clear: explored areas keep showing live activity', () =>
   assert.ok(g.sees(a, spot.x, spot.y + 4), '...but the area stays revealed');
 });
 
-test('stances: aggressive squads fight on the way, defensive ones march past, hold never chases', () => {
+test('stances: aggressive squads fight on the way, hold marches past and never chases, defensive ones turn aggressive when sent out', () => {
   const { g, a, b } = duel(26);
   assert.strictEqual(a.squads[0].stance, 'defensive');
   assert.match(g.squadStance(a.id, a.squads[0].id, 'berserk'), /Invalid/);
@@ -482,7 +482,8 @@ test('stances: aggressive squads fight on the way, defensive ones march past, ho
     return chased;
   };
   assert.ok(trial('aggressive') > 0, 'aggressive: turns on the enemy beside its path');
-  assert.strictEqual(trial('defensive'), 0, 'defensive: marches on');
+  trial('defensive');
+  assert.strictEqual(a.squads[0].stance, 'aggressive', 'defensive squads stay home: sent out, they turn aggressive');
   assert.strictEqual(trial('hold'), 0, 'hold: marches on');
 });
 
@@ -638,9 +639,10 @@ test('home troops react to enemies within 1 tile of their border, not further ou
   assert.ok(!g.nearHome(a.id, fx, fy), 'two and a half tiles out does not');
 });
 
-test('troops sent somewhere march past enemies on the way instead of stopping to fight them', () => {
+test('troops on hold march past enemies on the way instead of stopping to fight them', () => {
   const { g, a, b } = duel(36);
   const squad = troops(g, a, 'soldier', 4, a.core.x + 0.5, a.core.y + 2.5);
+  g.squadStance(a.id, squad[0].sq, 'hold');
   assert.strictEqual(g.order(a.id, squad.map((u) => u.id), { k: 'c', id: b.id }), null);
   // a group of b's soldiers holding a spot halfway along
   const mx = (a.core.x + b.core.x) / 2;
@@ -733,4 +735,47 @@ test('pillage: only camps that have been discovered; a camp back nearer home com
     g.updatePillage(a);
     assert.strictEqual(q.order.target.id, first.id, 'a camp back nearer home comes first');
   }
+});
+
+test('defensive squads stay inside the border; aggressive ones at home go out after enemies near it', () => {
+  const { g, a, b } = duel(43);
+  setMix(g, a, 0, { soldier: 4 });
+  a.squads[1].mix.soldier = 4;
+  respawn(g, a);
+  run(g, 10); // formed up at home
+  const [def, agg] = [a.squads[0], a.squads[1]];
+  g.squadStance(a.id, agg.id, 'aggressive');
+  const own = (u) => g.terr[g.idx(Math.floor(u.x), Math.floor(u.y))] === a.id;
+  const zone = g.homeZone(a.id);
+  // an enemy troop 4 tiles outside a's border, near the squads' posts
+  let spot = -1;
+  let bestD = Infinity;
+  const post = [...g.units.values()].find((u) => u.sq === def.id);
+  for (let k = 0; k < zone.length; k++) {
+    if (zone[k] !== 4) continue;
+    const d = Math.hypot((k % g.w) - post.x, Math.floor(k / g.w) - post.y);
+    if (d < bestD) { bestD = d; spot = k; }
+  }
+  const [foe] = troops(g, b, 'soldier', 1, (spot % g.w) + 0.5, Math.floor(spot / g.w) + 0.5);
+  foe.attack = { k: 'p', id: spot };
+  foe.hp = foe.maxHp = 1e6;
+  const defenders = [...g.units.values()].filter((u) => u.sq === def.id);
+  const raiders = [...g.units.values()].filter((u) => u.sq === agg.id);
+  let defOut = 0;
+  let aggOut = 0;
+  run(g, 12, () => {
+    foe.x = (spot % g.w) + 0.5;
+    foe.y = Math.floor(spot / g.w) + 0.5;
+    defOut += defenders.filter((u) => g.units.has(u.id) && !own(u)).length;
+    aggOut += raiders.filter((u) => g.units.has(u.id) && !own(u)).length;
+    return false;
+  });
+  assert.strictEqual(defOut, 0, 'defensive troops never leave the land');
+  assert.ok(aggOut > 0, 'aggressive troops go out after it');
+  assert.ok(foe.hp < foe.maxHp, 'and attack it');
+  // sending a defensive squad outside the land makes it aggressive; inside, it stays defensive
+  g.order(a.id, null, { k: 'c', id: a.id }, [def.id]);
+  assert.strictEqual(def.stance, 'defensive');
+  g.order(a.id, null, { k: 'c', id: b.id }, [def.id]);
+  assert.strictEqual(def.stance, 'aggressive');
 });

@@ -665,6 +665,74 @@ module.exports = {
     return false;
   },
 
+  // How far each tile is from owner's land (0 on it, up to RAID_RANGE + 1), rebuilt when land changes.
+  homeZone(owner) {
+    if (!this.zones) this.zones = new Map();
+    let z = this.zones.get(owner);
+    if (z && z.ver === this.terrVersion) return z.d;
+    const n = this.w * this.h;
+    const d = z ? z.d : new Uint8Array(n);
+    const far = C.RAID_RANGE + 1;
+    d.fill(far);
+    const queue = new Int32Array(n);
+    let head = 0;
+    let tail = 0;
+    for (let k = 0; k < n; k++) {
+      if (this.terr[k] === owner) {
+        d[k] = 0;
+        queue[tail++] = k;
+      }
+    }
+    while (head < tail) {
+      const k = queue[head++];
+      if (d[k] >= far - 1) continue;
+      const x = k % this.w;
+      const y = (k - x) / this.w;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (!this.inBounds(nx, ny)) continue;
+          const j = ny * this.w + nx;
+          if (d[j] > d[k] + 1) {
+            d[j] = d[k] + 1;
+            queue[tail++] = j;
+          }
+        }
+      }
+    }
+    this.zones.set(owner, { ver: this.terrVersion, d });
+    return d;
+  },
+
+  // The nearest enemy troop or worker (or barbarian out for blood) within RAID_RANGE of troop u's
+  // owner's border and HOME_ALERT + RAID_RANGE of u, or null. (Caravans are left alone.)
+  borderRaider(u) {
+    if (this.suddenDeath()) return null;
+    const zone = this.homeZone(u.owner);
+    const reach = C.HOME_ALERT + C.RAID_RANGE;
+    const near = (x, y) => this.inBounds(Math.floor(x), Math.floor(y)) && zone[this.idx(Math.floor(x), Math.floor(y))] <= C.RAID_RANGE;
+    let foe = null;
+    let best = reach;
+    for (const v of this.nearUnits(u.x, u.y, reach)) {
+      if (v.trade || !this.hostile(u.owner, v.owner)) continue;
+      const d = dist(u.x, u.y, v.x, v.y);
+      if (d < best && near(v.x, v.y)) {
+        best = d;
+        foe = v;
+      }
+    }
+    for (const c of this.creeps.values()) {
+      if (c.angry !== u.owner) continue;
+      const d = dist(u.x, u.y, c.x, c.y);
+      if (d < best && near(c.x, c.y)) {
+        best = d;
+        foe = c;
+      }
+    }
+    return foe;
+  },
+
   // The nearest enemy troop (or barbarian out for blood) within HOME_ALERT of troop u that's on its
   // land or right next to it, or null.
   homeIntruder(u) {
@@ -841,6 +909,16 @@ module.exports = {
       }
 
       // Defending.
+      if (stance === 'aggressive' && !def.heal) {
+        // An aggressive squad at home goes out after enemy troops near the border (within
+        // RAID_RANGE of it), then comes back.
+        const foe = this.borderRaider(u);
+        if (foe) {
+          const [fx, fy] = posOf(foe);
+          this.stepToward(u, fx, fy, s.range * 0.9, speed, dt);
+          continue;
+        }
+      }
       const a = this.anchorOf(u);
       const tx = Math.max(0, Math.min(this.w - 1, Math.floor(u.x)));
       const ty = Math.max(0, Math.min(this.h - 1, Math.floor(u.y)));
