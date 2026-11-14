@@ -1,5 +1,6 @@
 // Input: mouse, keyboard, minimap and help window.
 
+import { closePause, openPause, pauseOpen } from './pause.js';
 import { pickWall, wallDown, wallMove, wallUp } from './walls.js';
 import { closeConfirm, confirmOpen, isAlly } from './diplomacy.js';
 import { expandAll, landDown, landMove, landUp } from './land.js';
@@ -186,8 +187,15 @@ window.addEventListener('keydown', (e) => {
     if (k === 'escape') closeConfirm();
     return;
   }
+  if (pauseOpen()) {
+    // the menu takes the keyboard too: Esc closes it
+    if (k === 'escape') closePause();
+    return;
+  }
+  const helpOpen = !$('help').classList.contains('hidden');
   keys.add(k);
   if (S.spectating) {
+    if (k === 'escape' && !helpOpen) openPause();
     if (k === 'tab') {
       e.preventDefault();
       specNext();
@@ -205,8 +213,11 @@ window.addEventListener('keydown', (e) => {
   if (k === 'v') toggleBuild('wall');
   if (k === 'l') toggleBuild('land');
   if (k === 'escape') {
+    // Esc cancels what's going on; with nothing to cancel it opens the menu
+    const busy = S.buildKind || S.selectedId || selUnits.size || S.selCaravan || S.selWall || S.landDrag || S.wallDrag;
     S.buildKind = null;
     clearSelection();
+    if (!busy && !helpOpen) openPause();
   }
   if (k === 'q') {
     S.buildKind = null;

@@ -117,7 +117,7 @@ and get a turning gold rune ring at level 4 and a radiant aura at level 5.
 | `Ctrl`+click troops | Pick single troops (`N`: make them a new squad) |
 | `F` | New squads: guard home / follow your last order |
 | Left-click a tower | Select it |
-| `Esc` | Clear picked troops / selected building |
+| `Esc` | Clear picked troops / selected building / build mode; with nothing to clear, open the menu (Resume, How to play, Leave game). The ☰ button opens it too. The game keeps running while it is open; leaving hands your base to a bot. |
 | `H` | Every squad defends your core |
 | `R` | Place a barracks (your own land only): +4 troops per wave |
 | `T` | Place a trade post (your own land only): sends caravans to an ally's trade post |

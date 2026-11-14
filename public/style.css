@@ -358,3 +358,13 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 #confirm .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 #confirm button { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--raise-2, #21262d); color: var(--text); font-weight: 600; cursor: pointer; }
 #confirm button.yes { background: #da3633; border-color: #f85149; color: #fff; }
+
+/* ---------------------------------------------------------------- menu (pause) */
+#menu-toggle { top: 12px; right: 312px; font-size: 14px; }
+.pause-card { width: min(340px, 92vw); }
+.pause-btns { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.pause-btns button { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.pause-btns kbd { font-size: 10px; }
+.card button.danger { background: #b62324; }
+.card button.danger:hover { background: #da3633; }
+#pause-note { margin: 14px 0 0; font-size: 13px; line-height: 1.5; }

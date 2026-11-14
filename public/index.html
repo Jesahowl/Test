@@ -21,6 +21,7 @@
     <!-- top right: players -->
     <div id="leaderboard" class="panel"></div>
     <button id="help-toggle" class="round-btn" data-tip="Controls and how to play <kbd>?</kbd>">?</button>
+    <button id="menu-toggle" class="round-btn" data-tip="Menu <kbd>Esc</kbd>" aria-label="Menu">☰</button>
 
     <!-- bottom left: what you clicked, and first-game tips -->
     <div id="selection" class="panel hidden"></div>
@@ -68,6 +69,18 @@
   </div>
 
   <!-- controls window (? key) -->
+  <div id="pause" class="overlay hidden">
+    <div class="card pause-card" role="dialog" aria-labelledby="pause-title">
+      <h2 id="pause-title">Menu</h2>
+      <p class="tag">The game keeps running while this is open.</p>
+      <div class="pause-btns">
+        <button id="pause-resume">Resume <kbd>Esc</kbd></button>
+        <button id="pause-help" class="secondary">How to play</button>
+        <button id="pause-leave" class="danger">Leave game</button>
+      </div>
+      <p id="pause-note" class="muted hidden"></p>
+    </div>
+  </div>
   <div id="help" class="overlay hidden">
     <div class="card wide help-card">
       <button class="close" data-tip="Close <kbd>Esc</kbd>">×</button>
