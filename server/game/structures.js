@@ -99,7 +99,7 @@ module.exports = {
     if (!p || !p.alive || !t || t.owner !== pid) return 'Invalid sell';
     // no selling a building out from under its attackers (that would deny them the bounty)
     if (t.hitAt !== undefined && this.time - t.hitAt < C.SELL_LOCK) return "Can't sell while it's under attack";
-    p.gold += C.sellValue(t.kind, t.level);
+    p.gold += C.sellNow(t); // less the more damaged it is
     this.removeTower(t);
     return null;
   },

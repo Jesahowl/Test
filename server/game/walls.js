@@ -144,7 +144,7 @@ module.exports = {
     const w = this.walls.get(id);
     if (!p || !p.alive || !w || w.owner !== pid) return 'Invalid wall';
     if (w.hitAt !== undefined && this.time - w.hitAt < C.SELL_LOCK) return "Can't knock it down while it's under attack";
-    p.gold += Math.floor(this.wallSpent(w) * C.WALL_REFUND);
+    p.gold += Math.floor(this.wallSpent(w) * C.WALL_REFUND * C.healthOf(w)); // less the more damaged it is
     this.removeWall(w);
     return null;
   },

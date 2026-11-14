@@ -294,3 +294,21 @@ test('players get clearly different colours: 12 hues, then paler tones', () => {
   assert.strictEqual(late.hue, ps[3].hue);
   assert.strictEqual(late.tone, 0);
 });
+
+test('selling a damaged building (or knocking down a damaged wall) gets back less', () => {
+  const { g, a } = duel(19);
+  const h = g.hex.hexes[g.hex.hexes[g.hexAt(a.core.x, a.core.y)].n[0]];
+  g.build(a.id, h.centre % g.w, Math.floor(h.centre / g.w), 'tower');
+  const t = [...g.towers.values()].find((o) => o.owner === a.id && o.kind === 'tower');
+  const full = C.sellValue('tower', 1);
+  assert.strictEqual(C.sellNow(t), full, 'undamaged: the full price');
+  t.hp = t.maxHp / 2;
+  assert.strictEqual(C.sellNow(t), Math.floor(full / 2), 'half its HP: half the price');
+  const gold = a.gold;
+  g.time += 100; // (not under attack)
+  assert.strictEqual(g.sell(a.id, t.id), null);
+  assert.strictEqual(a.gold, gold + Math.floor(full / 2));
+  // an unharmed building site sells for its full price
+  const site = { kind: 'tower', level: 1, maxHp: 1000, progress: 0.5, hp: 1000 * (C.SITE_START_HP + (1 - C.SITE_START_HP) * 0.5) };
+  assert.strictEqual(C.sellNow(site), full);
+});

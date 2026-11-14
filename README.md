@@ -123,11 +123,11 @@ and get a turning gold rune ring at level 4 and a radiant aura at level 5.
 | `J` | Workers drawer: job priorities |
 | Click a worker, right-click | Send it to build, repair, chop or farm there |
 | `T` | Place a trade post (your own land only): sends caravans to an ally's trade post |
-| `V` | Build walls: drag along your border. Click a wall to make it a gate, or knock it down (`Del`) |
+| `V` | Build walls: drag along your border. Click a wall to make it a gate, or knock it down (`Del`; the refund scales with its health) |
 | `L` | Claim land: click empty hexes at your border, or drag along it (shows the price) |
 | Double-click outside your land | Grow your land one hex outward all round |
 | `B` | Place a tower in one of your hexes (it stands at the hex's centre) |
-| `U` / `Del` | Upgrade / sell the selected tower (no selling for 5s after it's hit) |
+| `U` / `Del` | Upgrade / sell the selected tower (no selling for 5s after it's hit). Damaged buildings sell for less: the price scales with their health, shown live on the Sell button |
 | `WASD` / arrows / right-drag | Pan. Wheel zooms. `Space` jumps home. Click the minimap to jump. `?` opens the controls & how-to-play window. |
 
 ### Interface

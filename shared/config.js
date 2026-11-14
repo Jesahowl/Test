@@ -373,6 +373,19 @@
     return Math.floor(CONFIG.totalSpent(kind, level) * CONFIG.SELL_REFUND);
   };
 
+  // How healthy a building (or wall) is, 0..1: its HP over the HP it should have (a building site
+  // is measured against what it should have at its stage of building, so an unharmed site is whole).
+  CONFIG.healthOf = function (o) {
+    const p = o.progress === undefined ? 1 : Math.min(1, o.progress);
+    const full = o.maxHp * (p < 1 ? CONFIG.SITE_START_HP + (1 - CONFIG.SITE_START_HP) * p : 1);
+    return Math.max(0, Math.min(1, o.hp / (full || 1)));
+  };
+
+  // What selling a building gets back now: its sell value, scaled by how healthy it is.
+  CONFIG.sellNow = function (t) {
+    return Math.floor(CONFIG.sellValue(t.kind, t.level) * CONFIG.healthOf(t));
+  };
+
   // Price of raising a troop type from `level` to `level + 1` (applies to troops spawned after).
   CONFIG.armyLevelCost = function (kind, level) {
     return Math.round(CONFIG.UNITS[kind].cost * 2 * level * CONFIG.latePrice(level));

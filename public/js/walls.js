@@ -384,7 +384,7 @@ function wallPanel(panel, gold) {
   }
   panel.classList.remove('hidden');
   const mine = w.owner === S.myId;
-  const key = `w:${w.id}:${w.gate}:${w.owner}`;
+  const key = `w:${w.id}:${w.gate}:${w.owner}:${Math.round(20 * C.healthOf(w))}`; // (rebuilt as it takes damage: its refund changes)
   const name = w.gate ? 'gate' : 'wall';
   if (panel.dataset.key !== key) {
     panel.dataset.key = key;
@@ -395,7 +395,7 @@ function wallPanel(panel, gold) {
       ${mine ? `<div class="btns">
         <button id="wall-gate" data-tip="${w.gate ? 'Back to a plain wall (free)' : `Your troops, caravans and allies can pass through: ${C.WALL_GATE_COST}g`}">${w.gate ? 'Close up gate' : `⛩ Make gate ${C.WALL_GATE_COST}g`}</button>
       </div>
-      <div class="btns"><button id="wall-down" data-tip="Knock it down for ${Math.round(C.WALL_REFUND * 100)}% of its cost back <kbd>Del</kbd>">Knock down</button></div>` : '<div class="muted">Troops that walk into it hack at it. Soldiers hit walls twice as hard.</div>'}`;
+      <div class="btns"><button id="wall-down" data-tip="Knock it down for ${Math.round(C.WALL_REFUND * 100)}% of its cost back, less the more damaged it is (${Math.floor(C.WALL_COST * C.WALL_REFUND * C.healthOf(w))}g now) <kbd>Del</kbd>">Knock down</button></div>` : '<div class="muted">Troops that walk into it hack at it. Soldiers hit walls twice as hard.</div>'}`;
     if (mine) {
       $('wall-gate').onclick = () => sendMsg({ t: 'wall', op: 'gate', id: w.id });
       $('wall-down').onclick = () => sendMsg({ t: 'wall', op: 'down', id: w.id });

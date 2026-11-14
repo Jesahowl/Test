@@ -340,7 +340,7 @@ function updateSelectionPanel(gold) {
             : `<div>Damage <b>${st.damage.toFixed(0)}/s</b></div><div>Range <b>${st.range}</b></div>`}<div>Sight <b>${C.structSight(t.kind, t.level)}</b></div></div>
         <div class="btns">
           <button id="sel-up" class="primary" data-tip="${isB ? upB : upTip}">${maxed ? 'Max level' : `▲ ${isB ? `+${C.squadCap(t.level + 1) - C.squadCap(t.level)} troops` : 'Upgrade'} ${C.upgradeCost(t.kind, t.level)}g`}</button>
-          <button id="sel-sell" data-tip="Sell for ${C.sellValue(t.kind, t.level)}g. Its land goes too. <kbd>Del</kbd>">Sell +${C.sellValue(t.kind, t.level)}g</button>
+          <button id="sel-sell">Sell</button>
         </div>
         <div class="btns"><button id="sel-defend">🛡 Defend here</button></div>`;
       $('sel-up').onclick = () => sendMsg({ t: 'upgrade', id: t.id });
@@ -361,6 +361,15 @@ function updateSelectionPanel(gold) {
     $('sel-info').innerHTML = t.progress < 1
       ? `<div style="grid-column:span 2">🔨 Being built: <b>${Math.round(t.progress * 100)}%</b>${t.owner === S.myId ? ' · your workers put it up' : ''}</div>`
       : `<div>HP <b>${t.hp}/${t.maxHp}</b></div><div>Guards <b>${garrison}</b></div>`;
+    if (t.owner === S.myId) {
+      // the sell price follows the building's health
+      const now = C.sellNow(t);
+      const full = C.sellValue(t.kind, t.level);
+      const sb = $('sel-sell');
+      const txt = `Sell +${now}g`;
+      if (sb.textContent !== txt) sb.textContent = txt;
+      sb.dataset.tip = `Sell for <b>${now}g</b>${now < full ? ` (${full}g undamaged: the more damaged it is, the less it's worth)` : ''}. <kbd>Del</kbd>`;
+    }
     if (t.owner === S.myId) $('sel-up').disabled = t.level >= C.maxLevel(t.kind) || gold < C.upgradeCost(t.kind, t.level);
   }
 }
