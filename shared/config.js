@@ -22,7 +22,7 @@
     WORKSHOP_WORKERS: 2,
     MAX_WORKSHOPS: 3,
     WORKER_JOBS: ['build', 'repair', 'gather', 'farm', 'scout'],
-    START_JOBS: { build: 2, repair: 2, gather: 1, farm: 1, scout: 1 },
+    START_JOBS: { build: 2, repair: 2, gather: 2, farm: 1, scout: 1 }, // (with nothing to build, they chop wood)
     SCOUT_WORKERS: 2, // at most this many workers out scouting
     SCOUT_SPEED: 4.2, // scouting workers run fast...
     SCOUT_SIGHT: 11, // ...and see far (they never fight: they explore, staying clear of enemy guns)
@@ -38,6 +38,7 @@
     CHOP_RATE: 0.8, // wood a second one worker chops...
     WORKER_CARRY: 10, // ...until it carries this much back to the core or a workshop
     TREE_WORKERS: 2, // at most this many chopping one forest hex
+    GATHER_RANGE: 16, // workers chop forests (not an enemy's) this close to their core or a workshop
     FARM_GOLD: 0.3, // gold a second each farming worker earns
     WORKER_BOUNTY: 20, // gold for killing an enemy worker (plus any wood it carried)
     BASE_INCOME: 1.5, // gold per second

@@ -9,7 +9,8 @@
 //   priority. A worker sent somewhere by hand (sendWorker) sticks to that until it's done.
 // - build: buildings and walls are sites that rise as workers work on them (BUILD_TIME worker-
 //   seconds); unfinished ones don't shoot, train, trade or block. repair: damaged buildings, walls
-//   and the core, for a little gold. gather: chop forest hexes (in or next to your land) and carry
+//   and the core, for a little gold. gather: chop forest hexes (not an enemy's, near the core or a
+//   workshop) and carry
 //   the wood to the core or a workshop. farm: work a plain hex of your land for gold. scout: run
 //   off exploring the fog (fast, seeing far, keeping clear of enemy guns); at most SCOUT_WORKERS.
 // These methods are mixed into Game (see ../game.js), so `this` is the game.
@@ -122,18 +123,25 @@ module.exports = {
     }
     if (k === 'h') {
       if (!Number.isInteger(id) || !this.hex.hexes[id]) return 'Invalid spot';
-      if (this.forest.has(id)) return this.canChop(p, id) ? { type: 'gather', k: 'h', id } : 'Workers can only chop forests in or next to your land';
+      if (this.forest.has(id)) return this.canChop(p, id) ? { type: 'gather', k: 'h', id } : 'Workers chop forests near your core or a workshop (not an enemy\'s)';
       return this.canFarm(p, id) ? { type: 'farm', k: 'h', id } : 'Workers farm open hexes of your own land';
     }
     return 'Invalid target';
   },
 
+  // Forests a player's workers may chop: their own, or nobody's, within GATHER_RANGE of their core
+  // or one of their finished workshops.
   canChop(p, i) {
     if (!this.forest.has(i) || this.forest.get(i) < 1) return false;
     const owner = this.hexOwner[i];
     if (owner === p.id) return true;
     if (owner) return false;
-    return this.hex.hexes[i].n.some((j) => this.hexOwner[j] === p.id);
+    const h = this.hex.hexes[i];
+    if (dist(h.cx, h.cy, p.core.x + 0.5, p.core.y + 0.5) <= C.GATHER_RANGE) return true;
+    for (const t of this.towers.values()) {
+      if (t.owner === p.id && t.kind === 'workshop' && !(t.progress < 1) && dist(h.cx, h.cy, t.x + 0.5, t.y + 0.5) <= C.GATHER_RANGE) return true;
+    }
+    return false;
   },
 
   canFarm(p, i) {

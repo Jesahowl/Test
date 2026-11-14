@@ -66,6 +66,10 @@ function drawTerrain(ox, oy, s) {
   if (seed === undefined || seed === null) return;
   if (!built || built.seed !== seed) built = build(seed);
   ctx.save();
+  // nothing past the map's edge (the hexes along it are cut off)
+  ctx.beginPath();
+  ctx.rect(ox, oy, C.MAP_W * s, C.MAP_H * s);
+  ctx.clip();
   ctx.translate(ox, oy);
   ctx.scale(s, s);
   ctx.fillStyle = FOREST;

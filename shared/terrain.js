@@ -24,8 +24,9 @@
   }
   const fbm = (seed, x, y) => 0.6 * vnoise(seed, x, y) + 0.3 * vnoise(seed + 1, x * 2.1, y * 2.1) + 0.1 * vnoise(seed + 2, x * 4.3, y * 4.3);
 
-  // Is hex h (with cx, cy in tiles) forest on the map grown from `seed`?
-  const isForest = (seed, h) => fbm(seed, h.cx / 10, h.cy / 10) > FOREST_AT;
+  // Is hex h (with cx, cy in tiles) forest on the map grown from `seed`? Only whole hexes: the cut-off
+  // ones along the map's edge are never forest.
+  const isForest = (seed, h) => h.full !== false && fbm(seed, h.cx / 10, h.cy / 10) > FOREST_AT;
 
   const api = { hash, isForest };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

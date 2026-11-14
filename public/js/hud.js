@@ -229,7 +229,7 @@ function updateTowerAndArmy(gold) {
 const JOBS = [
   ['build', '🔨', 'Build', 'Put up building sites and walls you place'],
   ['repair', '🔧', 'Repair', `Fix damaged buildings, walls and your core (${C.REPAIR_GOLD_PER_HP}g per HP)`],
-  ['gather', '🪓', 'Chop wood', 'Chop forests in or next to your land and carry the wood home'],
+  ['gather', '🪓', 'Chop wood', `Chop forests near your core or a workshop (within ${C.GATHER_RANGE} tiles, not an enemy's) and carry the wood home`],
   ['farm', '🌾', 'Farm', `Work open hexes of your land: +${C.FARM_GOLD}g/s each`],
   ['scout', '🔭', 'Scout', `Run off exploring the fog: fast, seeing ${C.SCOUT_SIGHT} tiles, keeping clear of enemy guns (at most ${C.SCOUT_WORKERS})`],
 ];
