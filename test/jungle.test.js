@@ -5,12 +5,12 @@ const assert = require('node:assert');
 const C = require('../shared/config');
 const { duel, troops, run } = require('./helpers');
 
-test('camps spawn across the map and stay passive until attacked', () => {
+test('camps spawn across the map and stay passive until attacked or approached', () => {
   const { g, a } = duel(1);
   assert.strictEqual(g.camps.length, C.CAMP_COUNT);
   assert.ok(g.camps.every((c) => c.alive));
   const camp = g.camps[0];
-  const [u] = troops(g, a, 'soldier', 1, camp.x + 1.5, camp.y + 0.5);
+  const [u] = troops(g, a, 'soldier', 1, camp.x + 4.5, camp.y + 0.5); // (not within a tile of it: that wakes the camp)
   u.anchor = 0;
   const hp = u.hp;
   g.update(0.05);

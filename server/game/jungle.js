@@ -109,6 +109,14 @@ module.exports = {
       const speed = def.speed;
       const homeD = dist(c.x, c.y, c.hx, c.hy);
       if (c.angry && homeD > C.CAMP_LEASH + 1.5) c.angry = 0; // dragged too far: reset
+      if (!c.angry && homeD < 1.5) {
+        // Someone's units came within a tile of the camp: the whole camp turns on that player.
+        for (const u of this.nearUnits(c.x, c.y, C.CAMP_AGGRO + 0.5)) {
+          if (u.trade || !u.owner || dist(u.x, u.y, c.x, c.y) > C.CAMP_AGGRO) continue;
+          for (const m of this.creeps.values()) if (m.camp === c.camp && !m.dead && !m.angry) m.angry = u.owner;
+          break;
+        }
+      }
 
       if (c.angry) {
         // Fight back against the player who attacked the camp, without leaving the camp area.

@@ -77,7 +77,7 @@
     WAVE_INTERVAL: 20,
     FIRST_WAVE_DELAY: 6,
     MAX_SQUADS: 4,
-    STANCES: ['aggressive', 'defensive', 'hold'],
+    STANCES: ['aggressive', 'defensive', 'hold', 'pillage'], // pillage: hunt barbarian camps on its own, nearest first
     BARRACKS_TROOPS: 5, // troop slots a barracks gives its squad per level...
     SQUAD_MAX_TROOPS: 20, // ...up to this many (level 4)
     MAX_BARRACKS: 4, // one per squad
@@ -276,6 +276,7 @@
     CAMP_CORE_DIST: 9, // minimum distance from any core
     CAMP_MOVE_MIN: 15, // a camp moves at least this far when it can
     CAMP_LEASH: 4.5, // monsters chase attackers this far from their camp, then reset
+    CAMP_AGGRO: 1.6, // anyone's units (not caravans) this close to a barbarian wake the whole camp: it attacks them
     CAMP_MIX: { small: 5, medium: 4, large: 3 }, // how many of each camp size
     CAMP_INFO: {
       small: { name: 'Raider Camp' },

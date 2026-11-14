@@ -5,7 +5,7 @@
 // (every WAVE_INTERVAL seconds every fallen troop respawns and marches out to rejoin its squad).
 // These methods are mixed into Game (see ../game.js), so `this` is the game.
 
-const { C, UNIT_KEYS } = require('./common');
+const { C, UNIT_KEYS, dist } = require('./common');
 
 const HOME = () => ({ type: 'defend', anchor: 0 });
 
@@ -122,7 +122,8 @@ module.exports = {
   },
 
   // A squad's stance: 'aggressive' (fights everything on the way), 'defensive' (marches past
-  // fights, fights at its target and at home) or 'hold' (never chases: only fights what's in reach).
+  // fights, fights at its target and at home), 'hold' (never chases: only fights what's in reach) or
+  // 'pillage' (hunts barbarian camps on its own, nearest first: see updatePillage).
   squadStance(pid, sq, stance) {
     const p = this.players.get(pid);
     if (!p || !p.alive) return 'Invalid order';
@@ -216,7 +217,12 @@ module.exports = {
       which = new Set(squads.filter((id) => this.squadOf(p, id)));
       if (!which.size) return 'Invalid squad';
     }
-    for (const q of p.squads) if (which.has(q.id)) q.order = ord;
+    for (const q of p.squads) {
+      if (!which.has(q.id)) continue;
+      q.order = ord;
+      // sending a pillaging squad anywhere but a camp: it stops pillaging and does as it's told
+      if (q.stance === 'pillage' && ord.target?.k !== 'j') this.squadStance(pid, q.id, 'defensive');
+    }
     let n = 0;
     for (const u of this.units.values()) {
       if (u.owner !== pid || u.trade || !which.has(u.sq)) continue;
@@ -293,10 +299,40 @@ module.exports = {
 
   // ---- reinforcements
 
+  // Pillaging squads: about once a second, one that isn't already after a live camp heads for the
+  // nearest live camp (from where the squad is), or if none is up, the nearest one coming back.
+  updatePillage(p) {
+    if (this.time < (p.pillageAt || 0)) return;
+    p.pillageAt = this.time + 1;
+    for (const q of p.squads) {
+      if (q.stance !== 'pillage') continue;
+      const o = q.order;
+      if (o.type === 'attack' && o.target.k === 'j' && this.camps[o.target.id]?.alive) continue;
+      const mine = [...this.units.values()].filter((u) => u.owner === p.id && u.sq === q.id);
+      const fx = mine.length ? mine.reduce((a, u) => a + u.x, 0) / mine.length : p.core.x + 0.5;
+      const fy = mine.length ? mine.reduce((a, u) => a + u.y, 0) / mine.length : p.core.y + 0.5;
+      let best = null;
+      let bestScore = Infinity;
+      for (const c of this.camps) {
+        const score = dist(fx, fy, c.x + 0.5, c.y + 0.5) + (c.alive ? 0 : 1e4);
+        if (score < bestScore) {
+          bestScore = score;
+          best = c;
+        }
+      }
+      if (!best || (o.type === 'attack' && o.target.k === 'j' && o.target.id === best.id)) continue;
+      const ord = this.makeOrder(p.id, { k: 'j', id: best.id });
+      if (typeof ord === 'string') continue;
+      q.order = ord;
+      for (const u of mine) this.applyOrder(u, ord);
+    }
+  },
+
   updateWaves() {
     for (const p of this.players.values()) {
       if (!p.alive) continue;
       this.fitArmy(p);
+      this.updatePillage(p);
       if (this.time < p.nextWaveAt) continue;
       p.nextWaveAt += C.WAVE_INTERVAL;
       this.spawnWave(p);

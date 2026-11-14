@@ -654,3 +654,45 @@ test('troops sent somewhere march past enemies on the way instead of stopping to
   assert.ok(arrived, 'the squad got to the target without getting bogged down');
   assert.ok(squad.filter((u) => g.units.has(u.id)).length >= 3, 'and most of it is still standing');
 });
+
+test('pillage: a squad hunts the camps on its own, nearest first, then the next', () => {
+  const { g, a } = duel(40);
+  setMix(g, a, 0, { soldier: 12, archer: 4, medic: 2 });
+  for (const l of [1, 2, 3]) a.levels.soldier = a.levels.archer = l + 1; // strong enough to clear camps
+  respawn(g, a);
+  const q = a.squads[0];
+  assert.strictEqual(g.squadStance(a.id, q.id, 'pillage'), null);
+  run(g, 1.5);
+  assert.strictEqual(q.order.type, 'attack');
+  assert.strictEqual(q.order.target.k, 'j', 'it set off for a camp by itself');
+  const first = q.order.target.id;
+  const mine = [...g.units.values()].filter((u) => u.owner === a.id && u.sq === q.id);
+  const cx = mine.reduce((s, u) => s + u.x, 0) / mine.length;
+  const cy = mine.reduce((s, u) => s + u.y, 0) / mine.length;
+  const nearest = g.camps.filter((c) => c.alive).sort((p, r) => Math.hypot(p.x - cx, p.y - cy) - Math.hypot(r.x - cx, r.y - cy))[0];
+  assert.strictEqual(first, nearest.id, 'the nearest one');
+  // once it's cleared, the squad moves on to another camp
+  for (const c of g.creeps.values()) if (c.camp === first) g.damageCreep(c, 1e9, a.id);
+  run(g, 2);
+  assert.ok(q.order.target.k === 'j' && q.order.target.id !== first, 'then the next');
+  // sending it somewhere else ends the pillaging
+  g.order(a.id, null, { k: 'c', id: a.id }, [q.id]);
+  assert.strictEqual(q.stance, 'defensive');
+});
+
+test('barbarians attack anyone who comes within a tile of their camp', () => {
+  const { g, a } = duel(41);
+  const camp = g.camps.find((c) => c.alive);
+  const monsters = [...g.creeps.values()].filter((c) => c.camp === camp.id);
+  assert.ok(monsters.every((c) => !c.angry), 'calm at first');
+  const m = monsters[0];
+  const [far] = troops(g, a, 'soldier', 1, m.x + 3, m.y);
+  far.attack = { k: 'p', id: g.idx(Math.floor(far.x), Math.floor(far.y)) };
+  g.update(0.05);
+  assert.ok(monsters.every((c) => !c.angry), 'three tiles off: left alone');
+  far.x = m.x + 1.2;
+  far.y = m.y;
+  g.buildUnitGrid();
+  g.update(0.05);
+  assert.ok(monsters.every((c) => c.angry === a.id), 'within a tile: the whole camp turns on them');
+});

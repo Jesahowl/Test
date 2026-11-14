@@ -204,8 +204,9 @@ module.exports = {
     }
     // The home guard stays home.
     if (guard.order.type !== 'defend') send(guard, { k: 'c', id: p.id });
-    // The jungle squad farms the nearest camp (it pays well; the warlord's fort is worth a detour).
-    if (size(jungle) && (jungle.order.type !== 'attack' || jungle.order.target.k !== 'j' || !this.camps[jungle.order.target.id]?.alive)) {
+    // The jungle squad farms the nearest camp (it pays well; the warlord's fort is worth a detour),
+    // unless it's pillaging (then it picks camps itself).
+    if (size(jungle) && jungle.stance !== 'pillage' && (jungle.order.type !== 'attack' || jungle.order.target.k !== 'j' || !this.camps[jungle.order.target.id]?.alive)) {
       const campScore = (c) => dist(c.x, c.y, p.core.x, p.core.y) - (C.BUFF_CAMPS.includes(c.type) ? 8 : 0);
       const camp = this.camps
         .filter((c) => c.alive && dist(c.x, c.y, p.core.x, p.core.y) < BOT_JUNGLE_RANGE)
@@ -249,7 +250,7 @@ module.exports = {
     });
     if (!p.bot.stances) {
       p.bot.stances = true;
-      this.squadStance(p.id, p.squads[2].id, 'aggressive');
+      this.squadStance(p.id, p.squads[2].id, 'pillage'); // squad 3 farms the camps on its own
     }
   },
 

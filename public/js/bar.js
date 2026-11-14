@@ -128,6 +128,7 @@ const STANCES = [
   ['aggressive', '⚔', 'Aggressive', 'Fights every enemy it meets on the way'],
   ['defensive', '🛡', 'Defensive', 'Marches past fights; fights at its target and defends home'],
   ['hold', '✋', 'Hold', 'Never chases: only fights what comes within reach'],
+  ['pillage', '🏕', 'Pillage', 'Hunts barbarian camps on its own: the nearest first, then the next. Sending it anywhere else sets it back to defensive'],
 ];
 
 // G: the picked squads (or all) move to the next stance.
