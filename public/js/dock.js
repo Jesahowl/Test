@@ -21,10 +21,11 @@ function initDock() {
   setDrawer(null);
 }
 
-// Little numbers on the dock buttons, and the Build button lit while placing something.
-function updateDock(squads, offers) {
+// Little numbers on the dock buttons (free army slots on Squads, alliance offers on Diplomacy),
+// and the Build button lit while placing something.
+function updateDock(free, offers) {
   const sb = $('squads-badge');
-  const st = squads ? String(squads) : '';
+  const st = free ? `+${free}` : '';
   if (sb.textContent !== st) sb.textContent = st;
   const db = $('diplo-badge');
   const dt = offers ? String(offers) : '';

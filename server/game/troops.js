@@ -731,10 +731,14 @@ module.exports = {
         continue;
       }
 
+      // Stances: 'aggressive' squads fight everything they meet on the way; 'defensive' ones (the
+      // default) march past fights; 'hold' squads never chase, only fight what's in reach.
+      const stance = u.stance || 'defensive';
+
       // Marching to a far-off target: don't get pulled into fights on the way. Troops keep walking
       // and only shoot at enemy troops (or angry barbarians) in reach as they pass; once they're
       // within MARCH_ENGAGE of the target they fight everything there as usual.
-      if (tgt && !def.heal && dist(u.x, u.y, tgt.x, tgt.y) > C.MARCH_ENGAGE) {
+      if (tgt && !def.heal && stance !== 'aggressive' && dist(u.x, u.y, tgt.x, tgt.y) > C.MARCH_ENGAGE) {
         if (u.cd <= 0) {
           const near = this.pickTarget(u, def, s.range, false);
           if (near) this.unitFire(u, near, s, def);
@@ -771,8 +775,8 @@ module.exports = {
       }
 
       if (tgt) {
-        // On the march: engage enemies that come close, otherwise push on to the target.
-        if (!def.heal) {
+        // On the march: engage enemies that come close (unless holding back), otherwise push on.
+        if (!def.heal && stance !== 'hold') {
           let foe = this.pickTarget(u, def, s.range + C.TROOP_AGGRO, false);
           if (foe && tgt.hold) {
             // Holding a spot: only chase enemies that come near it.
@@ -825,7 +829,7 @@ module.exports = {
         continue;
       }
 
-      if (!def.heal) {
+      if (!def.heal && stance !== 'hold') {
         // Home defence: go after enemies in (or right next to) my land nearby. Paths only cross my
         // own land, so troops meet them at the border and never wander out after them.
         const foe = this.homeIntruder(u);

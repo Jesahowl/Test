@@ -5,10 +5,10 @@ import { buildStats } from './hud.js';
 import { sendMsg } from './net.js';
 import { clearSelection } from './overlay.js';
 import { S, $, C, cam, selUnits, UNIT_KEYS } from './state.js';
-import { mySquads, squadPicked } from './squads.js';
+import { allSquads, squadPicked } from './squads.js';
 import { isMineTarget, targetName, targetPos } from './targets.js';
 import { tipDone } from './tips.js';
-import { escapeHtml } from './screens.js';
+import { escapeHtml, toast } from './screens.js';
 import { iconURL } from './ui.js';
 
 function buildBar() {
@@ -45,37 +45,29 @@ function buildBar() {
     card.dataset.kind = kind;
     const st1 = C.towerStats(kind, 1);
     const role = u.heal ? `heals ${u.heal}/s` : u.scout ? `sees ${u.sight} tiles, never fights` : `${st1.damage} dmg, ${u.melee ? 'melee' : `range ${st1.range}`}`;
-    card.dataset.tip = `<span class="t">${u.name}</span>${u.desc}.<br><span class="m">${st1.hp} HP · ${role} · speed ${u.speed}${C.slotsOf(kind) > 1 ? ` · <b>${C.slotsOf(kind)} wave slots</b>` : ''}</span>`;
+    card.dataset.tip = `<span class="t">${u.name}</span>${u.desc}.<br><span class="m">${st1.hp} HP · ${role} · speed ${u.speed}</span>`;
     card.innerHTML = `
       <div class="head"><img src="${iconURL(kind)}" alt=""><b>${u.name}</b><span class="lvl"></span></div>
       <div class="count"></div>
-      <div class="btns">
-        <button class="rem" data-tip="One fewer ${u.name} per wave (the slot goes back to soldiers)">−</button>
-        <button class="add" data-tip="One more ${u.name} in every wave. Free: it uses ${C.slotsOf(kind)} wave slot${C.slotsOf(kind) > 1 ? 's' : ''}">+</button>
-        <button class="up"></button>
-      </div>`;
-    card.querySelector('.add').onclick = () => sendMsg({ t: 'army', op: 'add', kind });
-    card.querySelector('.rem').onclick = () => sendMsg({ t: 'army', op: 'remove', kind });
+      <div class="btns"><button class="up"></button></div>`;
     card.querySelector('.up').onclick = () => sendMsg({ t: 'army', op: 'level', kind });
     army.appendChild(card);
   }
-  $('slots').dataset.tip = `<span class="t">Your next wave</span>The troops your core (${C.BASE_WAVE}) and each barracks (+${C.BARRACKS_TROOPS}) will send. Change the mix with the <b>+</b> and <b>−</b> buttons below; slots you leave free are filled with soldiers (<i>auto</i>).`;
-  $('alive').dataset.tip = 'Troops alive now / the most you can have. The cap grows with your land (and always fits one full wave).';
+  $('alive').dataset.tip = 'Troops alive now / your army size. The army grows with your land (1 troop per 10 tiles) and +4 for each barracks.';
   buildStats();
   $('defend-home').onclick = () => orderAt({ k: 'c', id: S.myId }, { everyone: true });
   $('squad-all').onclick = selectAllSquads;
-  $('squad-merge').onclick = mergeSquads;
-  $('new-waves').onclick = toggleNewWaves;
+  bindSquadCards();
 }
 
-// ---- squads: every wave is a squad of its own
+// ---- squads: up to four lasting squads, each with its own troops, stance and order
 
-const findSquad = (id) => mySquads().find((q) => q.id === id);
+const findSquad = (id) => allSquads().find((q) => q.id === id);
 
 // "Squad 2", "Squads 1 & 3", "All squads"
 function squadsLabel() {
   if (S.allSquads) return 'All squads';
-  const nums = mySquads().filter((q) => S.selSquads.has(q.id)).map((q) => q.num);
+  const nums = allSquads().filter((q) => S.selSquads.has(q.id)).map((q) => q.num);
   if (!nums.length) return 'All squads';
   return nums.length === 1 ? `Squad ${nums[0]}` : `Squads ${nums.slice(0, -1).join(', ')} & ${nums[nums.length - 1]}`;
 }
@@ -101,25 +93,10 @@ function pickSquad(id, add = false) {
   updateSquadsUi();
 }
 
-// 1-9: the squad with that number. With single troops picked: move them into it.
+// 1-4: the squad with that number.
 function squadKey(num, add) {
-  const q = mySquads().find((x) => x.num === num);
-  if (selUnits.size) {
-    if (!q) return;
-    sendMsg({ t: 'squad', op: 'assign', sq: q.id, ids: [...selUnits] });
-    S.pendingOrder = (n) => `${n} troop${n === 1 ? '' : 's'} moved to squad ${num}`;
-    selUnits.clear();
-    return;
-  }
+  const q = allSquads().find((x) => x.num === num);
   if (q) pickSquad(q.id, add);
-}
-
-// N: the picked single troops become a new squad.
-function newSquadFromPicked() {
-  if (!selUnits.size) return;
-  sendMsg({ t: 'squad', op: 'assign', sq: 'new', ids: [...selUnits] });
-  S.pendingOrder = (n) => `${n} troop${n === 1 ? '' : 's'} formed a new squad`;
-  selUnits.clear();
 }
 
 function selectAllSquads() {
@@ -135,87 +112,107 @@ function pickSquadOf(u, add = false) {
   pickSquad(u.sq, add);
 }
 
-// The squads Merge acts on: every squad when orders go to all of them (Q), else the picked ones.
-const mergeList = () => mySquads().filter((q) => S.allSquads || squadPicked(q.id));
-
-function mergeSquads() {
-  const list = mergeList();
-  if (list.length < 2) return;
-  sendMsg({ t: 'squad', op: 'merge', squads: list.map((q) => q.id) });
-  S.pendingOrder = () => (S.allSquads ? `All ${list.length} squads merged into squad ${list[0].num}` : `Squads ${list.map((q) => q.num).join(' + ')} merged into squad ${list[0].num}`);
-  if (!S.allSquads) S.selSquads = new Set([list[0].id]);
-}
-
-function toggleNewWaves() {
-  if (!S.me) return;
-  sendMsg({ t: 'squad', op: 'waves', mode: S.me.newWaves === 'follow' ? 'home' : 'follow' });
-}
-
 function centerOnSquad(id) {
   const q = findSquad(id);
-  if (!q) return;
+  if (!q || !q.units.length) return;
   cam.x = q.cx;
   cam.y = q.cy;
 }
 
+const STANCES = [
+  ['aggressive', '⚔', 'Aggressive', 'Fights every enemy it meets on the way'],
+  ['defensive', '🛡', 'Defensive', 'Marches past fights; fights at its target and defends home'],
+  ['hold', '✋', 'Hold', 'Never chases: only fights what comes within reach'],
+];
+
+// G: the picked squads (or all) move to the next stance.
+function cycleStance() {
+  const list = allSquads().filter((q) => S.allSquads || S.selSquads.has(q.id));
+  if (!list.length) return;
+  const i = STANCES.findIndex(([k]) => k === list[0].stance);
+  const next = STANCES[(i + 1) % STANCES.length][0];
+  for (const q of list) sendMsg({ t: 'squad', op: 'stance', sq: q.id, stance: next });
+  toast(`${S.allSquads ? 'All squads' : squadsLabel()}: ${STANCES.find(([k]) => k === next)[2].toLowerCase()} stance`, true);
+}
+
 const STATUS_ICON = { defend: '🛡', attack: '⚔', hold: '🚩' };
 
-// A squad's order for its chip: [kind, short text, long text]
+// A squad's order for its card: [kind, short text, long text]
 function squadStatus(q) {
   const [type, key] = q.status.split(' ');
-  if (type === 'defend') return key.startsWith('c:') ? ['defend', 'Home', 'Guarding your core'] : ['defend', targetName(key), `Defending ${targetName(key)}`];
-  if (key.startsWith('p:')) return ['hold', 'Holding', 'Holding a spot on the map'];
+  if (type === 'defend') return key.startsWith('c:') ? ['defend', 'Guarding home', 'Guarding your core'] : ['defend', `Guarding ${targetName(key)}`, `Defending ${targetName(key)}`];
+  if (key.startsWith('p:')) return ['hold', 'Holding a spot', 'Holding a spot on the map'];
   return ['attack', targetName(key), `Attacking ${targetName(key)}`];
+}
+
+// The squad cards: one listener for all of them (their HTML is rebuilt when anything changes).
+function bindSquadCards() {
+  $('squads').addEventListener('click', (e) => {
+    const el = e.target.closest('[data-act]');
+    const card = e.target.closest('.sq-card');
+    if (!el || !card) return;
+    const id = Number(card.dataset.id);
+    const act = el.dataset.act;
+    if (act === 'pick') pickSquad(id, e.shiftKey);
+    else if (act === 'find') {
+      pickSquad(id);
+      centerOnSquad(id);
+    } else if (act === 'add' || act === 'rem') {
+      sendMsg({ t: 'squad', op: 'mix', sq: id, kind: el.dataset.kind, d: act === 'add' ? 1 : -1 });
+      tipDone('mix');
+    } else if (act === 'stance') sendMsg({ t: 'squad', op: 'stance', sq: id, stance: el.dataset.stance });
+  });
 }
 
 function updateSquadsUi() {
   if (!S.me || !S.me.squads) return;
-  const squads = mySquads();
-  // drop picks of squads that are gone
+  const squads = allSquads();
   for (const id of S.selSquads) if (!squads.some((q) => q.id === id)) S.selSquads.delete(id);
   if (!S.allSquads && !S.selSquads.size) S.allSquads = true;
-  const moving = selUnits.size;
+  const used = squads.reduce((n, q) => n + UNIT_KEYS.reduce((m, k) => m + q.mix[k] * C.slotsOf(k), 0), 0);
+  const free = S.me.armySize - used;
   const box = $('squads');
-  const key = squads.map((q) => `${q.id}:${q.num}:${q.units.length}:${q.status}:${squadPicked(q.id) ? 1 : 0}`).join('|') + `|${moving}|${S.allSquads}`;
+  const key = squads.map((q) => `${q.id}:${q.stance}:${UNIT_KEYS.map((k) => `${q.mix[k]}/${q.kinds[k] || 0}`).join(',')}:${q.status}:${squadPicked(q.id) ? 1 : 0}:${Math.round(10 * hpFrac(q))}`).join('|') + `|${S.allSquads}|${free}`;
   if (box.dataset.key !== key) {
     box.dataset.key = key;
-    box.innerHTML = squads.length ? squads.map((q) => {
-      const [kind] = squadStatus(q);
-      const on = !moving && (S.allSquads || squadPicked(q.id));
-      return `<button class="chip ${kind} ${on ? 'on' : ''} ${squadPicked(q.id) ? 'picked' : ''} ${moving ? 'drop' : ''}" data-id="${q.id}">`
-        + `<span class="num">${q.num}</span><span class="ic">${STATUS_ICON[kind]}</span><span class="n">${q.units.length}</span></button>`;
-    }).join('') : '<div class="none">Your first wave forms squad 1</div>';
-    for (const el of box.querySelectorAll('.chip')) {
-      const id = Number(el.dataset.id);
-      const q = squads.find((x) => x.id === id);
-      const [, , long] = squadStatus(q);
-      const mix = UNIT_KEYS.filter((k) => q.kinds[k]).map((k) => `${q.kinds[k]} ${C.UNITS[k].name.toLowerCase()}${q.kinds[k] === 1 ? '' : 's'}`).join(', ');
-      el.dataset.tip = moving
-        ? `<span class="t">Move to squad ${q.num}</span>Put the ${moving} picked troop${moving === 1 ? '' : 's'} in this squad. They take on its orders.${q.num <= 9 ? ` <kbd>${q.num}</kbd>` : ''}`
-        : `<span class="t">Squad ${q.num}${q.num <= 9 ? ` <kbd>${q.num}</kbd>` : ''}</span>${escapeHtml(long)} · ${mix}.<br><span class="m">Click to pick it (or click one of its troops), then right-click a target. <kbd>Shift</kbd>-click to pick several. Click again to find it.</span>`;
-      el.onclick = (e) => {
-        if (moving) {
-          sendMsg({ t: 'squad', op: 'assign', sq: id, ids: [...selUnits] });
-          S.pendingOrder = (n) => `${n} troop${n === 1 ? '' : 's'} moved to squad ${q.num}`;
-          selUnits.clear();
-          return;
-        }
-        pickSquad(id, e.shiftKey);
-      };
-    }
+    box.innerHTML = squads.map((q) => {
+      const [kind, short, long] = squadStatus(q);
+      const on = S.allSquads || squadPicked(q.id);
+      const alive = q.units.length;
+      const mixHtml = UNIT_KEYS.map((k) => {
+        const n = q.mix[k];
+        const down = Math.max(0, n - (q.kinds[k] || 0));
+        return `<div class="mx${n ? '' : ' none'}" data-tip="<span class='t'>${C.UNITS[k].name}s in squad ${q.num}</span>${n} in the squad${down ? `, ${down} respawning` : ''}">`
+          + `<img src="${iconURL(k)}" alt=""><b>${n}</b>${down ? `<i class="down">−${down}</i>` : ''}`
+          + `<span class="pm"><button data-act="add" data-kind="${k}"${free < C.slotsOf(k) && !canMove(squads, q, k) ? ' disabled' : ''} data-tip="${free >= C.slotsOf(k) ? `One more ${C.UNITS[k].name.toLowerCase()} (it arrives at the next respawn)` : `Move a ${C.UNITS[k].name.toLowerCase()} here from your biggest squad (your army is full)`}">+</button><button data-act="rem" data-kind="${k}"${n ? '' : ' disabled'} data-tip="One fewer ${C.UNITS[k].name.toLowerCase()} (frees a slot for another squad)">−</button></span></div>`;
+      }).join('');
+      const stances = STANCES.map(([k, ic, name, what]) => `<button data-act="stance" data-stance="${k}" class="${q.stance === k ? 'on' : ''}" data-tip="<span class='t'>${name} <kbd>G</kbd></span>${what}">${ic}${q.stance === k ? ` ${name}` : ''}</button>`).join('');
+      return `<div class="sq-card ${kind}${on ? ' on' : ''}${squadPicked(q.id) ? ' picked' : ''}${q.size ? '' : ' empty'}" data-id="${q.id}">
+        <div class="sq-top" data-act="pick" data-tip="<span class='t'>Squad ${q.num} <kbd>${q.num}</kbd></span>${escapeHtml(long)}.<br><span class='m'>Click to pick it, then right-click a target. <kbd>Shift</kbd>-click to pick several.</span>">
+          <span class="num">${q.num}</span><span class="st">${STATUS_ICON[kind]} ${escapeHtml(short)}</span><span class="cnt">${alive}/${q.size}</span>
+          <button class="find" data-act="find" data-tip="Find squad ${q.num} on the map"${alive ? '' : ' disabled'}>◎</button></div>
+        <div class="sq-hp"><i style="width:${Math.round(100 * hpFrac(q))}%"></i></div>
+        <div class="sq-mix">${mixHtml}</div>
+        <div class="sq-stance">${stances}</div>
+      </div>`;
+    }).join('');
   }
-  $('squad-all').classList.toggle('on', S.allSquads && !moving);
-  $('squad-merge').disabled = mergeList().length < 2;
-  $('squad-merge').dataset.tip = S.allSquads ? 'Merge every squad into one <kbd>M</kbd>' : 'Merge the picked squads into one <kbd>M</kbd>';
-  const follow = S.me.newWaves === 'follow';
-  const nw = $('new-waves');
-  nw.classList.toggle('on', follow);
-  nw.innerHTML = follow ? '⚔ New squads follow your last order <kbd>F</kbd>' : '🛡 New squads guard home <kbd>F</kbd>';
-  nw.dataset.tip = `<span class="t">New squads</span>Every wave marches out as a new squad. ${follow
-    ? `It follows your <b>last order</b> (now: ${escapeHtml(targetName(S.me.follow))}).`
-    : 'It <b>guards your core</b> until you send it somewhere.'}<br><span class="m">Click or press <kbd>F</kbd> to switch.</span>`;
-  const hint = moving ? `· moving ${moving} troop${moving === 1 ? '' : 's'}` : `· ${squads.length}`;
+  $('squad-all').classList.toggle('on', S.allSquads);
+  const hint = free > 0 ? `${free} free troop slot${free === 1 ? '' : 's'}: add troops to a squad` : 'army full: claim land or build barracks for more';
   if ($('squad-hint').textContent !== hint) $('squad-hint').textContent = hint;
+}
+
+// With the army full, can a troop of kind k be moved into squad q from another squad?
+function canMove(squads, q, k) {
+  return squads.some((o) => o !== q && (o.mix[k] > 0 || o.mix.soldier > 0));
+}
+
+// How healthy a squad is: its troops' HP over the HP its whole mix would have.
+function hpFrac(q) {
+  if (!q.size) return 0;
+  let hp = 0;
+  for (const u of q.units) hp += Math.max(0, u.hp) / (u.maxHp || 1);
+  return Math.min(1, hp / q.size);
 }
 
 function toggleBuild(kind) {
@@ -246,8 +243,8 @@ function sendOrder(tg, opts) {
   if (!ids && !everyone) tipDone('send');
   const verb = isMineTarget(tg) ? 'defending' : tg.k === 'e' ? 'escorting' : tg.k === 'j' ? (S.camps[tg.id]?.alive === false ? 'waiting to clear' : 'clearing') : tg.k === 'u' ? 'hunting' : tg.k === 'p' ? 'holding a spot' : 'attacking';
   const what = tg.k === 'p' ? '' : ` ${targetName(`${tg.k}:${tg.id}`)}`;
-  const who = ids ? 'New squad' : opts.everyone ? 'All squads' : squadsLabel();
+  const who = opts.everyone ? 'All squads' : squadsLabel();
   S.pendingOrder = (n) => `${who} (${n} troop${n === 1 ? '' : 's'}): ${verb}${what}`;
 }
 
-export { buildBar, newSquadFromPicked, orderAt, pickSquadOf, selectAllSquads, squadKey, squadsLabel, toggleBuild, toggleNewWaves, updateSquadsUi };
+export { buildBar, cycleStance, orderAt, pickSquadOf, selectAllSquads, squadKey, squadsLabel, toggleBuild, updateSquadsUi };

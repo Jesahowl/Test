@@ -4,7 +4,7 @@ import { closePause, openPause, pauseOpen } from './pause.js';
 import { pickWall, wallDown, wallMove, wallUp } from './walls.js';
 import { closeConfirm, confirmOpen, isAlly } from './diplomacy.js';
 import { expandAll, landDown, landMove, landUp } from './land.js';
-import { newSquadFromPicked, orderAt, pickSquadOf, selectAllSquads, squadKey, toggleBuild, toggleNewWaves } from './bar.js';
+import { cycleStance, orderAt, pickSquadOf, selectAllSquads, squadKey, toggleBuild } from './bar.js';
 import { sendMsg } from './net.js';
 import { clearSelection } from './overlay.js';
 import { resize } from './render.js';
@@ -64,8 +64,7 @@ canvas.addEventListener('mousedown', (e) => {
     return;
   }
 
-  // Left-click a troop: pick its squad (Shift: pick single troops, to move them to another squad).
-  // Otherwise select a tower or ruin.
+  // Left-click a troop: pick its squad (Shift: add its squad). Otherwise select a tower or ruin.
   let hit = null;
   let hitD = 0.6;
   for (const u of S.units.values()) {
@@ -79,13 +78,7 @@ canvas.addEventListener('mousedown', (e) => {
   if (hit) {
     S.selectedId = null;
     S.selCaravan = null;
-    if (e.ctrlKey || e.metaKey || e.altKey) {
-      // pick single troops (to split them off or move them to another squad)
-      if (selUnits.has(hit.id)) selUnits.delete(hit.id);
-      else selUnits.add(hit.id);
-    } else {
-      pickSquadOf(hit, e.shiftKey);
-    }
+    pickSquadOf(hit, e.shiftKey);
     return;
   }
   // A caravan (mine or an ally's): select it to see its trade road.
@@ -231,9 +224,7 @@ window.addEventListener('keydown', (e) => {
     selectAllSquads();
   }
   if (k === 'h') orderAt({ k: 'c', id: S.myId }, { everyone: true });
-  if (k === 'f') toggleNewWaves();
-  if (k === 'n') newSquadFromPicked();
-  if (k === 'm') $('squad-merge').click();
+  if (k === 'g') cycleStance();
   if (k === ' ') {
     e.preventDefault();
     const p = players.get(S.myId);
@@ -242,8 +233,8 @@ window.addEventListener('keydown', (e) => {
       cam.y = p.y + 0.5;
     }
   }
-  // 1-9: pick the squad with that number (Shift adds; with single troops picked, move them in).
-  const m = /^Digit([1-9])$/.exec(e.code);
+  // 1-4: pick the squad with that number (Shift adds).
+  const m = /^Digit([1-4])$/.exec(e.code);
   if (m) squadKey(Number(m[1]), e.shiftKey);
   if (k === 'u' && S.selectedId) sendMsg({ t: 'upgrade', id: S.selectedId });
   if ((k === 'delete' || k === 'backspace') && S.selWall && S.walls.get(S.selWall)?.owner === S.myId) sendMsg({ t: 'wall', op: 'down', id: S.selWall });

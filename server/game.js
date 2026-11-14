@@ -209,20 +209,16 @@ class Game {
 
   // Personal state for one player (sent only to them).
   personal(p) {
-    // My squads as [id, number] (their troops carry the id), and what new squads do.
-    const squads = [...p.squadNum].sort((x, y) => x[1] - y[1]);
-    const lo = p.lastOrder;
-    const follow = lo.type === 'defend' ? (lo.anchor ? `t:${lo.anchor}` : `c:${p.id}`) : `${lo.target.k}:${lo.target.id}`;
+    // My squads: [id, number, stance, mix (per UNIT_KEYS), order ("attack t:12", "defend c:5")]. Their troops carry the id.
+    const okey = (o) => (o.type === 'defend' ? `defend ${o.anchor ? `t:${o.anchor}` : `c:${p.id}`}` : `attack ${o.target.k}:${o.target.id}`);
+    const squads = p.squads.map((q) => [q.id, q.num, q.stance, UNIT_KEYS.map((k) => q.mix[k] || 0), okey(q.order)]);
     return {
       id: p.id,
       gold: Math.floor(p.gold),
       nextWave: Math.max(0, Math.ceil(p.nextWaveAt - this.time)),
-      waveSize: this.waveSize(p),
-      army: p.army,
+      armySize: this.armySize(p),
       levels: p.levels,
       squads,
-      newWaves: p.newWaves,
-      follow,
       offersIn: this.offersTo(p.id),
       offersOut: this.offersFrom(p.id),
     };

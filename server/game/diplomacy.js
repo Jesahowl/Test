@@ -115,14 +115,14 @@ module.exports = {
     return null;
   },
 
-  // Troops of `pid` stop attacking `ally` (and new squads stop following an order against them).
+  // Troops of `pid` stop attacking `ally` (and squads forget orders against them).
   callOffAttacks(pid, ally) {
     for (const u of this.units.values()) {
       if (u.owner !== pid || !u.attack) continue;
       if (this.attackOwner(u.attack) === ally) u.attack = null;
     }
     const p = this.players.get(pid);
-    if (p && p.lastOrder.type === 'attack' && this.attackOwner(p.lastOrder.target) === ally) p.lastOrder = { type: 'defend', anchor: 0 };
+    if (p) for (const q of p.squads) if (q.order.type === 'attack' && this.attackOwner(q.order.target) === ally) q.order = { type: 'defend', anchor: 0 };
   },
 
   // Whose is the thing an attack order points at (0: nobody's, e.g. a camp or a spot)?

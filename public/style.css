@@ -140,7 +140,7 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 #slots .nw.pulse { animation: nw-pulse 0.9s ease-out; }
 @keyframes nw-pulse { 0% { box-shadow: 0 0 0 0 var(--c); transform: scale(1.12); } 100% { box-shadow: 0 0 0 8px transparent; transform: scale(1); } }
 #army { display: flex; gap: 6px; }
-.troop { width: 112px; background: var(--raise); border: 1px solid var(--line); border-radius: 10px; padding: 5px 6px 6px; display: flex; flex-direction: column; gap: 3px; }
+.troop { width: 128px; background: var(--raise); border: 1px solid var(--line); border-radius: 10px; padding: 5px 6px 6px; display: flex; flex-direction: column; gap: 3px; }
 .troop.off { opacity: 0.55; }
 .troop.in { border-color: var(--c); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 35%, transparent); background: color-mix(in srgb, var(--c) 7%, var(--raise)); }
 .troop .count b.n { color: var(--c); font-size: 15px; }
@@ -158,37 +158,52 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 .troop button:hover:not(:disabled) { border-color: var(--accent); }
 .troop button:disabled { opacity: 0.35; cursor: default; }
 
-#drawer [data-dr="squads"] { width: 300px; gap: 6px; }
-#squads { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; max-height: 120px; overflow-y: auto; align-content: start; }
-#squads .none { grid-column: 1 / -1; color: var(--muted); font-size: 11.5px; padding: 6px 2px; }
-#squads .chip { display: flex; align-items: center; gap: 2px; height: 25px; padding: 0 3px 0 2px; min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 7px;
-  background: var(--raise); color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
-#squads .chip:hover { border-color: var(--accent); }
-#squads .chip .num { min-width: 17px; height: 17px; border-radius: 5px; background: var(--raise-2); color: var(--text); font-weight: 800; font-size: 11px;
-  display: grid; place-items: center; padding: 0 2px; }
-#squads .chip .ic { font-size: 10px; }
-#squads .chip .n { margin-left: auto; font-weight: 700; color: var(--text); }
-#squads .chip.attack { border-color: rgba(255, 123, 114, 0.45); }
-#squads .chip.on { background: #2a2612; border-color: rgba(255, 213, 79, 0.55); }
-#squads .chip.picked { border-color: var(--gold); }
-#squads .chip.picked .num { background: var(--gold); color: #1a1505; }
-#squads .chip.drop { border-style: dashed; border-color: var(--good); }
+#drawer [data-dr="squads"] { width: min(860px, 96vw); gap: 8px; }
+#squads { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.sq-card { border: 1px solid var(--line); border-radius: 10px; background: var(--raise); padding: 6px 7px 7px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sq-card.on { border-color: rgba(255, 213, 79, 0.45); }
+.sq-card.picked { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; background: #211d0f; }
+.sq-card.empty { opacity: 0.75; }
+.sq-top { display: flex; align-items: center; gap: 6px; cursor: pointer; min-width: 0; }
+.sq-top .num { min-width: 20px; height: 20px; border-radius: 6px; background: var(--raise-2); font-weight: 800; font-size: 12px; display: grid; place-items: center; flex: none; }
+.sq-card.picked .sq-top .num { background: var(--gold); color: #1a1505; }
+.sq-top .st { flex: 1; min-width: 0; font-size: 11.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sq-card.attack .sq-top .st { color: var(--bad-soft); }
+.sq-card.defend .sq-top .st { color: #7ee787; }
+.sq-top .cnt { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sq-top .find { width: 20px; height: 20px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--raise-2); color: var(--muted); cursor: pointer; font-size: 11px; line-height: 1; }
+.sq-top .find:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+.sq-top .find:disabled { opacity: 0.35; cursor: default; }
+.sq-hp { height: 4px; border-radius: 2px; background: var(--raise-2); overflow: hidden; }
+.sq-hp i { display: block; height: 100%; background: linear-gradient(90deg, #2ea043, #3fb950); }
+.sq-mix { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
+.mx { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 3px 0 2px; border-radius: 7px; background: var(--raise-2); border: 1px solid transparent; }
+.mx.none { opacity: 0.55; }
+.mx img { width: 26px; height: 26px; }
+.mx b { font-size: 13px; line-height: 1; }
+.mx .down { position: absolute; top: 1px; right: 2px; font-style: normal; font-size: 9.5px; font-weight: 700; color: var(--bad-soft); }
+.mx .pm { display: flex; gap: 2px; margin-top: 2px; }
+.mx .pm button { width: 18px; height: 16px; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: var(--raise); color: var(--text); font-size: 11px; font-weight: 800; line-height: 1; cursor: pointer; }
+.mx .pm button:hover:not(:disabled) { border-color: var(--accent); }
+.mx .pm button:disabled { opacity: 0.3; cursor: default; }
+.sq-stance { display: flex; gap: 3px; }
+.sq-stance button { flex: 0 0 30px; min-width: 0; height: 22px; padding: 0 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--raise-2); color: var(--muted);
+  font: inherit; font-size: 10.5px; font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sq-stance button:hover { border-color: var(--accent); color: var(--text); }
+.sq-stance button.on { flex: 1; border-color: var(--gold); color: var(--gold); background: #2a2612; }
+.squad-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.squad-foot .squad-btns { width: 260px; }
 .squad-btns { display: flex; gap: 4px; }
-.squad-btns button { flex: 1; height: 24px; border: 1px solid var(--line); border-radius: 7px; background: var(--raise-2); color: var(--text);
-  font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; padding: 0 2px; white-space: nowrap; }
+.squad-btns button { flex: 1; height: 26px; border: 1px solid var(--line); border-radius: 7px; background: var(--raise-2); color: var(--text);
+  font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; padding: 0 6px; white-space: nowrap; }
 .squad-btns button:hover:not(:disabled) { border-color: var(--accent); }
-.squad-btns button:disabled { opacity: 0.4; cursor: default; }
 .squad-btns button.on { border-color: var(--gold); color: var(--gold); }
-.squad-btns kbd, #new-waves kbd { font-size: 9px; line-height: 12px; min-width: 14px; padding: 0 3px; }
-#new-waves { height: 22px; border: 1px solid var(--line); border-radius: 6px; background: var(--raise); color: #7ee787; cursor: pointer;
-  font: inherit; font-size: 11px; display: flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; }
-#new-waves.on { color: var(--bad-soft); border-color: rgba(255, 123, 114, 0.4); }
-#new-waves:hover { border-color: var(--accent); }
+.squad-btns kbd { font-size: 9px; line-height: 12px; min-width: 14px; padding: 0 3px; }
 #squad-hint { color: var(--muted) !important; font-weight: 500 !important; }
 .wide-btn { width: 100%; height: 28px; border: 1px solid var(--line); border-radius: 8px; background: var(--raise-2); color: var(--text);
   cursor: pointer; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; }
 .wide-btn:hover { border-color: var(--good); color: #7ee787; }
-#alive { font-size: 11px; color: var(--muted); text-align: center; }
+#alive { font-size: 11.5px; color: var(--muted); }
 #alive b { color: var(--text); }
 
 #order-info { white-space: nowrap; }
@@ -315,6 +330,7 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
   #leaderboard .pl:not(.me) .n { display: none; }
 }
 @media (max-width: 1000px) {
+  #squads { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   #stats .chip.land, #stats .who .rank { display: none; }
   #stats .who .name { max-width: 70px; }
   #leaderboard .pl .n { display: none; }

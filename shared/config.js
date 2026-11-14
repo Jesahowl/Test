@@ -40,13 +40,15 @@
     RUIN_CAPTURE_COST: 25,
     RUIN_LIFETIME: 120, // seconds before an unclaimed ruin crumbles
 
-    // ---- Troop waves (like League minions)
-    // Every WAVE_INTERVAL seconds your core sends out a free wave built from your army plan.
+    // ---- Squads and reinforcements
+    // You have up to MAX_SQUADS lasting squads, each with its own troop mix and stance. Every
+    // WAVE_INTERVAL seconds every fallen troop respawns (at the core and barracks) and marches out
+    // to rejoin its squad. The mixes together can use up to armySize() troop slots: one per
+    // LAND_PER_UNIT tiles of land (at least MIN_UNITS), plus BARRACKS_TROOPS per barracks.
     WAVE_INTERVAL: 20,
     FIRST_WAVE_DELAY: 6,
-    // Wave size: BASE_WAVE slots from the core, plus BARRACKS_TROOPS from each barracks you own.
-    // The army panel only sets the mix (one slot per troop); unassigned slots become soldiers.
-    BASE_WAVE: 4,
+    MAX_SQUADS: 4,
+    STANCES: ['aggressive', 'defensive', 'hold'],
     BARRACKS_TROOPS: 4,
     MAX_BARRACKS: 5,
     BARRACKS_COST_STEP: 150, // each extra barracks costs this much more than the last
@@ -64,8 +66,7 @@
     STRUCT_BODY: 0.6,
     CORE_BODY: 0.85,
     CREEP_BODY: 0.55,
-    START_ARMY: { scout: 1, medic: 1, archer: 1 }, // the first wave: one of each type (the rest are soldiers)
-    // How many troop slots can be alive at once grows with land: one per LAND_PER_UNIT tiles.
+    START_SQUAD: { scout: 1, medic: 1, archer: 2 }, // squad 1 to start with (the rest of the army as soldiers)
     LAND_PER_UNIT: 10,
     MIN_UNITS: 10,
     MAX_UNITS: 45,
@@ -312,11 +313,6 @@
     return kind === 'barracks' ? d.cost + CONFIG.BARRACKS_COST_STEP * owned : d.cost;
   };
 
-  // Troops per wave for a player owning this many barracks.
-  CONFIG.waveSize = function (barracks) {
-    return CONFIG.BASE_WAVE + CONFIG.BARRACKS_TROOPS * Math.min(barracks, CONFIG.MAX_BARRACKS);
-  };
-
   // Tower upgrades: cost to go from `level` to `level + 1`.
   CONFIG.upgradeCost = function (kind, level) {
     return Math.round(CONFIG.defOf(kind).cost * level * CONFIG.latePrice(level));
@@ -338,10 +334,11 @@
     return Math.round(CONFIG.UNITS[kind].cost * 2 * level * CONFIG.latePrice(level));
   };
 
-  // How many troops a player with this much land may have alive at once.
-  // (always enough for one full wave, so barracks are never wasted).
-  CONFIG.unitCap = function (territory, waveSize = 0) {
-    return Math.min(CONFIG.MAX_UNITS, Math.max(CONFIG.MIN_UNITS, waveSize, Math.floor(territory / CONFIG.LAND_PER_UNIT)));
+  // Army size: the troop slots a player's squads may use. One per LAND_PER_UNIT tiles of land (at
+  // least MIN_UNITS), plus BARRACKS_TROOPS for each barracks; never more than MAX_UNITS.
+  CONFIG.armySize = function (territory, barracks) {
+    const land = Math.max(CONFIG.MIN_UNITS, Math.floor(territory / CONFIG.LAND_PER_UNIT));
+    return Math.min(CONFIG.MAX_UNITS, land + CONFIG.BARRACKS_TROOPS * Math.min(barracks, CONFIG.MAX_BARRACKS));
   };
 
   // Gold for the next tile of land, for a player who owns `territory` tiles.

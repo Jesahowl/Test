@@ -28,12 +28,8 @@ module.exports = {
     const pos = this.findSpawn();
     if (!pos) return null;
     const id = this.nextId++;
-    const army = {};
     const levels = {};
-    for (const k of UNIT_KEYS) {
-      army[k] = C.START_ARMY[k] || 0;
-      levels[k] = 1;
-    }
+    for (const k of UNIT_KEYS) levels[k] = 1;
     const p = {
       isPlayer: true,
       id,
@@ -53,16 +49,11 @@ module.exports = {
       buffUntil: 0, // jungle buff active until this time
       vis: new Uint8Array(this.w * this.h), // fog of war: what this player sees now
       explored: new Uint8Array(this.w * this.h), // ...and everywhere they have seen
-      army,
       levels,
-      // Squads: every wave marches out as a squad of its own (u.sq = squad id), numbered with the
-      // lowest number free. New squads guard home, or with newWaves 'follow' take lastOrder.
-      squadNum: new Map(),
-      newWaves: 'home',
-      lastOrder: { type: 'defend', anchor: 0 },
       nextWaveAt: this.time + C.FIRST_WAVE_DELAY,
       bot: isBot ? { next: this.time + 1, nextOrder: this.time + 10 } : null,
     };
+    this.makeSquads(p); // squads 1-4 (see army.js)
     this.players.set(id, p);
     this.roster.set(id, { id, name: p.name, hue: p.hue, tone: p.tone, isBot, place: 0, left: false, survived: 0, peakTerritory: 0,
       kills: 0, towersDestroyed: 0, coresDestroyed: 0, gold: 0 });
@@ -260,7 +251,7 @@ module.exports = {
 
     // Surviving troops defect to the conqueror and garrison the new tower; otherwise they vanish.
     let troopsTaken = 0;
-    let defectors = 0; // the squad they form for the conqueror
+    const defectors = conquered ? this.smallestSquad(killer) : null; // the squad they join
     for (const u of this.units.values()) {
       if (u.owner !== p.id) continue;
       if (!conquered || u.trade) {
@@ -268,7 +259,8 @@ module.exports = {
         continue;
       }
       u.owner = killer.id;
-      u.sq = defectors || (defectors = this.newSquad(killer));
+      u.sq = defectors.id;
+      u.stance = defectors.stance;
       u.attack = null;
       u.anchor = site.id;
       u.path = [];
@@ -289,7 +281,7 @@ module.exports = {
       killer.coresDestroyed++;
       p.gold = 0;
       // Waves that were pushing on this player head home instead of wandering off.
-      if (killer.lastOrder.type === 'attack' && !this.orderValid(killer.id, killer.lastOrder)) killer.lastOrder = { type: 'defend', anchor: 0 };
+      this.tidySquadOrders(killer);
       this.pushFeed(`${killer.name} destroyed ${p.name}'s core: +${bounty}g, all ${landTaken} tiles of their land, ${towersTaken + 1} building${towersTaken ? 's' : ''} and ${troopsTaken} troop${troopsTaken === 1 ? '' : 's'}`);
     } else if (leftGame) {
       this.pushFeed(`${p.name} left - their base lies in ruins`);

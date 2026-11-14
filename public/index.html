@@ -48,13 +48,13 @@
         <section class="dr" data-dr="squads">
           <div class="dr-head"><b>Squads</b><span id="squad-hint" class="muted"></span></div>
           <div id="squads"></div>
-          <div class="squad-btns">
-            <button id="squad-all" data-tip="Orders go to every squad <kbd>Q</kbd>">All <kbd>Q</kbd></button>
-            <button id="squad-merge" data-tip="Merge the picked squads into one <kbd>M</kbd>">Merge <kbd>M</kbd></button>
-            <button id="defend-home" data-tip="Every squad goes home to guard your core <kbd>H</kbd>">🛡 Home <kbd>H</kbd></button>
+          <div class="squad-foot">
+            <span id="alive"></span>
+            <div class="squad-btns">
+              <button id="squad-all" data-tip="Orders go to every squad <kbd>Q</kbd>">All squads <kbd>Q</kbd></button>
+              <button id="defend-home" data-tip="Every squad goes home to guard your core <kbd>H</kbd>">🛡 All home <kbd>H</kbd></button>
+            </div>
           </div>
-          <button id="new-waves" class="toggle"></button>
-          <div id="alive"></div>
         </section>
         <section class="dr" data-dr="diplo">
           <div class="dr-head"><b>Diplomacy</b><span class="muted" id="diplo-hint"></span></div>
@@ -63,9 +63,9 @@
       </div>
       <div id="dock">
         <button class="dock-btn" data-dr="build" data-tip="Build towers, barracks, trade posts, walls and land <kbd>Z</kbd>">Build<kbd>Z</kbd></button>
-        <button class="dock-btn" data-dr="army" data-tip="Choose your wave and level your troops <kbd>X</kbd>">Army<kbd>X</kbd></button>
-        <div id="wave-timer" data-tip="Every 20 seconds your core and barracks send out a free wave"></div>
-        <button class="dock-btn" data-dr="squads" data-tip="Your squads and their orders <kbd>C</kbd>">Squads<kbd>C</kbd><span class="badge" id="squads-badge"></span></button>
+        <button class="dock-btn" data-dr="army" data-tip="Level up your troop types and see who's respawning <kbd>X</kbd>">Army<kbd>X</kbd></button>
+        <div id="wave-timer" data-tip="Every 20 seconds, fallen troops respawn and rejoin their squads"></div>
+        <button class="dock-btn" data-dr="squads" data-tip="Your four squads: their troops, stance and orders <kbd>C</kbd>">Squads<kbd>C</kbd><span class="badge hot" id="squads-badge" data-tip="Free troop slots: add troops to a squad"></span></button>
         <button class="dock-btn" data-dr="diplo" data-tip="Alliances: offer, accept or break <kbd>P</kbd>">Diplomacy<kbd>P</kbd><span class="badge hot" id="diplo-badge"></span></button>
       </div>
     </div>
@@ -91,20 +91,18 @@
       <button class="close" data-tip="Close <kbd>Esc</kbd>">×</button>
       <h2>How to play</h2>
       <div class="how-grid">
-        <div><b>🏰 Waves</b>Every 20s your core sends <b>4 troops</b> (one of each type), plus 4 from every <b>barracks</b>. Choose the mix in the wave panel. It's free; gold buys levels.</div>
-        <div><b>🎯 Squads</b>Every wave marches out as a <b>squad</b> that sticks together. Click one of its troops (or press its number), then <b>right-click</b> a target.</div>
+        <div><b>🏰 Army</b>You have up to <b>4 squads</b>. Choose each squad's troops in <b>Squads</b> (<kbd>C</kbd>). Troops that fall <b>respawn every 20s</b> and rejoin their squad. Land and <b>barracks</b> make your army bigger; gold buys levels.</div>
+        <div><b>🎯 Squads</b>Click one of a squad's troops (or press <kbd>1</kbd>–<kbd>4</kbd>), then <b>right-click</b> a target. Set each squad's <b>stance</b>: aggressive, defensive or hold.</div>
         <div><b>🗺 Land</b>The map is made of <b>hexes</b>. Claim them with gold (<kbd>L</kbd>, then click or drag along your border). More land means more gold and a bigger army. <b>Towers</b> defend it.</div>
         <div><b>🏆 Win</b>Take enemy towers, break their core, and be the <b>last core standing</b>. Beating a barbarian Warlord powers up your troops.</div>
       </div>
       <h3>Controls</h3>
       <div class="keys">
         <div><kbd>Left-click</kbd> a troop<span>Pick its squad (<kbd>Shift</kbd> adds another squad)</span></div>
-        <div><kbd>1</kbd>–<kbd>9</kbd><span>Pick that squad (press twice to find it)</span></div>
+        <div><kbd>1</kbd>–<kbd>4</kbd><span>Pick that squad (press twice to find it)</span></div>
         <div><kbd>Q</kbd><span>Orders go to all squads</span></div>
         <div><kbd>Right-click</kbd><span>Send the picked squads at a target, or to hold a spot</span></div>
-        <div><kbd>M</kbd><span>Merge the picked squads</span></div>
-        <div><kbd>Ctrl</kbd>+click troops<span>Pick single troops; then a number moves them, <kbd>N</kbd> makes a new squad</span></div>
-        <div><kbd>F</kbd><span>New squads: guard home / follow your last order</span></div>
+        <div><kbd>G</kbd><span>Next stance for the picked squads</span></div>
         <div><kbd>H</kbd><span>Every squad home</span></div>
         <div><kbd>L</kbd><span>Buy land: click or drag along your border</span></div>
         <div><kbd>Double-click</kbd> outside your land<span>Grow your land one hex outward all round</span></div>
@@ -143,8 +141,8 @@
       </div>
       <div id="conn"></div>
       <div class="how-grid">
-        <div><b>🏰 Waves</b>Your core sends troops every 20s. Build <b>barracks</b> for bigger waves.</div>
-        <div><b>🎯 Squads</b>Each wave is a squad. Click it, then <b>right-click</b> a target.</div>
+        <div><b>🏰 Squads</b>Up to 4 squads; you pick their troops. Fallen troops <b>respawn every 20s</b>.</div>
+        <div><b>🎯 Orders</b>Click a squad, then <b>right-click</b> a target. Set its <b>stance</b>.</div>
         <div><b>🗺 Land</b>Claim <b>hexes</b> of land with gold. Land means more gold. <b>Towers</b> defend it.</div>
         <div><b>🏆 Win</b>Be the <b>last core standing</b>. Rounds last about 15–22 minutes.</div>
       </div>

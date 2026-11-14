@@ -1,7 +1,8 @@
-// My squads, worked out from my troops (each carries its squad id): number, troops, centre and
-// what it's doing. Every wave is a squad of its own; the server sends their numbers.
+// My squads: the server sends my (up to four) lasting squads with their number, stance, troop mix
+// and order; their troops carry the squad id. From those troops this works out where each squad
+// is and what it's doing.
 
-import { S } from './state.js';
+import { S, UNIT_KEYS } from './state.js';
 
 let cache = null;
 let cacheAt = -1;
@@ -12,22 +13,28 @@ function troopStatus(u) {
   return `defend ${u.anchor ? `t:${u.anchor}` : `c:${u.owner}`}`;
 }
 
-// [{ id, num, units, cx, cy, top, kinds, status }] sorted by number. Cached per frame.
-function mySquads() {
+// Every squad, troops or not:
+// [{ id, num, stance, mix: {kind: n}, size, units, kinds, status, cx, cy, top }] by number.
+// cx/cy/top are only set when the squad has troops. Cached per frame.
+function allSquads() {
   const now = performance.now();
   if (cache && now - cacheAt < 16) return cache;
-  const nums = new Map((S.me && S.me.squads) || []);
   const by = new Map();
+  for (const [id, num, stance, mix, order] of (S.me && S.me.squads) || []) {
+    const m = Object.fromEntries(UNIT_KEYS.map((k, i) => [k, mix[i] || 0]));
+    by.set(id, { id, num, stance, mix: m, size: mix.reduce((a, b) => a + b, 0), order, units: [], kinds: {}, votes: new Map() });
+  }
   for (const u of S.units.values()) {
-    if (u.owner !== S.myId || !nums.has(u.sq)) continue;
-    let q = by.get(u.sq);
-    if (!q) by.set(u.sq, (q = { id: u.sq, num: nums.get(u.sq), units: [], kinds: {}, votes: new Map() }));
+    const q = u.owner === S.myId && by.get(u.sq);
+    if (!q) continue;
     q.units.push(u);
     q.kinds[u.kind] = (q.kinds[u.kind] || 0) + 1;
     const st = troopStatus(u);
     q.votes.set(st, (q.votes.get(st) || 0) + 1);
   }
   for (const q of by.values()) {
+    q.status = q.units.length ? [...q.votes].sort((a, b) => b[1] - a[1])[0][0] : q.order;
+    if (!q.units.length) continue;
     // The squad's main group: scouts off exploring (and other strays) don't drag its tag away.
     const pos = (u) => [u.rx ?? u.x, u.ry ?? u.y];
     const core = q.units.filter((u) => u.kind !== 'scout' || u.attack);
@@ -43,11 +50,15 @@ function mySquads() {
     q.cx = mx;
     q.cy = my;
     q.top = Math.min(...group.map((u) => pos(u)[1]));
-    q.status = [...q.votes].sort((a, b) => b[1] - a[1])[0][0];
   }
   cache = [...by.values()].sort((a, b) => a.num - b.num);
   cacheAt = now;
   return cache;
+}
+
+// The squads that have troops on the map.
+function mySquads() {
+  return allSquads().filter((q) => q.units.length);
 }
 
 // Is squad q one of the squads my orders go to right now?
@@ -55,4 +66,4 @@ function squadPicked(id) {
   return !S.allSquads && S.selSquads.has(id);
 }
 
-export { mySquads, squadPicked, troopStatus };
+export { allSquads, mySquads, squadPicked, troopStatus };

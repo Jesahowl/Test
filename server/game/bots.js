@@ -115,19 +115,10 @@ module.exports = {
       return;
     }
 
-    // One scout per wave until two are out exploring; then those slots go to fighters.
-    const scouts = troops.filter((u) => u.kind === 'scout').length;
-    if (scouts >= 2 && p.army.scout) this.armyRemove(p.id, 'scout');
-    else if (scouts < 2 && !p.army.scout && this.slotsUsed(p) < this.waveSize(p)) this.armyAdd(p.id, 'scout');
-
-    // Shape the wave: assign free slots to a mix of troop types (free), then buy levels.
-    const assigned = this.slotsUsed(p);
-    if (assigned < this.waveSize(p)) {
-      const r = this.rand();
-      const kind = r < 0.5 ? 'soldier' : r < 0.7 ? 'medic' : 'archer';
-      this.armyAdd(p.id, kind);
-    } else if (p.gold >= 120 && roll < 0.7) {
-      const kinds = UNIT_KEYS.filter((k) => p.army[k] > 0 && p.levels[k] < C.MAX_LEVEL);
+    // Squads: shape the army (free), then buy levels.
+    this.botArmy(p);
+    if (p.gold >= 120 && roll < 0.7 && !wantTrade) {
+      const kinds = UNIT_KEYS.filter((k) => p.squads.some((q) => q.mix[k] > 0) && p.levels[k] < C.MAX_LEVEL);
       if (kinds.length) this.armyLevel(p.id, kinds[Math.floor(this.rand() * kinds.length)]);
     }
 
@@ -142,8 +133,12 @@ module.exports = {
     // Orders.
     if (this.time < p.bot.nextOrder) return;
     p.bot.nextOrder = this.time + 8 + this.rand() * 6;
-    // Sudden death: everything, new waves too, goes for the nearest rival's core, even with
-    // intruders at home (cores are crumbling: waiting it out only stalls the round).
+    const [strike, guard, jungle] = p.squads;
+    const alive = (q) => troops.filter((u) => u.sq === q.id).length;
+    const size = (q) => this.mixSlots(q.mix);
+    const send = (q, target) => this.order(p.id, null, target, [q.id]);
+    // Sudden death: everything goes for the nearest rival's core, even with intruders at home
+    // (cores are crumbling: waiting it out only stalls the round).
     if (this.suddenDeath()) {
       const rival = this.nearestEnemy(p.core.x, p.core.y, p.id, true);
       if (rival) {
@@ -154,7 +149,7 @@ module.exports = {
     const intruders = [...this.units.values()].filter((u) => this.hostile(p.id, u.owner)
       && this.terr[this.idx(Math.floor(u.x), Math.floor(u.y))] === p.id);
     if (intruders.length >= 3) {
-      // Defend whichever of our structures is closest to the intruders.
+      // Strike force and home guard defend whichever of our structures is closest to the intruders.
       const cx = intruders.reduce((sum, u) => sum + u.x, 0) / intruders.length;
       const cy = intruders.reduce((sum, u) => sum + u.y, 0) / intruders.length;
       let anchor = { k: 'c', id: p.id };
@@ -166,33 +161,25 @@ module.exports = {
           anchor = { k: 't', id: t.id };
         }
       }
-      this.order(p.id, null, anchor);
+      this.order(p.id, null, anchor, [strike.id, guard.id]);
       return;
     }
-    // Keep a small squad farming the nearest jungle camp (it pays well).
-    let home = troops.filter((u) => !u.attack);
-    const jungling = troops.some((u) => u.attack && u.attack.k === 'j');
-    if (!jungling && home.length >= 4) {
+    // The home guard stays home.
+    if (guard.order.type !== 'defend') send(guard, { k: 'c', id: p.id });
+    // The jungle squad farms the nearest camp (it pays well; the warlord's fort is worth a detour).
+    if (size(jungle) && (jungle.order.type !== 'attack' || jungle.order.target.k !== 'j' || !this.camps[jungle.order.target.id]?.alive)) {
       const campScore = (c) => dist(c.x, c.y, p.core.x, p.core.y) - (C.BUFF_CAMPS.includes(c.type) ? 8 : 0);
       const camp = this.camps
         .filter((c) => c.alive && dist(c.x, c.y, p.core.x, p.core.y) < BOT_JUNGLE_RANGE)
-        // The warlord's fort is worth a detour: it gives the jungle buff.
         .sort((c1, c2) => campScore(c1) - campScore(c2))[0];
-      if (camp) {
-        const squad = home.slice(0, Math.max(3, Math.round(home.length * C.BOT_JUNGLE_SHARE)));
-        this.order(p.id, squad.map((u) => u.id), { k: 'j', id: camp.id });
-        home = home.filter((u) => !squad.includes(u));
-      }
+      if (camp && alive(jungle) >= Math.min(3, size(jungle))) send(jungle, { k: 'j', id: camp.id });
     }
-
-    // Attack with a strike force, keeping new waves at home to defend.
+    // The strike force attacks once it's mostly up to strength, and falls back to regroup when
+    // it has been worn down.
     const enemy = this.nearestEnemy(p.core.x, p.core.y, p.id, true);
-    if (enemy && this.suddenDeath()) {
-      // Sudden death: everything, including new waves, goes for the nearest rival's core.
-      this.order(p.id, null, { k: 'c', id: enemy.id });
-      return;
-    }
-    if (enemy && home.length >= Math.max(8, C.unitCap(p.territory, this.waveSize(p)) * 0.5)) {
+    if (strike.order.type === 'attack' && alive(strike) < size(strike) * 0.35) {
+      send(strike, { k: 'c', id: p.id });
+    } else if (enemy && strike.order.type === 'defend' && alive(strike) >= Math.max(6, size(strike) * 0.75)) {
       let target = { k: 'c', id: enemy.id };
       let bestD = Infinity;
       for (const t of this.towers.values()) {
@@ -203,9 +190,29 @@ module.exports = {
           target = { k: 't', id: t.id };
         }
       }
-      const strike = home.slice(0, Math.ceil(home.length * C.BOT_STRIKE_SHARE)).map((u) => u.id);
-      this.order(p.id, strike, target); // picked troops only: squads keep defending home
-      return;
+      send(strike, target);
+    }
+  },
+
+  // A bot's squads: 1 a strike force, 2 a home guard, 3 a jungle party and 4 a scout or two. Each
+  // fighting squad is mostly soldiers, with archers and a medic or two.
+  botArmy(p) {
+    const size = this.armySize(p);
+    const scouts = size >= 14 ? 2 : 1;
+    const rest = size - scouts;
+    const jungle = Math.max(3, Math.round(rest * C.BOT_JUNGLE_SHARE * 0.7));
+    const guard = Math.round((rest - jungle) * (1 - C.BOT_STRIKE_SHARE));
+    const strike = rest - jungle - guard;
+    const mixOf = (n) => {
+      const medic = n >= 5 ? Math.max(1, Math.round(n * 0.15)) : 0;
+      const archer = Math.round(n * 0.3);
+      return { soldier: n - medic - archer, scout: 0, medic, archer };
+    };
+    const want = [mixOf(strike), mixOf(guard), mixOf(jungle), { soldier: 0, scout: scouts, medic: 0, archer: 0 }];
+    p.squads.forEach((q, i) => Object.assign(q.mix, want[i]));
+    if (!p.bot.stances) {
+      p.bot.stances = true;
+      this.squadStance(p.id, p.squads[2].id, 'aggressive');
     }
   },
 

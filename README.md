@@ -1,8 +1,8 @@
 # Territory Siege
 
 A multiplayer **.io strategy game with a League-of-Legends feel**. Every player has a core on one shared map
-that sends out **waves of troops** every 20 seconds. Point your waves at a rival's towers to push, or pull
-them home to defend. **Buy land** with gold along your border; more land means more gold and a bigger army. Towers defend it.
+that commands up to **four squads of troops**; any that fall respawn every 20 seconds. Point your squads at a
+rival's towers to push, or pull them home to defend. **Buy land** with gold along your border; more land means more gold and a bigger army. Towers defend it.
 
 ![A battle at an enemy core](screenshots/1-battle.jpg)
 
@@ -64,15 +64,15 @@ closes after a minute. **Play** still drops you into the always-running public g
 
 | | |
 |---|---|
-| **Waves** | Every 20s your core sends out a free wave of **4 troops**: to start with, one of each type (soldier, scout, medic, archer). |
-| **Barracks** | Build **barracks** (`R`, on your own land) for **+4 troops in every wave**. Each barracks' 4 march out from the barracks itself and join that wave's squad. Up to 5 barracks (24 troops per wave). They cost 250g, then 150g more for each one you own. They don't shoot or level up, and like towers they can be destroyed: whoever destroys one gets the bounty and the barracks is gone. |
+| **Squads** | You command up to **4 lasting squads**. In the **Squads** drawer (`C`) each squad has a card: what it's doing, its troops alive / its size, a health bar, a **+ / −** for each troop type and its **stance**. Squad 1 starts with a scout, a medic, two archers and soldiers for the rest of your army; squads 2–4 start empty. With your army full, **+** moves a troop over from your biggest squad (one of its living troops walks over at once); **−** frees a slot for another squad. |
+| **Barracks** | Build **barracks** (`R`, on your own land) for **+4 troops in your army**, and fallen troops respawn there as well as at the core. Up to 5 barracks. They cost 250g, then 150g more for each one you own. They don't shoot or level up, and like towers they can be destroyed: whoever destroys one gets the bounty and the barracks is gone. |
 | **Alliances** | Offer an alliance with the **+🤝** button in the **Diplomacy** drawer (`P`); the other player accepts (bots weigh it up). Allies don't fight each other and can see each other's bases. Attacking an ally asks first and breaks the alliance. At most 2 allies; every alliance ends when sudden death starts. |
 | **Trade** | Build a **Trade Post** (`T`, 220g, up to 2) and, with an ally who has one too, a **caravan** sets off for their post every 30s along a road that steers round hostile towers. When it arrives you **both** get its cargo (more for longer routes and higher post levels). Two guards ride with it and fight back; enemies who destroy it take half the cargo. Click a trade post or caravan to see its road; right-click your caravan to send a squad as **escort**. If the alliance ends, caravans on the road vanish. |
 | **Walls** | Press `V` and **drag along your border** to wall it (15g a segment, on the edges between your hexes and land that isn't yours). Walls block **every** troop and caravan, yours too: click one and make it a **gate** (40g) to let your troops, caravans and allies through. Walls are your border lifted up into a see-through band of light in your colour, 600 HP each (no upgrades). Gates are the same band opened into a doorway. Attackers path round walls when they can and otherwise hack through the weakest point; soldiers hit walls twice as hard. A broken wall can't be rebuilt for 45s, and you can't build with enemies right at it. Buying a hex beyond your walls moves them out with you: the walls it touched (1, 2 or 3) move onto its outer edges, joining up with the rest of the wall, gates staying gates. Losing the hex behind a wall makes it crumble. Bots wall the side facing their nearest enemy, with two gates. |
-| **Army mix** | The army panel decides **which troops fill your wave slots**, for free (`1`–`4` / `+`). Unassigned slots are filled with soldiers. Gold goes into **levelling troop types** (`Shift`+number), barracks and towers. |
-| **Squads** | **Every wave marches out as a squad of its own**, numbered 1, 2, 3… (the lowest free number; a wiped-out squad's number is reused). A squad **sticks together**: on the march it moves at its slowest troop's pace and troops that run ahead wait for it, and **standing troops form up inside a hex**: evenly spaced, one in the middle, a ring of 6 round it and an outer ring of 12 (a bigger squad spills into the next hex). At home each squad takes its own hex next to the core, guards of a tower form up round it in its hex, and a squad holding a spot fills the hex you clicked. **Troops at home defend automatically**: any enemy troop (or angry barbarian) that comes onto your land or into a hex next to it, within 8 tiles of them, gets attacked, and they fight from their own side of the border, never chasing it off your land. Its number floats above it on the map, nudged to a free spot so it never covers another squad's number, an enemy or a building. Troops also keep a little **personal space** from their own side and never stand inside buildings. In a fight, **melee troops close right in** on their enemy (front lines meet and interlock), and **every sword swing is a quick lunge** at the target that springs back. **Click any of its troops** (or its chip in the Squads panel, or press its number `1`–`9`) to pick it, `Shift` to pick more, `Q` for all squads, then **right-click** a target. `M` merges the picked squads. New squads **guard home**, or with **F** they **follow your last order**. `H` sends every squad home. |
+| **Respawning** | Every **20 seconds**, every troop that has fallen respawns (taking turns at the core and each barracks) and marches out to **rejoin its squad**, taking on the order of a living squadmate, or the squad's own order if none is left. The dock's ring counts down to it; the **Army** drawer (`X`) shows who's coming back and lets you **level up troop types** with gold (new levels apply to troops that respawn after). |
+| **Stances** | Each squad has a stance (buttons on its card, or `G` to cycle the picked squads): **⚔ Aggressive** fights every enemy it meets on the way, **🛡 Defensive** (the default) marches past fights and fights at its target and at home, **✋ Hold** never chases: it only fights what comes within reach. |
+| **Orders** | A squad **sticks together**: on the march it moves at its slowest troop's pace and troops that run ahead wait for it, and **standing troops form up inside a hex**: evenly spaced, one in the middle, a ring of 6 round it and an outer ring of 12. At home each squad takes its own hex next to the core. **Troops at home defend automatically** (unless holding): any enemy troop (or angry barbarian) that comes onto your land or into a hex next to it, within 8 tiles of them, gets attacked, from their own side of the border. Each squad's number floats above it on the map. In a fight, **melee troops close right in** and **every sword swing is a quick lunge**. **Click any of a squad's troops** (or its card, or press `1`–`4`) to pick it, `Shift` to pick more, `Q` for all squads, then **right-click** a target. A squad keeps its order even with no troops left, so its reinforcements head there. `H` sends every squad home. |
 | **Fog of war** | The map starts dark except your own land and what your core (9 tiles), towers (range + 2), barracks and troops can see; scouts see furthest. **Once an area has been explored, the fog there is cleared for good**: you keep seeing everything that happens there (troops, fights, buildings, camps), even after your troops leave. Enemy troops in unexplored fog aren't even sent to your browser. Spectators see everything. |
-| **Regrouping** | **Ctrl-click** single troops to pick them, then press a squad's number (or click its chip) to move them into it, or `N` to make them a new squad. Right-clicking with troops picked sends them off as a new squad. |
 | **Moving** | **Right-click empty ground** to send the picked squads there. They hold the spot, fight enemies that come within 6 tiles of it, and come back to it afterwards. |
 | **Hunting** | **Right-click an enemy troop** to send your troops after it. They chase it down and focus it, ignoring other enemies on the way. When it dies they go after its squadmates within 6 tiles, then head home once the squad is gone. A red crosshair marks troops you're hunting. Hunts use the picked squads (or picked troops) like other orders, but are a one-off: the squads keep their standing orders. |
 | **The push** | Troops march across the map (pathfinding around structures), fight whatever they meet, then hit the target. When a tower falls, the push rolls on to that player's next tower, then their core. |
@@ -84,7 +84,7 @@ closes after a minute. **Play** still drops you into the always-running public g
 | **Jungle buff** | Defeating a **Warlord's Fort** (marked 🔥 buff) empowers all your troops for 60s: **+30% damage and 25% less damage taken**. Buffed troops glow orange and a 🔥 shows next to your name. |
 | **Rounds** | **Last core standing wins.** Joining is open for the first 60s of a round (bots fill in during that time too). After that, newcomers watch and join the next round automatically. Cores are **fortified for the first 8 minutes** (they take 80% less damage), and from minute 8 troops hit buildings **10% harder every minute**, so early rushes can't knock anyone out but pushes keep getting stronger. After **19 minutes, sudden death** starts: no home-turf bonus, troops deal double damage to towers and cores, and cores slowly crumble, so every round ends. Then a scoreboard shows everyone's placing and a new round starts on a fresh map 15s later. If only bots are left, pressing *New round* starts one straight away. |
 | **Home turf** | Troops on their own land heal 2% HP/s and deal +30% damage, so defending is cheaper than attacking. |
-| **Army size** | You can have 1 troop alive per 10 tiles of land (min 10, max 45), and always at least one full wave. Waves stop spawning at the cap. |
+| **Army size** | Your squads can hold **1 troop per 10 tiles of land** (at least 10) **plus 4 per barracks**, up to 45. New slots (more land, a new barracks) join squad 1 as soldiers; if the army shrinks, troops come off the last squads first. Respawns never take you over the size. |
 | **Spawning** | Each base spawns at a random spot, as far as possible from everyone already playing (and their buildings), so bases spread evenly over the map with a different layout every game. |
 | **Spawn protection** | For 2 minutes after spawning your core and towers can't be damaged. |
 | **Losing** | If your core falls you're **out of the round**. Whoever destroyed it takes the spoils: **all your gold** (plus a 250g bounty), **all your land**, **all your towers and barracks**, **every troop you still had standing**, and your core site, which becomes **one of their towers** garrisoned by your former troops. You can then **spectate** (follow any player with Tab, free camera with WASD, Space to follow again) and you join the next round automatically. If you leave mid-round, **a bot takes over your base** under your name (core, land, gold, buildings and troops) and plays on. |
@@ -93,9 +93,9 @@ closes after a minute. **Play** still drops you into the always-running public g
 
 Troops are little big-headed figures dressed in their owner's colour (helmet, hood, cap or hat, plus a team-coloured belt), so you can tell them apart at a glance: **soldiers** wear a round steel helmet and carry a sword and round shield, **scouts** a pointed hood and short cape, **medics** a white cap and tunic with crosses and a healing staff, and **archers** a feathered felt hat and a short bow. They face the way they walk and bob as they march. Caravans are an **open wagon of barrels pulled by an ox**, with two soldiers walking alongside.
 
-| Troop | Wave slots | Level 2 | HP | Role |
+| Troop | Army slots | Level 2 | HP | Role |
 |---|---|---|---|---|
-| Soldier | 1 | 120g | 340 | Sword and shield: the backbone of every wave. Unassigned slots are filled with soldiers. Your first wave has one of each type |
+| Soldier | 1 | 120g | 340 | Sword and shield: the backbone of every squad. New army slots join squad 1 as soldiers |
 | Scout | 1 | 100g | 110 | Very fast, sees 11 tiles, **never fights**. While your troops defend, scouts **explore on their own**, heading for ground you haven't seen and staying clear of enemy guns |
 | Medic | 1 | 180g | 200 | Heals the **two most wounded** troops near it (15 HP/s each), never attacks |
 | Archer | 1 | 160g | 170 | **Shoots arrows from range** (5 tiles). Fragile: keep soldiers in front of them |
@@ -111,15 +111,13 @@ and get a turning gold rune ring at level 4 and a radiant aura at level 5.
 |---|---|
 | Right-click target | Order troops: attack an enemy tower/core/camp, hunt an enemy troop, or defend your own tower/core |
 | Left-click a troop | Pick its squad (`Shift` adds another squad) |
-| `1`–`9` | Pick that squad (press twice to find it). With troops picked: move them into it |
+| `1`–`4` | Pick that squad (press twice to find it) |
 | `Q` | Orders go to all squads |
-| `M` | Merge the picked squads |
-| `Ctrl`+click troops | Pick single troops (`N`: make them a new squad) |
-| `F` | New squads: guard home / follow your last order |
+| `G` | Next stance for the picked squads (aggressive / defensive / hold) |
 | Left-click a tower | Select it |
 | `Esc` | Clear picked troops / selected building / build mode; with nothing to clear, open the menu (Resume, How to play, Leave game). The ☰ button opens it too. The game keeps running while it is open. |
 | `H` | Every squad defends your core |
-| `R` | Place a barracks (your own land only): +4 troops per wave |
+| `R` | Place a barracks (your own land only): +4 troops in your army |
 | `T` | Place a trade post (your own land only): sends caravans to an ally's trade post |
 | `V` | Build walls: drag along your border. Click a wall to make it a gate, or knock it down (`Del`) |
 | `L` | Claim land: click empty hexes at your border, or drag along it (shows the price) |
@@ -132,13 +130,13 @@ and get a turning gold rune ring at level 4 and a radiant aura at level 5.
 
 - **Top bar**: you (name, rank, gold and income, land, kills, core health, spawn protection / jungle buff), the round in the middle (with what's coming next just under it), and the players by land on the right (you highlighted, allies marked 🤝; hover one for details), then `?` and the menu.
 - **Minimap** (bottom left), with the first-game tips above it. The selected building's panel sits bottom right.
-- **Dock** (bottom centre): **Build** `Z`, **Army** `X`, the next-wave countdown, **Squads** `C` and **Diplomacy** `P`. Each opens its drawer above the dock (the same button or `Esc` closes it), so the map stays clear: *Build* has the tower, barracks, trade post, wall and land tiles; *Army* the next-wave lineup and one card per troop type with +/− and level-up; *Squads* a chip per squad (number, order, size) with All, Merge, Home, the new-squads setting and troops alive; *Diplomacy* every player with offer / accept / break alliance buttons and offers waiting for you. Squads and Diplomacy show a badge with your squad count and new offers.
+- **Dock** (bottom centre): **Build** `Z`, **Army** `X`, the respawn countdown, **Squads** `C` and **Diplomacy** `P`. Each opens its drawer above the dock (the same button or `Esc` closes it), so the map stays clear: *Build* has the tower, barracks, trade post, wall and land tiles; *Army* who's respawning and one card per troop type with its level-up; *Squads* a card per squad (order, troops alive, health, + / − per troop type, stance) with All squads, All home and troops alive; *Diplomacy* every player with offer / accept / break alliance buttons and offers waiting for you. Squads shows a badge with your free army slots, Diplomacy one with new offers.
 - **Hover anything** for a tooltip explaining it, with costs and what an upgrade would change.
-- **First-game tips** walk you through attacking, towers, barracks, the wave mix, squads and the jungle; each ticks off when you do it. `?` shows the controls and can bring the tips back.
+- **First-game tips** walk you through attacking, towers, barracks, squad mixes, orders and the jungle; each ticks off when you do it. `?` shows the controls and can bring the tips back.
 
 All numbers live in [`shared/config.js`](shared/config.js), shared by server and client, so tuning happens in one place.
 The most useful knobs: economy (`BASE_INCOME`, `INCOME_PER_TILE`, `TROOP_BOUNTY`, `TOWER_BOUNTY`, `CORE_KILL_BOUNTY`,
-monster `bounty`, `CAMP_RESPAWN`, `CAMP_RELOCATE`), `WAVE_INTERVAL`, `BASE_WAVE`, `BARRACKS_TROOPS`, `MAX_BARRACKS`, `BARRACKS_COST_STEP`, `LAND_PER_UNIT`, troop and tower stats,
+monster `bounty`, `CAMP_RESPAWN`, `CAMP_RELOCATE`), `WAVE_INTERVAL`, `MAX_SQUADS`, `START_SQUAD`, `BARRACKS_TROOPS`, `MAX_BARRACKS`, `BARRACKS_COST_STEP`, `LAND_PER_UNIT`, troop and tower stats,
 `CORE_DAMAGE`, `HOME_DAMAGE_BONUS`, `SPAWN_SHIELD`, `CAPTURE_TIME`, `TOWER_CLAIM_HP`, `CAMP_*`, jungle buff (`BUFF_CAMPS`, `JUNGLE_BUFF_*`),
 rounds (`ROUND_JOIN_WINDOW`, `ROUND_SUDDEN_DEATH`, `SUDDEN_DEATH_*`, `CORE_FORTIFY*`, `SIEGE_RAMP_*`, `ROUND_RESET_DELAY`).
 
@@ -155,7 +153,7 @@ server/room.js          a room: its game, rounds/lobby, and the 10 Hz per-player
 server/game.js          the Game class core: state, spatial grid, tick, snapshots
 server/game/*.js        Game methods by topic, mixed into Game.prototype:
                           players (joining, rounds, pacing, gold) · territory · structures (build,
-                          upgrade, sell) · army (wave mix, orders, waves) · jungle · combat (damage,
+                          upgrade, sell) · army (squads, mixes, stances, orders, respawns) · jungle · combat (damage,
                           towers/cores shooting) · troops (movement, targeting, pathfinding) · fog · bots
                           common.js holds the shared constants and helpers
 public/index.html, style.css
@@ -164,15 +162,15 @@ public/js/*.js          the browser client as ES modules (entry: main.js):
                           (WebSocket, interpolation) · fog · targets · territory · render · structures ·
                           troops · camps · cores · effects · overlay (build preview, markers, minimap) ·
                           ui (icons, tooltips) · bar (drawer contents) · dock (dock and drawers) · hud · tips · screens · input · main
-test/                   node:test suite (game rules, waves & orders, jungle, rounds, pathfinding, server)
+test/                   node:test suite (game rules, squads & orders, jungle, rounds, pathfinding, server)
 ```
 
-- **Authoritative server.** Clients only send intents (`build`, `upgrade`, `sell`, `capture`, `army`, `order` with optional `ids` or `squads`, `squad` to move troops, merge squads or set what new squads do). The server validates everything.
+- **Authoritative server.** Clients only send intents (`build`, `upgrade`, `sell`, `capture`, `army`, `order` with optional `ids` or `squads`, `squad` to change a squad's mix or stance). The server validates everything.
 - **State sync.** The game simulates 20 times a second and sends state 10 times a second. Entity lists (players, towers, troops,
   monsters, camps) go out as compact arrays containing only the rows that changed since the last update, plus removed ids; a
   client that just joined gets everything once. Positions are sent in tenths of a tile, and WebSocket compression
   (permessage-deflate) shrinks the rest about 7x: roughly 7 KB/s per player with 12 players. Each player also gets their own
-  gold, army plan, standing order and wave timer. Territory is sent run-length encoded, only when it changes.
+  gold, army size, squads (mix, stance, order), levels and respawn timer. Territory is sent run-length encoded, only when it changes.
 - **Spatial grid.** Troops are bucketed into 4x4-tile cells each tick, so targeting, tower fire, splash, healing and
   healing only look at nearby troops (24 players: about 4 ms per tick).
 - **Territory.** The map is a hex grid (`shared/hex.js`, shared by server and browser) laid over the fine
@@ -187,8 +185,9 @@ test/                   node:test suite (game rules, waves & orders, jungle, rou
   patrol around the structure they guard.
 - **Smooth movement.** Each snapshot carries the server tick number; the client draws troops and monsters 100 ms in the
   past, interpolating between snapshots on that steady clock, so movement stays smooth despite network jitter.
-- **Bots** buy land at their border (growing round their core), build towers inside it, grow and level their army plan, defend when invaded, keep a squad farming jungle camps, and launch
-  strike forces (60% of their home troops) at the nearest rival's towers while new waves stay home.
+- **Bots** buy land at their border (growing round their core), build towers inside it and level their troops. Their
+  four squads have roles: a strike force that attacks the nearest rival's towers once it's mostly at strength (and falls
+  back to regroup when worn down), a home guard, an aggressive jungle party farming camps, and a scout or two.
 
 ## Ideas for next steps
 

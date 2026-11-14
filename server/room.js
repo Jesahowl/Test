@@ -207,8 +207,6 @@ class Room {
         return game.lastBuy && game.lastBuy.n ? null : err;
       }
       case 'army':
-        if (msg.op === 'add') return game.armyAdd(client.pid, msg.kind);
-        if (msg.op === 'remove') return game.armyRemove(client.pid, msg.kind);
         if (msg.op === 'level') return game.armyLevel(client.pid, msg.kind);
         return null;
       case 'order': {
@@ -244,14 +242,8 @@ class Room {
         if (msg.op === 'down') return game.demolishWall(client.pid, Number(msg.id));
         return null;
       case 'squad':
-        if (msg.op === 'assign' || msg.op === 'merge') {
-          const err = msg.op === 'assign'
-            ? game.squadAssign(client.pid, msg.ids, msg.sq === 'new' ? 'new' : Number(msg.sq))
-            : game.squadMerge(client.pid, Array.isArray(msg.squads) ? msg.squads.slice(0, 64).map(Number) : null);
-          if (!err) send(client, { t: 'ordered', n: game.lastOrderCount });
-          return err;
-        }
-        if (msg.op === 'waves') return game.setNewWaves(client.pid, msg.mode);
+        if (msg.op === 'mix') return game.squadMix(client.pid, Number(msg.sq), String(msg.kind), msg.d === -1 ? -1 : 1);
+        if (msg.op === 'stance') return game.squadStance(client.pid, Number(msg.sq), String(msg.stance));
         return null;
       default:
         return null;

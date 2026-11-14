@@ -57,7 +57,7 @@ test('allying calls off attacks between the two', () => {
   assert.ok(t.every((u) => u.attack));
   ally(g, a, b);
   assert.ok(t.every((u) => !u.attack), 'troops stopped attacking');
-  assert.strictEqual(a.lastOrder.type, 'defend');
+  assert.strictEqual(a.squads[0].order.type, 'defend', 'and the squad forgets the order');
 });
 
 test('allies see each other\'s bases, but not what each other\'s troops see', () => {

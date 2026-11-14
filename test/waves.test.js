@@ -7,26 +7,69 @@ const { Game, seeded, duel, edgeTile, outpost, troops, run } = require('./helper
 
 const mine = (g, p) => [...g.units.values()].filter((u) => u.owner === p.id);
 
-test('the core sends a free wave of 4 (one of each type) every interval', () => {
-  const { g, a } = duel(1);
-  a.nextWaveAt = g.time;
+// Give squad i of p this mix (the rest of the squads empty), e.g. { soldier: 4 }.
+function setMix(p, i, mix) {
+  p.armySeen = 1e9; // no spare slots joining squad 1 behind the test's back
+  for (const q of p.squads) for (const k of Object.keys(q.mix)) q.mix[k] = 0;
+  Object.assign(p.squads[i].mix, mix);
+}
+
+// Respawn time: every fallen troop comes back now.
+function respawn(g, p) {
+  p.nextWaveAt = g.time;
   g.update(0.05);
-  const w1 = mine(g, a);
-  assert.strictEqual(w1.length, C.BASE_WAVE);
-  assert.deepStrictEqual(w1.map((u) => u.kind).sort(), ['archer', 'medic', 'scout', 'soldier']);
-  assert.ok(Math.abs(a.nextWaveAt - (g.time - 0.05 + C.WAVE_INTERVAL)) < 0.1);
-  run(g, C.WAVE_INTERVAL);
-  assert.strictEqual(mine(g, a).length, C.BASE_WAVE * 2);
+  p.nextWaveAt = Infinity;
+}
+
+test('every player has 4 lasting squads; fallen troops respawn into them every interval', () => {
+  const { g, a } = duel(1);
+  assert.strictEqual(a.squads.length, C.MAX_SQUADS);
+  assert.deepStrictEqual(a.squads.map((q) => q.num), [1, 2, 3, 4]);
+  setMix(a, 0, { soldier: 2, archer: 1 });
+  Object.assign(a.squads[1].mix, { scout: 1, medic: 1 });
+  respawn(g, a);
+  const s1 = mine(g, a).filter((u) => u.sq === a.squads[0].id);
+  const s2 = mine(g, a).filter((u) => u.sq === a.squads[1].id);
+  assert.deepStrictEqual(s1.map((u) => u.kind).sort(), ['archer', 'soldier', 'soldier']);
+  assert.deepStrictEqual(s2.map((u) => u.kind).sort(), ['medic', 'scout']);
+  respawn(g, a);
+  assert.strictEqual(mine(g, a).length, 5, 'a squad at full strength gets no more');
+  // two fall; at the next respawn exactly those two come back
+  g.units.delete(s1[0].id);
+  g.units.delete(s2[0].id);
+  a.nextWaveAt = g.time + 1;
+  run(g, 0.5);
+  assert.strictEqual(mine(g, a).length, 3, 'not before the timer');
+  run(g, 1);
+  assert.strictEqual(mine(g, a).length, 5, 'back when it runs out');
+  assert.ok(Math.abs(a.nextWaveAt - (g.time + C.WAVE_INTERVAL)) < 1.2, 'and the timer starts over');
 });
 
-test('waves stop at the land-based troop cap', () => {
+test('the army size comes from land and barracks; squads can only use that many slots', () => {
   const { g, a } = duel(2);
-  const cap = C.unitCap(a.territory, g.waveSize(a));
-  for (let i = 0; i < 8; i++) {
-    a.nextWaveAt = g.time;
-    g.update(0.05);
-  }
-  assert.strictEqual(mine(g, a).length, cap);
+  g.fitArmy(a);
+  const size = g.armySize(a);
+  assert.strictEqual(size, C.armySize(a.territory, 0));
+  assert.strictEqual(g.slotsUsed(a), size, 'a new army is full: the spare slots join squad 1 as soldiers');
+  assert.match(g.squadMix(a.id, a.squads[1].id, 'dragon', 1), /Invalid/);
+  // more land: the new slots join squad 1
+  const before = a.squads[0].mix.soldier;
+  a.territory += C.LAND_PER_UNIT * 2;
+  g.fitArmy(a);
+  assert.strictEqual(a.squads[0].mix.soldier, before + 2);
+  // less land: troops come off the last squads first
+  a.squads[3].mix.archer = 2;
+  a.squads[0].mix.soldier -= 2;
+  a.territory -= C.LAND_PER_UNIT * 2;
+  g.fitArmy(a);
+  assert.strictEqual(g.slotsUsed(a), g.armySize(a));
+  assert.strictEqual(a.squads[3].mix.archer, 0);
+  // respawns never go past the army size, even with extra troops about
+  respawn(g, a);
+  troops(g, a, 'soldier', 3, a.core.x + 0.5, a.core.y + 2);
+  for (const u of mine(g, a).filter((v) => v.sq === a.squads[0].id).slice(0, 2)) g.units.delete(u.id);
+  respawn(g, a);
+  assert.ok(mine(g, a).length <= g.armySize(a) + 1);
 });
 
 // A barracks in the n-th hex next to p's core.
@@ -39,66 +82,91 @@ function barracksAt(g, p, n) {
   return [...g.towers.values()].find((t) => t.x === x && t.y === y);
 }
 
-test('each barracks adds 4 troops to every wave, spawning at the barracks', () => {
+test('each barracks adds 4 troops to the army, and troops respawn there too', () => {
   const { g, a } = duel(16);
+  g.fitArmy(a);
   const gold = a.gold;
+  const size = g.armySize(a);
   const b1 = barracksAt(g, a, 0);
   assert.strictEqual(a.gold, gold - C.buildCost('barracks', 0));
   const b2 = barracksAt(g, a, 3);
   assert.strictEqual(a.gold, gold - C.buildCost('barracks', 0) - C.buildCost('barracks', 1));
   assert.ok(C.buildCost('barracks', 1) > C.buildCost('barracks', 0), 'each one costs more');
-  assert.strictEqual(g.waveSize(a), C.BASE_WAVE + 2 * C.BARRACKS_TROOPS);
-  a.nextWaveAt = g.time;
-  g.update(0.05);
-  const wave = mine(g, a);
-  assert.strictEqual(wave.length, C.BASE_WAVE + 2 * C.BARRACKS_TROOPS);
-  const near = (t) => wave.filter((u) => Math.hypot(u.x - t.x - 0.5, u.y - t.y - 0.5) < 1.6).length;
-  assert.strictEqual(near(b1), C.BARRACKS_TROOPS);
-  assert.strictEqual(near(b2), C.BARRACKS_TROOPS);
-  assert.strictEqual(new Set(wave.map((u) => u.sq)).size, 1, 'the whole wave is one squad');
+  assert.strictEqual(g.armySize(a), size + 2 * C.BARRACKS_TROOPS);
+  respawn(g, a);
+  const army = mine(g, a);
+  assert.strictEqual(army.length, size + 2 * C.BARRACKS_TROOPS, 'the new slots fill at once');
+  const near = (t) => army.filter((u) => Math.hypot(u.x - t.x - 0.5, u.y - t.y - 0.5) < 1.6).length;
+  assert.ok(near(b1) >= 3 && near(b2) >= 3, 'troops take turns spawning at the core and each barracks');
   // rules: own land only, a maximum count, no upgrades, and they don't shoot
   const out = edgeTile(g, a, 0, 1, 1);
   assert.match(g.build(a.id, out.x, out.y, 'barracks'), /own land/);
   assert.match(g.upgrade(a.id, b1.id), /can't be upgraded/);
   for (let i = 2; i < C.MAX_BARRACKS; i++) barracksAt(g, a, [1, 2, 4][i - 2]);
   { const h = g.hex.hexes[g.hex.hexes[g.hexAt(a.core.x, a.core.y)].n[5]]; assert.match(g.build(a.id, h.centre % g.w, Math.floor(h.centre / g.w), 'barracks'), /at most/); }
-  assert.strictEqual(g.waveSize(a), C.BASE_WAVE + C.MAX_BARRACKS * C.BARRACKS_TROOPS);
+  assert.strictEqual(g.armySize(a), Math.min(C.MAX_UNITS, size + C.MAX_BARRACKS * C.BARRACKS_TROOPS));
 });
 
-test('losing a barracks shrinks your waves; whoever destroys it gains nothing but the bounty', () => {
+test('losing a barracks shrinks your army; whoever destroys it gains nothing but the bounty', () => {
   const { g, a, b } = duel(17);
+  g.fitArmy(a);
+  const size = g.armySize(a);
   const bar = barracksAt(g, a, 0);
+  g.update(0.05);
   const gold = b.gold;
   g.damageTower(bar, 1e9, b.id);
   assert.ok(!g.towers.has(bar.id), 'it is gone');
-  assert.strictEqual(g.waveSize(a), C.BASE_WAVE);
-  assert.strictEqual(g.waveSize(b), C.BASE_WAVE);
+  g.update(0.05);
+  assert.strictEqual(g.armySize(a), size);
+  assert.strictEqual(g.slotsUsed(a), size, 'the squads shrink to fit');
   assert.ok(b.gold >= gold + C.TOWER_BOUNTY);
 });
 
-test('the army plan sets the wave mix for free (one slot per troop); levels cost gold', () => {
-  const { g, a } = duel(3);
+test('squad mixes are free to change (one slot per troop); levels cost gold', () => {
+  const { g, a, b } = duel(3);
+  g.fitArmy(a);
   const gold = a.gold;
-  for (const k of Object.keys(a.army)) a.army[k] = 0; // start from an all-soldier wave
-  assert.strictEqual(g.armyAdd(a.id, 'archer'), null);
-  assert.strictEqual(g.armyAdd(a.id, 'archer'), null);
-  assert.strictEqual(a.gold, gold, 'assigning slots is free');
-  assert.deepStrictEqual(g.waveList(a), ['archer', 'archer', 'soldier', 'soldier']);
-  assert.strictEqual(g.armyAdd(a.id, 'scout'), null);
-  assert.strictEqual(g.armyAdd(a.id, 'medic'), null);
-  assert.match(g.armyAdd(a.id, 'medic'), /barracks/);
-  assert.deepStrictEqual(g.waveList(a), ['scout', 'medic', 'archer', 'archer']);
-  assert.match(g.armyAdd(a.id, 'dragon'), /Invalid/);
+  const [s1, s2] = a.squads;
+  // the army starts full, so + on squad 2 moves a troop over from squad 1 (the biggest)
+  const archers = s1.mix.archer;
+  assert.strictEqual(g.squadMix(a.id, s2.id, 'archer', 1), null);
+  assert.strictEqual(s1.mix.archer, archers - 1);
+  assert.strictEqual(s2.mix.archer, 1);
+  assert.strictEqual(a.gold, gold, 'changing squads is free');
+  // with no archer left to move, a soldier makes room instead
+  s1.mix.soldier += s1.mix.archer; // (keeping the army full)
+  s1.mix.archer = 0;
+  const soldiers = s1.mix.soldier;
+  assert.strictEqual(g.squadMix(a.id, s2.id, 'archer', 1), null);
+  assert.strictEqual(s1.mix.soldier, soldiers - 1);
+  assert.strictEqual(s2.mix.archer, 2);
+  // − frees a slot; + then uses it without touching other squads
+  assert.strictEqual(g.squadMix(a.id, s2.id, 'archer', -1), null);
+  assert.strictEqual(g.squadMix(a.id, a.squads[2].id, 'medic', 1), null);
+  assert.strictEqual(s1.mix.soldier, soldiers - 1);
+  assert.match(g.squadMix(a.id, a.squads[3].id, 'medic', -1), /None/);
+  assert.match(g.squadMix(a.id, 999, 'medic', 1), /Invalid squad/);
+  assert.match(g.squadMix(b.id, s1.id, 'medic', 1), /Invalid squad/);
+  // levels
   assert.strictEqual(g.armyLevel(a.id, 'archer'), null);
   assert.strictEqual(a.levels.archer, 2);
   assert.ok(a.gold < gold);
-  a.nextWaveAt = g.time;
-  g.update(0.05);
-  const archers = mine(g, a).filter((u) => u.kind === 'archer');
-  assert.ok(archers.length === 2 && archers.every((u) => u.level === 2), 'new archers spawn at the new level');
-  for (const k of Object.keys(a.army)) while (a.army[k] && !g.armyRemove(a.id, k));
-  assert.match(g.armyRemove(a.id, 'soldier'), /None/);
-  assert.strictEqual(g.waveList(a).length, C.BASE_WAVE, 'unassigned slots are filled with soldiers');
+  respawn(g, a);
+  const lv = mine(g, a).filter((u) => u.kind === 'archer');
+  assert.ok(lv.length && lv.every((u) => u.level === 2), 'new archers spawn at the new level');
+});
+
+test('moving a troop to another squad sends one of the living ones over at once', () => {
+  const { g, a } = duel(37);
+  setMix(a, 0, { soldier: 3, archer: 2 });
+  a.squads[1].mix.soldier = g.armySize(a) - 5;
+  respawn(g, a);
+  const before = mine(g, a).filter((u) => u.sq === a.squads[0].id && u.kind === 'archer');
+  assert.strictEqual(before.length, 2);
+  assert.strictEqual(g.squadMix(a.id, a.squads[1].id, 'archer', 1), null);
+  assert.strictEqual(mine(g, a).filter((u) => u.sq === a.squads[1].id && u.kind === 'archer').length, 1, 'an archer changed squads');
+  respawn(g, a);
+  assert.strictEqual(mine(g, a).filter((u) => u.kind === 'archer').length, 2, 'and no extra one appeared');
 });
 
 test('archers shoot from range', () => {
@@ -144,38 +212,40 @@ test('fog of war: you see your land and what your core, buildings and troops can
   assert.ok(g.sees(a, u.x, u.y + 2), 'troops see around them');
 });
 
-test('orders: every squad, or only picked troops (which split off as a squad of their own)', () => {
+test('orders go to every squad or the picked ones, and reinforcements follow their squad', () => {
   const { g, a, b } = duel(4);
   const t = outpost(g, b);
-  a.nextWaveAt = g.time;
-  g.update(0.05);
-  const squad = mine(g, a);
-  const sq = squad[0].sq;
-  assert.ok(squad.every((u) => u.sq === sq));
-  assert.strictEqual(g.order(a.id, [squad[0].id], { k: 't', id: t.id }), null);
-  assert.deepStrictEqual(squad[0].attack, { k: 't', id: t.id, owner: b.id });
-  assert.strictEqual(squad[1].attack, null);
-  assert.notStrictEqual(squad[0].sq, sq, 'a picked troop splits off into a new squad');
-  assert.strictEqual(a.squadNum.size, 2);
-  assert.strictEqual(g.order(a.id, null, { k: 'c', id: b.id }), null);
-  assert.ok(squad.every((u) => u.attack && u.attack.k === 'c'));
-  // new squads guard home by default...
-  a.nextWaveAt = g.time;
-  g.update(0.05);
-  let fresh = mine(g, a).filter((u) => !squad.includes(u));
-  assert.ok(fresh.length && fresh.every((u) => !u.attack), 'new squads guard home');
-  // ...or follow your last order
-  assert.strictEqual(g.setNewWaves(a.id, 'follow'), null);
-  a.nextWaveAt = g.time;
-  g.update(0.05);
-  fresh = mine(g, a).filter((u) => !squad.includes(u) && !fresh.includes(u));
-  assert.ok(fresh.length && fresh.every((u) => u.attack && u.attack.k === 'c'), 'new squads follow the last order');
+  setMix(a, 0, { soldier: 3 });
+  a.squads[1].mix.soldier = 3;
+  respawn(g, a);
+  const s1 = mine(g, a).filter((u) => u.sq === a.squads[0].id);
+  const s2 = mine(g, a).filter((u) => u.sq === a.squads[1].id);
+  assert.strictEqual(g.order(a.id, null, { k: 't', id: t.id }, [a.squads[1].id]), null);
+  assert.strictEqual(g.lastOrderCount, 3);
+  assert.ok(s2.every((u) => u.attack && u.attack.id === t.id) && s1.every((u) => !u.attack));
+  assert.deepStrictEqual(a.squads[1].order, { type: 'attack', target: { k: 't', id: t.id, owner: b.id } });
+  // a squad with no troops left still takes orders: its reinforcements head there
+  assert.strictEqual(g.order(a.id, null, { k: 'c', id: b.id }, [a.squads[2].id]), null);
+  a.squads[2].mix.soldier = 1;
+  a.squads[0].mix.soldier = 2;
+  g.units.delete(s1[0].id);
+  respawn(g, a);
+  const s3 = mine(g, a).filter((u) => u.sq === a.squads[2].id);
+  assert.ok(s3.length === 1 && s3[0].attack && s3[0].attack.k === 'c', 'the new troop follows its squad');
+  // a fallen squadmate's replacement joins its squad's attack
+  g.units.delete(s2[0].id);
+  respawn(g, a);
+  const fresh = mine(g, a).filter((u) => u.sq === a.squads[1].id && !s2.includes(u));
+  assert.ok(fresh.length === 1 && fresh[0].attack && fresh[0].attack.id === t.id);
+  // ...picked troops: their squads get the order
+  assert.strictEqual(g.order(a.id, [s1[1].id], { k: 'c', id: a.id }), null);
+  assert.ok(mine(g, a).filter((u) => u.sq === a.squads[0].id).every((u) => !u.attack));
   assert.strictEqual(g.order(a.id, null, { k: 'c', id: a.id }), null);
   assert.ok(mine(g, a).every((u) => !u.attack && u.anchor === 0));
   assert.match(g.order(a.id, null, { k: 't', id: 999 }), /No such/);
   assert.match(g.order(a.id, null, { k: 'x', id: 1 }), /Invalid/);
-  assert.match(g.order(b.id, [squad[0].id], { k: 'c', id: a.id }), /No troops/);
-  assert.match(g.setNewWaves(a.id, 'sometimes'), /Invalid/);
+  assert.match(g.order(a.id, null, { k: 'c', id: b.id }, [12345]), /Invalid squad/);
+  assert.match(g.order(b.id, [s1[1].id], { k: 'c', id: a.id }), /No troops/);
 });
 
 test('an attack marches across the map and takes an undefended tower', () => {
@@ -206,7 +276,7 @@ test('destroying a tower just destroys it: bounty, but no tower and no land', ()
   assert.strictEqual(g.hexOwner[hexI], b.id, 'its hex stays the owner\'s');
   assert.strictEqual(a.territory, landBefore, 'the attacker gains no land');
   assert.strictEqual(b.territory, bLand, 'the owner loses none');
-  assert.deepStrictEqual(a.lastOrder, { type: 'attack', target: { k: 'c', id: b.id } }, 'the remembered order pushes on to the core');
+  assert.deepStrictEqual(a.squads[0].order, { type: 'attack', target: { k: 'c', id: b.id } }, 'the squad\'s order pushes on to the core');
 });
 
 test("a destroyed core's towers go to the conqueror; with nobody to take them they fall to ruins", () => {
@@ -283,15 +353,15 @@ test('medics heal, and troops heal slowly on their own land', () => {
   assert.ok(homeGuard.hp > 100 && homeGuard.hp < 100 + homeGuard.maxHp * C.HOME_REGEN * 2.2, 'home regen');
 });
 
-test('the standing order rolls on to the next structure when its tower is destroyed', () => {
+test('a squad\'s order rolls on to the next structure when its tower is destroyed', () => {
   const { g, a, b } = duel(12);
   const t1 = outpost(g, b, 1, 0);
   const t2 = outpost(g, b, 0, 1);
   g.order(a.id, null, { k: 't', id: t1.id });
   g.damageTower(t1, 1e9, a.id);
-  assert.deepStrictEqual(a.lastOrder, { type: 'attack', target: { k: 't', id: t2.id, owner: b.id } });
+  assert.deepStrictEqual(a.squads[0].order, { type: 'attack', target: { k: 't', id: t2.id, owner: b.id } });
   g.damageTower(t2, 1e9, a.id);
-  assert.deepStrictEqual(a.lastOrder, { type: 'attack', target: { k: 'c', id: b.id } });
+  assert.ok(a.squads.every((q) => q.order.target.k === 'c' && q.order.target.id === b.id), 'every squad sent there pushes on to the core');
 });
 
 test('the spatial grid finds the same nearby troops as a full scan', () => {
@@ -323,10 +393,8 @@ test('hunting: troops chase a chosen enemy troop, focus it, then move on to its 
   const decoy = troops(g, b, 'soldier', 1, mx + 1, my + 2)[0]; // right next to the hunters
   const [target] = prey;
   for (const v of [...prey, decoy]) v.attack = { k: 'c', id: b.id }; // hold them still: no orders to follow
-  const before = a.lastOrder;
   assert.strictEqual(g.order(a.id, null, { k: 'u', id: target.id }), null);
   assert.strictEqual(g.lastOrderCount, 4);
-  assert.deepStrictEqual(a.lastOrder, before, 'a hunt is not remembered for new squads');
   assert.ok(hunters.every((u) => u.attack.k === 'u' && u.attack.id === target.id));
   // pin the prey in place and let the hunters work
   const pin = () => { for (const v of [...prey, decoy]) if (g.units.has(v.id)) { v.x = v === decoy ? mx + 1 : mx + 8 + prey.indexOf(v) * 0.4; v.y = v === decoy ? my + 2 : my; v.path = []; } };
@@ -382,73 +450,64 @@ test('cleared fog stays clear: explored areas keep showing live activity', () =>
   assert.ok(g.sees(a, spot.x, spot.y + 4), '...but the area stays revealed');
 });
 
-test('squads: every wave is a squad, numbered, and ordered on its own', () => {
+test('stances: aggressive squads fight on the way, defensive ones march past, hold never chases', () => {
   const { g, a, b } = duel(26);
-  const t = outpost(g, b);
-  const wave = () => {
-    const before = new Set(mine(g, a));
-    a.nextWaveAt = g.time;
-    g.update(0.05);
-    return mine(g, a).filter((u) => !before.has(u));
+  assert.strictEqual(a.squads[0].stance, 'defensive');
+  assert.match(g.squadStance(a.id, a.squads[0].id, 'berserk'), /Invalid/);
+  const trial = (stance) => {
+    for (const u of [...g.units.values()]) g.units.delete(u.id);
+    g.squadStance(a.id, a.squads[0].id, stance);
+    const mx = Math.round((a.core.x + b.core.x) / 2);
+    const my = Math.round((a.core.y + b.core.y) / 2);
+    const squad = troops(g, a, 'soldier', 3, mx - 6, my);
+    assert.ok(squad.every((u) => u.stance === stance), 'troops take their squad\'s stance');
+    const [foe] = troops(g, b, 'soldier', 1, mx - 2, my + 2.4); // beside the path, out of reach
+    foe.hp = foe.maxHp = 1e6;
+    foe.attack = { k: 'p', id: g.idx(Math.floor(foe.x), Math.floor(foe.y)) };
+    g.order(a.id, null, { k: 'c', id: b.id }, [a.squads[0].id]);
+    let chased = 0;
+    const [fx, fy] = [foe.x, foe.y];
+    run(g, 3, () => {
+      foe.x = fx; // it stays put
+      foe.y = fy;
+      for (const u of squad) if (g.units.has(u.id) && Math.hypot(u.x - foe.x, u.y - foe.y) < 1.6) chased++;
+      return false;
+    });
+    return chased;
   };
-  const w1 = wave();
-  const w2 = wave();
-  assert.strictEqual(w1.length, C.BASE_WAVE);
-  const s1 = w1[0].sq;
-  const s2 = w2[0].sq;
-  assert.ok(w1.every((u) => u.sq === s1) && w2.every((u) => u.sq === s2) && s1 !== s2, 'one squad per wave');
-  assert.deepStrictEqual([a.squadNum.get(s1), a.squadNum.get(s2)], [1, 2]);
-  // send squad 2 at the tower; squad 1 stays home
-  assert.strictEqual(g.order(a.id, null, { k: 't', id: t.id }, [s2]), null);
-  assert.strictEqual(g.lastOrderCount, w2.length);
-  assert.ok(w2.every((u) => u.attack) && w1.every((u) => !u.attack));
-  assert.match(g.order(a.id, null, { k: 't', id: t.id }, [12345]), /no troops/);
-  // a squad that's wiped out frees its number for the next wave
-  for (const u of w1) g.units.delete(u.id);
-  g.pruneSquads();
-  const w3 = wave();
-  assert.strictEqual(a.squadNum.get(w3[0].sq), 1);
+  assert.ok(trial('aggressive') > 0, 'aggressive: turns on the enemy beside its path');
+  assert.strictEqual(trial('defensive'), 0, 'defensive: marches on');
+  assert.strictEqual(trial('hold'), 0, 'hold: marches on');
 });
 
-test('squads: merging, and moving picked troops between squads', () => {
-  const { g, a, b } = duel(27);
-  const t = outpost(g, b);
-  const wave = () => {
-    const before = new Set(mine(g, a));
-    a.nextWaveAt = g.time;
-    g.update(0.05);
-    return mine(g, a).filter((u) => !before.has(u));
-  };
-  for (const k of Object.keys(a.army)) a.army[k] = 0; // all soldiers: none wander off scouting
-  barracksAt(g, a, 0); // 8 troops a wave
-  const w1 = wave();
-  const w2 = wave();
-  g.order(a.id, null, { k: 't', id: t.id }, [w2[0].sq]);
-  // move two troops of squad 1 into squad 2: they take on its attack
-  assert.strictEqual(g.squadAssign(a.id, [w1[0].id, w1[1].id], w2[0].sq), null);
-  assert.ok(w1[0].sq === w2[0].sq && w1[0].attack && w1[0].attack.k === 't');
-  assert.ok(w1[2].sq !== w2[0].sq && !w1[2].attack);
-  // two more into a new squad of their own
-  assert.strictEqual(g.squadAssign(a.id, [w1[2].id, w1[3].id], 'new'), null);
-  assert.ok(w1[2].sq === w1[3].sq && w1[2].sq !== w1[4].sq);
-  assert.strictEqual(a.squadNum.size, 3);
-  // merge it back into squad 1
-  assert.strictEqual(g.squadMerge(a.id, [w1[4].sq, w1[2].sq]), null);
-  assert.ok(w1[2].sq === w1[4].sq);
-  assert.strictEqual(a.squadNum.size, 2);
-  assert.match(g.squadMerge(a.id, [w1[4].sq]), /two or more/);
-  assert.match(g.squadAssign(a.id, [w1[4].id], 999), /Invalid squad/);
-  assert.match(g.squadAssign(b.id, [w1[4].id], 'new'), /No troops/);
+test('hold: troops at home never chase intruders, defensive ones do', () => {
+  const { g, a, b } = duel(38);
+  setMix(a, 0, { soldier: 4 });
+  respawn(g, a);
+  run(g, 12);
+  const guards = mine(g, a);
+  const core = g.hex.hexes[g.hexAt(a.core.x, a.core.y)];
+  const post = guards[0].slotPos;
+  const far = g.hex.hexes.filter((h) => g.hexOwner[h.i] === a.id && h !== core)
+    .sort((p, q) => Math.hypot(q.cx - post.x, q.cy - post.y) - Math.hypot(p.cx - post.x, p.cy - post.y))[0];
+  g.squadStance(a.id, a.squads[0].id, 'hold');
+  const [foe] = troops(g, b, 'soldier', 1, far.cx, far.cy);
+  foe.hp = foe.maxHp = 1e6;
+  foe.attack = { k: 'p', id: g.idx(Math.floor(far.cx), Math.floor(far.cy)) };
+  const start = guards.map((u) => [u.x, u.y]);
+  run(g, 4);
+  assert.ok(guards.every((u, i) => Math.hypot(u.x - start[i][0], u.y - start[i][1]) < 1), 'holding: they stay at their post');
+  g.squadStance(a.id, a.squads[0].id, 'defensive');
+  run(g, 4);
+  assert.ok(guards.some((u, i) => Math.hypot(u.x - start[i][0], u.y - start[i][1]) > 2), 'defensive: they go after it');
 });
 
 test('squads stay together on the march and stand guard together at home', () => {
   const { g, a, b } = duel(28);
-  a.army.scout = 1; // a fast scout in a squad of soldiers
-  a.army.archer = 1;
-  a.nextWaveAt = g.time;
-  g.update(0.05);
+  setMix(a, 0, { soldier: 2, scout: 1, archer: 1 }); // a fast scout in a squad of soldiers
+  respawn(g, a);
   const sq = mine(g, a);
-  assert.strictEqual(sq.length, C.BASE_WAVE);
+  assert.strictEqual(sq.length, 4);
   g.order(a.id, null, { k: 'c', id: b.id }, [sq[0].sq]);
   const spread = (home = false) => {
     const live = sq.filter((u) => g.units.has(u.id) && !(home && u.kind === 'scout')); // at home, scouts explore
@@ -489,10 +548,8 @@ test('troops keep their personal space: never on top of each other or inside bui
 
 test('standing troops fill their hex in an even formation', () => {
   const { g, a } = duel(32);
-  for (const k of Object.keys(a.army)) a.army[k] = 0; // all soldiers
-  a.nextWaveAt = g.time;
-  g.update(0.05);
-  a.nextWaveAt = Infinity;
+  setMix(a, 0, { soldier: 4 }); // all soldiers
+  respawn(g, a);
   const squad = mine(g, a);
   run(g, 20);
   const hexes = new Set(squad.map((u) => g.hexAt(Math.floor(u.x), Math.floor(u.y))));
@@ -505,9 +562,8 @@ test('standing troops fill their hex in an even formation', () => {
     for (const v of squad) if (v !== u) assert.ok(Math.hypot(u.x - v.x, u.y - v.y) > 0.9, 'evenly spaced');
   }
   // a second squad forms up in a different hex
-  a.nextWaveAt = g.time;
-  g.update(0.05);
-  a.nextWaveAt = Infinity;
+  a.squads[1].mix.soldier = 4;
+  respawn(g, a);
   const second = mine(g, a).filter((u) => !squad.includes(u));
   run(g, 20);
   const h2 = new Set(second.map((u) => g.hexAt(Math.floor(u.x), Math.floor(u.y))));
@@ -533,10 +589,8 @@ test("a tower's lightning chains on to nearby enemies, weaker each jump", () => 
 
 test('troops at home fight enemies coming into their land, without leaving it', () => {
   const { g, a, b } = duel(34);
-  for (const k of Object.keys(a.army)) a.army[k] = 0; // all soldiers
-  a.nextWaveAt = g.time;
-  g.update(0.05);
-  a.nextWaveAt = Infinity;
+  setMix(a, 0, { soldier: 4 }); // all soldiers
+  respawn(g, a);
   const guards = mine(g, a);
   run(g, 15); // formed up next to the core
   // an intruder on a's land, well away from the guards' post (beyond the old guard leash)

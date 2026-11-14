@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const C = require('../shared/config');
 const { Game, seeded, duel, edgeTile, outpost, troops, run } = require('./helpers');
 
-test('a new player gets a core, gold, land and a starting army plan', () => {
+test('a new player gets a core, gold, land and four squads', () => {
   const g = new Game({ botTarget: 0, rand: seeded(1) });
   const p = g.addPlayer('Alice');
   g.update(0.05);
@@ -13,10 +13,13 @@ test('a new player gets a core, gold, land and a starting army plan', () => {
   assert.ok(p.territory > 100, `territory ${p.territory}`);
   assert.ok(p.gold > C.START_GOLD);
   assert.strictEqual(g.grid[g.idx(p.core.x, p.core.y)], -p.id);
-  assert.deepStrictEqual(p.army, { soldier: 0, scout: 1, medic: 1, archer: 1 });
-  assert.deepStrictEqual(g.waveList(p), ['scout', 'medic', 'archer', 'soldier'], 'the first wave: one of each type');
-  assert.strictEqual(p.squadNum.size, 0, 'no squads until the first wave');
-  assert.strictEqual(p.newWaves, 'home');
+  g.fitArmy(p); // (land is counted after the army is fitted on the first tick)
+  assert.strictEqual(p.squads.length, C.MAX_SQUADS);
+  const [s1, ...rest] = p.squads;
+  assert.deepStrictEqual({ scout: s1.mix.scout, medic: s1.mix.medic, archer: s1.mix.archer }, C.START_SQUAD, 'squad 1: a scout, a medic and archers...');
+  assert.strictEqual(g.slotsUsed(p), g.armySize(p), '...and soldiers for the rest of the army');
+  assert.ok(rest.every((q) => g.mixSlots(q.mix) === 0), 'squads 2-4 start empty');
+  assert.ok(p.squads.every((q) => q.stance === 'defensive' && q.order.type === 'defend'));
 });
 
 test('names are sanitised', () => {

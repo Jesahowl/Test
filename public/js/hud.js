@@ -11,7 +11,7 @@ import { targetName } from './targets.js';
 import { updateTips } from './tips.js';
 import { iconURL, refreshTip } from './ui.js';
 import { updateDock } from './dock.js';
-import { mySquads } from './squads.js';
+import { allSquads } from './squads.js';
 
 S.hudTimer = 0;
 
@@ -40,38 +40,31 @@ function updateHud() {
   const sorted = [...players.values()].sort((a, b) => b.territory - a.territory);
   const rank = sorted.findIndex((q) => q.id === S.myId) + 1;
   const myTroops = [...S.units.values()].filter((u) => u.owner === S.myId && u.kind !== 'caravan').reduce((n, u) => n + C.slotsOf(u.kind), 0);
-  const perWave = S.me.waveSize;
+  const armySize = S.me.armySize;
   updateRound();
   updateStats(p, gold, rank, sorted.length);
 
-  // wave: size, countdown ring, and the next wave's lineup
-  $('wave-size').textContent = `${perWave} troops every ${C.WAVE_INTERVAL}s`;
+  // respawns: countdown ring, and who comes back when it runs out
+  const squads = allSquads();
+  const used = squads.reduce((n, q) => n + q.size, 0);
+  $('wave-size').textContent = `${used} / ${armySize} troops in squads · fallen troops respawn every ${C.WAVE_INTERVAL}s`;
   const frac = Math.max(0, Math.min(1, S.me.nextWave / C.WAVE_INTERVAL));
   $('wave-timer').innerHTML = `<svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="11" fill="none" stroke="#273041" stroke-width="2.4"/>
     <circle cx="13" cy="13" r="11" fill="none" stroke="#ffd54f" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="${(69.1 * (1 - frac)).toFixed(1)} 69.1"/></svg><span>${S.me.nextWave}s</span>`;
-  $('wave-timer').dataset.tip = `<span class="t">Next wave in ${S.me.nextWave}s</span>Every ${C.WAVE_INTERVAL} seconds your core (and each barracks) sends out a free wave.`;
-  // The next wave at a glance: a chip per troop type with how many are coming (auto-filled
-  // soldiers counted separately). A chip glows briefly when its number changes.
-  const list = waveListOf(S.me);
-  const lineup = UNIT_KEYS.map((k) => {
-    const n = list.filter((x) => x === k).length;
-    return { k, n, auto: Math.max(0, n - (S.me.army[k] || 0)) };
-  }).filter((c) => c.n);
-  const slotKey = lineup.map((c) => `${c.k}${c.n}/${c.auto}`).join(',');
+  const down = {};
+  for (const q of squads) for (const k of UNIT_KEYS) down[k] = (down[k] || 0) + Math.max(0, q.mix[k] - (q.kinds[k] || 0));
+  const lineup = UNIT_KEYS.filter((k) => down[k]);
+  const nDown = lineup.reduce((n, k) => n + down[k], 0);
+  $('wave-timer').dataset.tip = `<span class="t">Respawn in ${S.me.nextWave}s</span>${nDown ? `${nDown} fallen troop${nDown === 1 ? '' : 's'} will respawn and rejoin their squads.` : 'Every squad is at full strength.'} Every ${C.WAVE_INTERVAL} seconds, every fallen troop respawns at your core and barracks.`;
+  const slotKey = lineup.map((k) => `${k}${down[k]}`).join(',') + `|${S.me.nextWave}`;
   const box = $('slots');
   if (box.dataset.key !== slotKey) {
-    const before = Object.fromEntries((box.dataset.key || '').split(',').filter(Boolean).map((t) => [t.replace(/[\d/]+$/, ''), t]));
     box.dataset.key = slotKey;
-    box.innerHTML = '<span class="nw-label">Next wave</span>' + lineup.map((c) => {
-      const changed = before[c.k] !== `${c.k}${c.n}/${c.auto}` && box.dataset.ready;
-      const picked = c.n - c.auto;
-      const count = picked ? `×${picked}${c.auto ? `<span class="auto">+${c.auto} auto</span>` : ''}` : `×${c.auto}<span class="auto">auto</span>`;
-      return `<span class="nw ${changed ? 'pulse' : ''}" style="--c:${C.UNITS[c.k].color}"><img src="${iconURL(c.k, 36)}" alt="">${count}</span>`;
-    }).join('');
-    box.dataset.ready = '1';
+    box.innerHTML = lineup.length
+      ? `<span class="nw-label">Respawning in ${S.me.nextWave}s</span>` + lineup.map((k) => `<span class="nw" style="--c:${C.UNITS[k].color}"><img src="${iconURL(k, 36)}" alt="">×${down[k]}</span>`).join('')
+      : '<span class="nw-label">Every squad at full strength</span>';
   }
-  const cap = C.unitCap(p.territory, perWave);
-  $('alive').innerHTML = `Troops alive <b>${myTroops}</b> / ${cap}`;
+  $('alive').innerHTML = `Troops alive <b>${myTroops}</b> / ${armySize}`;
 
   const who = selUnits.size ? `${selUnits.size} picked troop${selUnits.size === 1 ? '' : 's'}` : squadsLabel();
   const orderHtml = selUnits.size
@@ -83,8 +76,8 @@ function updateHud() {
   }
 
   updateBoards();
-  updateDock(mySquads().length, (S.me.offersIn || []).length);
-  updateTowerAndArmy(gold, perWave);
+  updateDock(Math.max(0, armySize - used), (S.me.offersIn || []).length);
+  updateTowerAndArmy(gold);
   updateSelectionPanel(gold);
   updateTips();
   refreshTip();
@@ -175,22 +168,8 @@ function updateDiplomacy(sorted) {
   }
 }
 
-// Same as the server's waveList: assigned slots, then guards/archers.
-function waveListOf(m) {
-  const list = [];
-  let used = 0;
-  for (const kind of UNIT_KEYS) {
-    for (let i = 0; i < m.army[kind] && used + C.slotsOf(kind) <= m.waveSize; i++) {
-      list.push(kind);
-      used += C.slotsOf(kind);
-    }
-  }
-  for (; used < m.waveSize; used++) list.push('soldier');
-  return list;
-}
-
 // Build buttons (tower, barracks, land), squads and the army panel.
-function updateTowerAndArmy(gold, perWave) {
+function updateTowerAndArmy(gold) {
   updateSquadsUi();
   const tb = $('tower-button');
   tb.classList.toggle('active', S.buildKind === 'tower');
@@ -221,36 +200,29 @@ function updateTowerAndArmy(gold, perWave) {
   const wb = $('wall-button');
   wb.classList.toggle('active', S.buildKind === 'wall');
   wb.classList.toggle('poor', gold < C.WALL_COST);
-  // Troop cards: how many per wave, how many were picked vs auto-filled, level and its price.
-  const assigned = UNIT_KEYS.reduce((n, k) => n + S.me.army[k] * C.slotsOf(k), 0);
-  const list = waveListOf(S.me);
+  // Troop cards: how many are in squads, level and its price.
+  const inSquads = {};
+  for (const q of allSquads()) for (const k of UNIT_KEYS) inSquads[k] = (inSquads[k] || 0) + q.mix[k];
   for (const card of document.querySelectorAll('#army .troop')) {
     const kind = card.dataset.kind;
-    const n = list.filter((k) => k === kind).length;
-    const set = S.me.army[kind];
+    const n = inSquads[kind] || 0;
     const lvl = S.me.levels[kind];
     const upCost = lvl < C.MAX_LEVEL ? C.armyLevelCost(kind, lvl) : 0;
     card.classList.toggle('off', n === 0);
     card.classList.toggle('in', n > 0);
     card.style.setProperty('--c', C.UNITS[kind].color);
     card.querySelector('.lvl').textContent = `Lv ${lvl}`;
-    const slots = C.slotsOf(kind);
-    const auto = Math.max(0, n - set);
-    const html = n
-      ? `<b class="n">×${n}</b> <span class="muted">${auto ? (auto === n ? 'auto-filled' : `in wave · ${auto} auto`) : 'in each wave'}</span>`
-      : slots > 1 ? `none · ${slots} slots each` : 'none in waves';
+    const html = n ? `<b class="n">×${n}</b> <span class="muted">in your squads</span>` : 'none in your squads';
     const countEl = card.querySelector('.count');
     if (countEl.innerHTML !== html) countEl.innerHTML = html;
-    card.querySelector('.add').disabled = assigned + slots > S.me.waveSize;
     const up = card.querySelector('.up');
-    up.textContent = lvl < C.MAX_LEVEL ? `▲ ${upCost}g` : 'MAX';
+    up.textContent = lvl < C.MAX_LEVEL ? `▲ Level up ${upCost}g` : 'MAX';
     up.disabled = lvl >= C.MAX_LEVEL || gold < upCost;
     const s1 = C.towerStats(kind, lvl);
     const s2 = lvl < C.MAX_LEVEL ? C.towerStats(kind, lvl + 1) : null;
     up.dataset.tip = s2
-      ? `<span class="t">Level ${C.UNITS[kind].name}s up to ${lvl + 1}: ${upCost}g</span>HP ${s1.hp} → <b>${s2.hp}</b>${s1.damage ? ` · damage ${Math.round(s1.damage)} → <b>${Math.round(s2.damage)}</b>` : ''}${s1.heal ? ` · healing ${Math.round(s1.heal)} → <b>${Math.round(s2.heal)}</b>` : ''}<br><span class="m">Applies to troops from the next wave.</span>`
+      ? `<span class="t">Level ${C.UNITS[kind].name}s up to ${lvl + 1}: ${upCost}g</span>HP ${s1.hp} → <b>${s2.hp}</b>${s1.damage ? ` · damage ${Math.round(s1.damage)} → <b>${Math.round(s2.damage)}</b>` : ''}${s1.heal ? ` · healing ${Math.round(s1.heal)} → <b>${Math.round(s2.heal)}</b>` : ''}<br><span class="m">Applies to troops that respawn after.</span>`
       : 'Max level';
-    card.querySelector('.rem').disabled = set === 0;
   }
 }
 
