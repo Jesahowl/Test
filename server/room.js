@@ -54,10 +54,10 @@ class RowTracker {
 }
 
 // Does an effect happen somewhere player p can see (or belong to them)?
-function fxVisible(game, p, f) {
+function fxVisible(seen, p, f) {
   if (f.o === p.id) return true;
-  if (f.x !== undefined) return game.sees(p, f.x, f.y);
-  return game.sees(p, f.x1, f.y1) || game.sees(p, f.x2, f.y2);
+  if (f.x !== undefined) return seen(f.x, f.y);
+  return seen(f.x1, f.y1) || seen(f.x2, f.y2);
 }
 
 function send(client, obj) {
@@ -178,6 +178,8 @@ class Room {
     this.trackers = Object.fromEntries(COLLECTIONS.map((k) => [k, new RowTracker()])); // ids start over on a new map
     for (const client of this.clients) {
       client.synced = false;
+      client.expSent = -1;
+      client.expView = null;
       client.pid = null;
       client.terrVersion = -1;
       if (client.name) this.addToGame(client);
@@ -293,22 +295,51 @@ class Room {
         body = fullBody;
         client.synced = true;
         client.priv = Object.fromEntries(PRIVATE.map((k) => [k, new RowTracker()]));
+        client.expSent = -1;
+        client.expView = null;
       }
       const p = client.pid ? game.players.get(client.pid) : null;
       const fog = p && p.alive && p.vis ? p : null;
+      let expPart = '';
+      // Where this player has explored (run lengths, starting with unexplored): the client draws its
+      // fog from exactly this, so it always matches what the server sends them.
+      if (p && p.explored && client.expSent !== p.exploredCount && (client.expSent === -1 || this.tick >= (client.expAt || 0))) {
+        client.expAt = this.tick + C.TICK_RATE / 2; // at most twice a second
+        const runs = [];
+        let cur = 0;
+        let n = 0;
+        for (let k = 0; k < p.explored.length; k++) {
+          if (p.explored[k] === cur) n++;
+          else {
+            runs.push(n);
+            cur = p.explored[k];
+            n = 1;
+          }
+        }
+        runs.push(n);
+        expPart = `"exp":[${runs.join(',')}],`;
+        client.expView = Uint8Array.from(p.explored);
+        client.expSent = p.exploredCount;
+      }
+      // Only what the client has been told is explored (its fog matches this exactly).
+      const seen = (x, y) => {
+        const tx = Math.floor(x);
+        const ty = Math.floor(y);
+        return !!client.expView && game.inBounds(tx, ty) && client.expView[game.idx(tx, ty)] === 1;
+      };
       for (const key of PRIVATE) {
-        const rows = fog ? priv[key].filter((e) => e.owner === fog.id || game.sees(fog, e.x, e.y)) : priv[key];
+        const rows = fog ? priv[key].filter((e) => e.owner === fog.id || seen(e.x, e.y)) : priv[key];
         const d = client.priv[key].diffEntries(rows);
         body += `"${key}":{"c":[${d.changed.join(',')}],"r":[${d.removed.join(',')}]},`;
       }
       let fx;
-      if (fog) fx = JSON.stringify(snap.fx.filter((f) => fxVisible(game, fog, f)));
+      if (fog) fx = JSON.stringify(snap.fx.filter((f) => fxVisible(seen, fog, f)));
       else fx = allFx || (allFx = JSON.stringify(snap.fx));
       body += `"fx":${fx},`;
-      let extra = '';
+      let extra = expPart;
       if (client.terrVersion !== game.terrVersion) {
         if (!terrJson) terrJson = JSON.stringify(game.encodeTerritory());
-        extra = `"terr":${terrJson},`;
+        extra += `"terr":${terrJson},`;
         client.terrVersion = game.terrVersion;
       }
       const me = p ? JSON.stringify(game.personal(p)) : 'null';

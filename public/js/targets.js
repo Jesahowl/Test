@@ -1,6 +1,6 @@
 // Order targets: what is under the cursor and how to name it.
 
-import { S, C, baseLift, hexSpot, players, towerInHex } from './state.js';
+import { S, C, baseLift, explored, hexSpot, players, towerInHex } from './state.js';
 
 // ------------------------------------------------------------------ targets
 // Targets are encoded like the server does: 't:<tower id>', 'c:<player id>', 'j:<camp id>'.
@@ -46,6 +46,8 @@ function targetName(key) {
 
 // What's under world point (wx, wy) that troops can be ordered at?
 function orderTargetAt(wx, wy) {
+  // nothing to point at in unexplored fog
+  if (S.fogOn && (wx < 0 || wy < 0 || wx >= C.MAP_W || wy >= C.MAP_H || !explored[Math.floor(wy) * C.MAP_W + Math.floor(wx)])) return null;
   // Enemy troops first (they're small, so only right under the cursor).
   let best = null;
   let bestD = 0.55;

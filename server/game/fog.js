@@ -31,7 +31,12 @@ module.exports = {
         p.explored = new Uint8Array(n);
       }
       Vision.computeVision(p.vis, this.w, this.h, pid, this.terr, list);
-      for (let k = 0; k < n; k++) if (p.vis[k]) p.explored[k] = 1;
+      for (let k = 0; k < n; k++) {
+        if (p.vis[k] && !p.explored[k]) {
+          p.explored[k] = 1;
+          p.exploredCount = (p.exploredCount || 0) + 1; // tells the room to send the new map
+        }
+      }
     }
   },
 

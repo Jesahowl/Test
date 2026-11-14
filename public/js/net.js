@@ -1,6 +1,6 @@
 // Network: the WebSocket connection, incoming messages, and smooth (interpolated) movement.
 
-import { resetFog, updateFog } from './fog.js';
+import { resetFog, setExplored, updateFog } from './fog.js';
 import { formError, onLeft, onRoom } from './lobby.js';
 import { clearSelection } from './overlay.js';
 import { showDeath, showMenu, showRoundOver, startSpectating, stopSpectating, toast } from './screens.js';
@@ -215,6 +215,7 @@ function applyState(msg) {
 
   S.campMap = merge(S.campMap, msg.camps, (a) => ({ id: a[0], x: a[1], y: a[2], type: CAMP_KEYS[a[3]], alive: !!a[4], respawn: a[5] }));
   S.camps = [...S.campMap.values()];
+  if (msg.exp) setExplored(msg.exp);
   updateFog(!!msg.terr);
 
   for (const f of msg.fx) {

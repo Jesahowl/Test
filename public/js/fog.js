@@ -7,6 +7,17 @@ import { drawTerritory } from './territory.js';
 const seesTile = (x, y) => explored[Math.floor(y) * C.MAP_W + Math.floor(x)] === 1;
 
 // Recompute my sight and the remembered map. terrChanged: new territory arrived this update.
+// The server's map of where I've explored (run lengths, starting with unexplored).
+function setExplored(runs) {
+  let k = 0;
+  let v = 0;
+  for (const n of runs) {
+    explored.fill(v, k, Math.min(NTILES, k + n));
+    k += n;
+    v = 1 - v;
+  }
+}
+
 function updateFog(terrChanged) {
   S.fogOn = !!(S.myId && players.has(S.myId) && !S.spectating);
   let redraw = terrChanged || S.fogOn !== S.fogWasOn;
@@ -24,16 +35,17 @@ function updateFog(terrChanged) {
   for (const t of S.towers.values()) if (t.owner === S.myId) sources.push({ x: t.x + 0.5, y: t.y + 0.5, r: C.structSight(t.kind, t.level) });
   for (const u of S.units.values()) if (u.owner === S.myId) sources.push({ x: u.x, y: u.y, r: C.UNITS[u.kind].sight || 5 });
   Vision.computeVision(vis, C.MAP_W, C.MAP_H, S.myId, terr, sources);
-  for (let k = 0; k < NTILES; k++) if (vis[k]) explored[k] = 1;
+  // (explored ground comes from the server: see net.js, msg.exp)
   // Territory is always drawn with its real borders; the fog simply covers what I haven't
   // explored, so clearing fog reveals the border underneath instead of re-tracing it.
   S.terrView = terr;
   if (redraw) drawTerritory();
   // Buildings, cores and camps: live once their spot has been explored.
-  const remember = (seen, live, posOf) => {
+  // mine(o): always shown (my own buildings and core); everything else once its spot is explored.
+  const remember = (seen, live, posOf, mine) => {
     for (const [id, o] of live) {
       const [x, y] = posOf(o);
-      if (seesTile(x, y) || o.owner === S.myId || o.id === S.myId) seen.set(id, o);
+      if (seesTile(x, y) || mine(o)) seen.set(id, o);
     }
     // Forget what we remember at a spot we can see that isn't there any more: gone, or moved away
     // (a cleared camp comes back somewhere else under the same id).
@@ -50,9 +62,9 @@ function updateFog(terrChanged) {
     }
     return seen;
   };
-  S.towersView = remember(S.towersSeen, S.towers, (t) => [t.x, t.y]);
-  S.coresView = remember(S.coresSeen, players, (p) => [p.x, p.y]);
-  S.campsView = [...remember(S.campsSeen, S.campMap, (c) => [c.x, c.y]).values()];
+  S.towersView = remember(S.towersSeen, S.towers, (t) => [t.x, t.y], (t) => t.owner === S.myId);
+  S.coresView = remember(S.coresSeen, players, (p) => [p.x, p.y], (p) => p.id === S.myId);
+  S.campsView = [...remember(S.campsSeen, S.campMap, (c) => [c.x, c.y], () => false).values()];
   // Fog image: clear wherever explored, dark where nobody has looked yet. Rebuilt only when
   // the explored area grows; drawn blurred so its edge is soft and round, not tile steps.
   let count = 0;
@@ -105,4 +117,4 @@ function drawFog() {
   ctx.restore();
 }
 
-export { drawFog, resetFog, updateFog };
+export { drawFog, resetFog, setExplored, updateFog };
