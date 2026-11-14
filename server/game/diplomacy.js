@@ -1,7 +1,7 @@
 'use strict';
 
 // Alliances. Two players can ally: their troops, towers and cores stop fighting each other and they
-// share vision. One player offers, the other accepts (bots weigh the offer up). Either can break the
+// can see each other's bases. One player offers, the other accepts (bots weigh the offer up). Either can break the
 // alliance at any time - attacking an ally asks you first (in the browser) and breaks it. Everyone
 // can see who is allied with whom. Alliances end when one side is knocked out, and all of them
 // dissolve when sudden death starts (only one core can win).

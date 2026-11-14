@@ -59,7 +59,7 @@ function checkAllyOrder(tg, go) {
   }
   const q = players.get(owner);
   const name = escapeHtml(q ? q.name : 'them');
-  confirmBox(`<h3>⚔ Attack your ally?</h3><p><b>${name}</b> is your ally. Attacking breaks the alliance: your troops and towers will fight theirs again and you stop sharing vision.</p><p class="muted">Everyone sees who broke it${q && q.isBot ? ', and a betrayed bot won\'t trust you again' : ''}.</p>`,
+  confirmBox(`<h3>⚔ Attack your ally?</h3><p><b>${name}</b> is your ally. Attacking breaks the alliance: your troops and towers will fight theirs again.</p><p class="muted">Everyone sees who broke it${q && q.isBot ? ', and a betrayed bot won\'t trust you again' : ''}.</p>`,
     'Break alliance and attack', () => {
       sendMsg({ t: 'ally', op: 'break', id: owner });
       go();
@@ -68,7 +68,7 @@ function checkAllyOrder(tg, go) {
 
 function breakWith(id) {
   const q = players.get(id);
-  confirmBox(`<h3>Break the alliance with <b>${escapeHtml(q ? q.name : '?')}</b>?</h3><p>Your troops and towers will fight theirs again and you stop sharing vision.</p>`,
+  confirmBox(`<h3>Break the alliance with <b>${escapeHtml(q ? q.name : '?')}</b>?</h3><p>Your troops and towers will fight theirs again.</p>`,
     'Break alliance', () => sendMsg({ t: 'ally', op: 'break', id }));
 }
 
@@ -77,11 +77,11 @@ function allyButton(q) {
   if (!S.me || S.spectating || q.id === S.myId) return '';
   const inOffer = (S.me.offersIn || []).includes(q.id);
   const outOffer = (S.me.offersOut || []).includes(q.id);
-  if (isAlly(q.id)) return `<button class="dip ally" data-act="break" data-id="${q.id}" data-tip="Allied: you don't fight and you share vision. Click to break the alliance">🤝</button>`;
+  if (isAlly(q.id)) return `<button class="dip ally" data-act="break" data-id="${q.id}" data-tip="Allied: you don't fight and you can see each other's bases. Click to break the alliance">🤝</button>`;
   if (inOffer) return `<button class="dip offer" data-act="accept" data-id="${q.id}" data-tip="${escapeHtml(q.name)} offers an alliance: click to accept">✓ Ally</button>`;
   if (outOffer) return '<button class="dip wait" disabled data-tip="Waiting for an answer">…</button>';
   const full = (players.get(S.myId)?.allies || []).length >= C.MAX_ALLIES;
-  return `<button class="dip" data-act="propose" data-id="${q.id}"${full ? ' disabled' : ''} data-tip="${full ? `At most ${C.MAX_ALLIES} allies` : `Offer ${escapeHtml(q.name)} an alliance: you stop fighting each other and share vision`}">+🤝</button>`;
+  return `<button class="dip" data-act="propose" data-id="${q.id}"${full ? ' disabled' : ''} data-tip="${full ? `At most ${C.MAX_ALLIES} allies` : `Offer ${escapeHtml(q.name)} an alliance: you stop fighting each other and can see each other's bases`}">+🤝</button>`;
 }
 
 // Incoming offers, shown under the player list.

@@ -77,7 +77,7 @@
     // side of the border.
     HOME_ALERT: 16,
     HOME_EDGE: 1,
-    // Alliances: allies don't fight and share vision. Offers run out after ALLY_OFFER_TIME seconds.
+    // Alliances: allies don't fight and can see each other's bases. Offers run out after ALLY_OFFER_TIME seconds.
     MAX_ALLIES: 2,
     ALLY_OFFER_TIME: 30,
     BOT_OFFER_FIRST: 90, // bots start offering alliances to players after this (+ up to a minute)
