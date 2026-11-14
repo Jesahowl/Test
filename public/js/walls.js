@@ -139,7 +139,7 @@ function chainsOf(items) {
 // all one height. The face is filled segment by segment (they meet edge to edge), and the top is
 // ONE line through the whole run,
 // so the run reads as a single wall. A gate is a gap in the wall: the top line stops either side of
-// it, its ground line glows brighter and a soft light rises from it.
+// it, the walls there end in a lit edge, and a soft light rises from the gap (no line along its foot).
 function drawRun(run, s, now, ghost) {
   if (!run.length) return;
   const owner = run[0].w.owner;
@@ -183,18 +183,6 @@ function drawRun(run, s, now, ghost) {
     ctx.lineTo(b[0], b[1]);
   }
   ctx.stroke();
-  // a gate's ground line glows brighter
-  for (const [width, color] of [[Math.max(6, s * 0.3), colorOf(owner, 80, 0.3)], [Math.max(2.5, s * 0.11), colorOf(owner, 88)]]) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    ctx.beginPath();
-    for (const { a, b, w } of P) {
-      if (!w.gate) continue;
-      ctx.moveTo(a[0], a[1]);
-      ctx.lineTo(b[0], b[1]);
-    }
-    ctx.stroke();
-  }
   // the top: one path through each stretch of wall between gates
   const first = P[0];
   const last = P[P.length - 1];

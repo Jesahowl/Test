@@ -77,6 +77,30 @@ function drawTerritory() {
 // Territory fills and borders in world space: a see-through fill in the owner's colour inside a
 // solid border drawn on the inside of its own edge. Neighbours share exactly the same edge (see the
 // smoothing above), so their two border bands sit side by side.
+// The whole map with a thin band cut out along each gate (world units), for an even-odd clip; null
+// when there are no gates.
+function gateCutout() {
+  let cut = null;
+  for (const w of S.walls ? S.walls.values() : []) {
+    if (!w.gate || !w.ends) continue;
+    if (!cut) {
+      cut = new Path2D();
+      cut.rect(-1, -1, C.MAP_W + 2, C.MAP_H + 2);
+    }
+    const [[ax, ay], [bx, by]] = w.ends;
+    const len = Math.hypot(bx - ax, by - ay) || 1;
+    const ux = (bx - ax) / len;
+    const uy = (by - ay) / len;
+    const t = 0.4; // half the band's width, in tiles
+    cut.moveTo(ax - uy * t, ay + ux * t);
+    cut.lineTo(bx - uy * t, by + ux * t);
+    cut.lineTo(bx + uy * t, by - ux * t);
+    cut.lineTo(ax + uy * t, ay - ux * t);
+    cut.closePath();
+  }
+  return cut;
+}
+
 function drawTerritoryShapes(ox, oy, s) {
   ctx.save();
   ctx.translate(ox, oy);
@@ -88,9 +112,12 @@ function drawTerritoryShapes(ox, oy, s) {
   }
   // Each border is drawn just inside its own land (clipped to it, at double width), so where two
   // players meet you see both colours side by side and neither paints over the other's land.
+  // Gates leave their doorway clear: no border line runs under one.
+  const doors = gateCutout();
   for (const { owner, path } of S.terrShapes) {
     const mine = owner === S.myId;
     ctx.save();
+    if (doors) ctx.clip(doors, 'evenodd');
     ctx.clip(path);
     ctx.strokeStyle = colorOf(owner, 65, mine ? 1 : 0.9);
     ctx.lineWidth = (mine ? 5 : 4.5) / s;
