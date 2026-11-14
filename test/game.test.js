@@ -16,7 +16,7 @@ test('a new player gets a core, gold, land and four squads', () => {
   g.fitArmy(p); // (land is counted after the army is fitted on the first tick)
   assert.strictEqual(p.squads.length, C.MAX_SQUADS);
   const [s1, ...rest] = p.squads;
-  assert.deepStrictEqual({ scout: s1.mix.scout, medic: s1.mix.medic, archer: s1.mix.archer }, C.START_SQUAD, 'squad 1: a scout, a medic and archers...');
+  assert.deepStrictEqual({ medic: s1.mix.medic, archer: s1.mix.archer }, C.START_SQUAD, 'squad 1: a medic and archers...');
   assert.strictEqual(g.slotsUsed(p), g.armySize(p), '...and soldiers for the rest of the army');
   assert.ok(rest.every((q) => g.mixSlots(q.mix) === 0), 'squads 2-4 start empty');
   assert.ok(p.squads.every((q) => q.stance === 'defensive' && q.order.type === 'defend'));

@@ -34,7 +34,7 @@ function buildBar() {
   kb.innerHTML = `<kbd>${kd.key}</kbd><span class="count"></span><img src="${iconURL('workshop')}" alt="">Workshop<span class="cost"></span>`;
   kb.onclick = () => toggleBuild('workshop');
   const wb = $('wall-button');
-  wb.dataset.tip = `<span class="t">Walls <kbd>V</kbd></span><b>Drag along your border</b> to wall it, ${C.WALL_COST}g and ${C.WALL_WOOD} wood a segment; your workers build it. Walls block <b>every</b> troop and caravan, yours too: click one and make it a <b>gate</b> (${C.WALL_GATE_COST}g) to let your side and your allies through. Each segment has ${C.WALL_HP} HP. <span class="m">Enemies hack through the weakest point; soldiers hit walls twice as hard.</span>`;
+  wb.dataset.tip = `<span class="t">Walls <kbd>V</kbd></span><b>Drag along your border</b> to wall it, ${C.WALL_COST}g a segment (no wood); your workers build it. Walls block <b>every</b> troop and caravan, yours too: click one and make it a <b>gate</b> (${C.WALL_GATE_COST}g) to let your side and your allies through. Each segment has ${C.WALL_HP} HP. <span class="m">Enemies hack through the weakest point; soldiers hit walls twice as hard.</span>`;
   wb.innerHTML = `<kbd>V</kbd><img src="${iconURL('wall')}" alt="">Wall<span class="cost"></span>`;
   wb.onclick = () => toggleBuild('wall');
   const lb = $('land-button');
@@ -49,7 +49,7 @@ function buildBar() {
     card.className = 'troop';
     card.dataset.kind = kind;
     const st1 = C.towerStats(kind, 1);
-    const role = u.heal ? `heals ${u.heal}/s` : u.scout ? `sees ${u.sight} tiles, never fights` : `${st1.damage} dmg, ${u.melee ? 'melee' : `range ${st1.range}`}`;
+    const role = u.heal ? `heals ${u.heal}/s` : u.breaker ? `${st1.damage} dmg, ×${u.wallBreaker} against walls, ×${u.siege} against buildings` : `${st1.damage} dmg, ${u.melee ? 'melee' : `range ${st1.range}`}`;
     card.dataset.tip = `<span class="t">${u.name}</span>${u.desc}.<br><span class="m">${st1.hp} HP · ${role} · speed ${u.speed}</span>`;
     card.innerHTML = `
       <div class="head"><img src="${iconURL(kind)}" alt=""><b>${u.name}</b><span class="lvl"></span></div>

@@ -213,21 +213,22 @@ module.exports = {
     }
   },
 
-  // A bot's squads: 1 a strike force, 2 a home guard, 3 a jungle party and 4 a scout or two. Each
-  // fighting squad is mostly soldiers, with archers and a medic or two.
+  // A bot's squads: 1 a strike force (with a siege ram or two once it's big enough), 2 a home guard
+  // and 3 a jungle party; 4 stays empty. Each is mostly soldiers, with archers and a medic or two.
   botArmy(p) {
     const size = this.armySize(p);
-    const scouts = size >= 14 ? 2 : 1;
-    const rest = size - scouts;
+    const rest = size;
     const jungle = Math.max(3, Math.round(rest * C.BOT_JUNGLE_SHARE * 0.7));
     const guard = Math.round((rest - jungle) * (1 - C.BOT_STRIKE_SHARE));
     const strike = rest - jungle - guard;
-    const mixOf = (n) => {
-      const medic = n >= 5 ? Math.max(1, Math.round(n * 0.15)) : 0;
-      const archer = Math.round(n * 0.3);
-      return { soldier: n - medic - archer, scout: 0, medic, archer };
+    const mixOf = (n, rams = 0) => {
+      const left = n - rams * C.slotsOf('siege');
+      const medic = left >= 5 ? Math.max(1, Math.round(left * 0.15)) : 0;
+      const archer = Math.round(left * 0.3);
+      return { soldier: left - medic - archer, medic, archer, siege: rams };
     };
-    const want = [mixOf(strike), mixOf(guard), mixOf(jungle), { soldier: 0, scout: scouts, medic: 0, archer: 0 }];
+    const rams = strike >= 16 ? 2 : strike >= 9 ? 1 : 0;
+    const want = [mixOf(strike, rams), mixOf(guard), mixOf(jungle), { soldier: 0, medic: 0, archer: 0, siege: 0 }];
     p.squads.forEach((q, i) => Object.assign(q.mix, want[i]));
     if (!p.bot.stances) {
       p.bot.stances = true;

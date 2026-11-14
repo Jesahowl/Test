@@ -10,13 +10,14 @@
 // - build: buildings and walls are sites that rise as workers work on them (BUILD_TIME worker-
 //   seconds); unfinished ones don't shoot, train, trade or block. repair: damaged buildings, walls
 //   and the core, for a little gold. gather: chop forest hexes (in or next to your land) and carry
-//   the wood to the core or a workshop. farm: work a plain hex of your land for gold.
+//   the wood to the core or a workshop. farm: work a plain hex of your land for gold. scout: run
+//   off exploring the fog (fast, seeing far, keeping clear of enemy guns); at most SCOUT_WORKERS.
 // These methods are mixed into Game (see ../game.js), so `this` is the game.
 
 const { C, dist, round2 } = require('./common');
 const Terrain = require('../../shared/terrain');
 
-const JOB_CODE = { build: 1, repair: 2, gather: 3, farm: 4 };
+const JOB_CODE = { build: 1, repair: 2, gather: 3, farm: 4, scout: 5 };
 
 module.exports = {
   // ---- the forest
@@ -165,6 +166,7 @@ module.exports = {
     if (job.type === 'repair') return this.finished(at.obj) && at.obj.hp < at.obj.maxHp && p.gold >= 1;
     if (job.type === 'gather') return this.canChop(p, job.id);
     if (job.type === 'farm') return this.canFarm(p, job.id);
+    if (job.type === 'scout') return true;
     return false;
   },
 
@@ -196,6 +198,8 @@ module.exports = {
         const h = this.hex.hexes[i];
         consider({ type, k: 'h', id: i }, h.cx, h.cy, C.TREE_WORKERS);
       }
+    } else if (type === 'scout') {
+      consider({ type, k: 's', id: 0 }, u.x, u.y, C.SCOUT_WORKERS);
     } else if (type === 'farm') {
       for (const h of this.hex.hexes) if (this.hexOwner[h.i] === p.id && this.canFarm(p, h.i)) consider({ type, k: 'h', id: h.i }, h.cx, h.cy, 1);
     }
@@ -279,6 +283,10 @@ module.exports = {
       if (d > 3) this.stepToward(u, p.core.x + 0.5, p.core.y + 0.5, 2.5, speed, dt);
       return;
     }
+    if (job.type === 'scout') {
+      this.scoutTick(u, C.SCOUT_SPEED, dt);
+      return;
+    }
     const at = this.jobPos(p, job);
     if (!at) {
       u.job = null;
@@ -344,7 +352,12 @@ module.exports = {
     return best;
   },
 
-  // For snapshots: what a worker is doing (0 idle, 1 build, 2 repair, 3 gather, 4 farm), +8 when
+  // How far a troop or worker sees (scouting workers see furthest).
+  unitSight(u) {
+    return u.worker && u.job && u.job.type === 'scout' ? C.SCOUT_SIGHT : C.UNITS[u.kind].sight || 5;
+  },
+
+  // For snapshots: what a worker is doing (0 idle, 1 build, 2 repair, 3 gather, 4 farm, 5 scout), +8 when
   // it's carrying wood, +16 while it's at work on the spot.
   workerCode(u) {
     return (u.job ? JOB_CODE[u.job.type] : 0) + (u.carry > 0 ? 8 : 0) + (u.working ? 16 : 0);

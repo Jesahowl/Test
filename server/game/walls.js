@@ -89,12 +89,7 @@ module.exports = {
         reason = 'Not enough gold';
         break;
       }
-      if (p.wood < C.WALL_WOOD) {
-        reason = 'Not enough wood';
-        break;
-      }
       p.gold -= C.WALL_COST;
-      p.wood -= C.WALL_WOOD;
       this.addWall(pid, a, b);
       this.lastWalls++;
     }

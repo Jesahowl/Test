@@ -9,7 +9,7 @@ const TIPS = [
   { id: 'tower', text: 'Open <b>Build</b> (<kbd>Z</kbd>) or press <kbd>B</kbd>, and click your land to build a <b>tower</b>. Towers zap enemies and hold your land: lose one and the land around it opens up.' },
   { id: 'workers', text: 'Your <b>workers</b> (hard hats) put up what you build, repair, chop <b>wood</b> 🪵 from forests next to your land and farm. Open <b>Workers</b> (<kbd>J</kbd>) to set what matters most. Buildings and walls cost wood as well as gold.' },
   { id: 'barracks', text: 'Press <kbd>R</kbd> and click your land for a <b>barracks</b>: <b>+4 troops</b> for your army, and troops respawn there too.' },
-  { id: 'mix', text: 'Open <b>Squads</b> (<kbd>C</kbd>): you have up to <b>4 squads</b>. Choose each one\'s troops with <b>+</b> and <b>−</b>, and its <b>stance</b>. <b>Scouts</b> explore the fog, <b>archers</b> shoot from range, <b>medics</b> heal.' },
+  { id: 'mix', text: 'Open <b>Squads</b> (<kbd>C</kbd>): you have up to <b>4 squads</b>. Choose each one\'s troops with <b>+</b> and <b>−</b>, and its <b>stance</b>. <b>Archers</b> shoot from range, <b>medics</b> heal and <b>siege rams</b> smash walls and buildings.' },
   { id: 'send', text: 'Each squad\'s number floats above it. <b>Click one of its troops</b> or press <kbd>1</kbd>–<kbd>4</kbd>, then right-click to send <b>just that squad</b>. Keep one home to defend.' },
   { id: 'jungle', text: 'Right-click <b>barbarian camps</b> for gold. Beat a <b>Warlord\'s Fort</b> (🔥) to power up your troops for 60s.' },
 ];

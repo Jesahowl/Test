@@ -102,7 +102,7 @@ module.exports = {
     const u = mine[mine.length - 1];
     u.sq = to.id;
     u.stance = to.stance;
-    const lead = [...this.units.values()].find((o) => o.owner === p.id && o.sq === to.id && o !== u && (o.kind !== 'scout' || o.attack));
+    const lead = [...this.units.values()].find((o) => o.owner === p.id && o.sq === to.id && o !== u);
     if (lead) this.copyOrder(lead, u);
     else this.applyOrder(u, this.orderValid(p.id, to.order) ? to.order : HOME());
   },
@@ -313,7 +313,7 @@ module.exports = {
     for (const q of p.squads) {
       const missing = this.missingOf(p, q);
       if (!missing.length) continue;
-      const lead = [...this.units.values()].find((u) => u.owner === p.id && u.sq === q.id && !u.trade && (u.kind !== 'scout' || u.attack));
+      const lead = [...this.units.values()].find((u) => u.owner === p.id && u.sq === q.id && !u.trade && !u.worker);
       for (const kind of missing) {
         if (room < C.slotsOf(kind)) break;
         room -= C.slotsOf(kind);

@@ -39,15 +39,15 @@ function updateHud() {
   const gold = S.me.gold;
   const sorted = [...players.values()].sort((a, b) => b.territory - a.territory);
   const rank = sorted.findIndex((q) => q.id === S.myId) + 1;
-  const myTroops = [...S.units.values()].filter((u) => u.owner === S.myId && u.kind !== 'caravan').reduce((n, u) => n + C.slotsOf(u.kind), 0);
+  const myTroops = [...S.units.values()].filter((u) => u.owner === S.myId && u.kind !== 'caravan' && u.kind !== 'worker').reduce((n, u) => n + C.slotsOf(u.kind), 0);
   const armySize = S.me.armySize;
   updateRound();
   updateStats(p, gold, rank, sorted.length);
 
   // respawns: countdown ring, and who comes back when it runs out
   const squads = allSquads();
-  const used = squads.reduce((n, q) => n + q.size, 0);
-  $('wave-size').textContent = `${used} / ${armySize} troops in squads · fallen troops respawn every ${C.WAVE_INTERVAL}s`;
+  const used = squads.reduce((n, q) => n + UNIT_KEYS.reduce((m, k) => m + q.mix[k] * C.slotsOf(k), 0), 0); // army slots taken
+  $('wave-size').textContent = `${used} / ${armySize} army slots used · fallen troops respawn every ${C.WAVE_INTERVAL}s`;
   const frac = Math.max(0, Math.min(1, S.me.nextWave / C.WAVE_INTERVAL));
   $('wave-timer').innerHTML = `<svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="11" fill="none" stroke="#273041" stroke-width="2.4"/>
     <circle cx="13" cy="13" r="11" fill="none" stroke="#ffd54f" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="${(69.1 * (1 - frac)).toFixed(1)} 69.1"/></svg><span>${S.me.nextWave}s</span>`;
@@ -192,7 +192,7 @@ function updateTowerAndArmy(gold) {
   tile('barracks-button', 'barracks', C.buildCost('barracks', barracks), C.TOWERS.barracks.wood, barracks, C.MAX_BARRACKS);
   tile('trade-button', 'trade', C.TOWERS.trade.cost, C.TOWERS.trade.wood, mine('trade'), C.MAX_TRADE_POSTS);
   tile('workshop-button', 'workshop', C.TOWERS.workshop.cost, C.TOWERS.workshop.wood, mine('workshop'), C.MAX_WORKSHOPS);
-  tile('wall-button', 'wall', C.WALL_COST, C.WALL_WOOD);
+  tile('wall-button', 'wall', C.WALL_COST, 0);
   const lb = $('land-button');
   const hexCost = Math.round(C.landCost((players.get(S.myId) || { territory: 0 }).territory) * 2.598 * C.HEX_R * C.HEX_R);
   lb.classList.toggle('active', S.buildKind === 'land');
@@ -231,13 +231,14 @@ const JOBS = [
   ['repair', '🔧', 'Repair', `Fix damaged buildings, walls and your core (${C.REPAIR_GOLD_PER_HP}g per HP)`],
   ['gather', '🪓', 'Chop wood', 'Chop forests in or next to your land and carry the wood home'],
   ['farm', '🌾', 'Farm', `Work open hexes of your land: +${C.FARM_GOLD}g/s each`],
+  ['scout', '🔭', 'Scout', `Run off exploring the fog: fast, seeing ${C.SCOUT_SIGHT} tiles, keeping clear of enemy guns (at most ${C.SCOUT_WORKERS})`],
 ];
 const LEVELS = ['Off', 'Low', 'High'];
 let jobsBound = false;
 function updateWorkersUi() {
-  const [cap, prio] = S.me.workers || [0, [0, 0, 0, 0]];
+  const [cap, prio] = S.me.workers || [0, [0, 0, 0, 0, 0]];
   const mine = [...S.units.values()].filter((u) => u.owner === S.myId && u.kind === 'worker');
-  const busy = [0, 0, 0, 0, 0];
+  const busy = [0, 0, 0, 0, 0, 0];
   for (const u of mine) busy[u.job]++;
   $('workers-badge').textContent = busy[0] && mine.length ? String(busy[0]) : '';
   $('workers-badge').dataset.tip = 'Idle workers';
@@ -292,7 +293,7 @@ function updateSelectionPanel(gold) {
   if (S.selWorker && S.units.has(S.selWorker)) {
     const u = S.units.get(S.selWorker);
     panel.classList.remove('hidden');
-    const job = ['Idle', 'Building', 'Repairing', 'Chopping wood', 'Farming'][u.job] + (u.carry ? ' (carrying wood home)' : '');
+    const job = ['Idle', 'Building', 'Repairing', 'Chopping wood', 'Farming', 'Scouting'][u.job] + (u.carry ? ' (carrying wood home)' : '');
     const key = `wk:${u.id}:${job}`;
     if (panel.dataset.key !== key) {
       panel.dataset.key = key;

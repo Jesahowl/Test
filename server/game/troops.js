@@ -173,6 +173,25 @@ module.exports = {
     return best;
   },
 
+  // The nearest hostile wall, building or core within reach of a siege ram, or null.
+  breakerTarget(u, reach) {
+    let best = null;
+    let bestD = reach + 0.6;
+    const take = (obj, x, y) => {
+      const d = dist(u.x, u.y, x, y);
+      if (d < bestD) {
+        bestD = d;
+        best = obj;
+      }
+    };
+    for (const w of this.walls.values()) if (!(w.progress < 1) && this.hostile(u.owner, w.owner)) take(w, w.x, w.y);
+    for (const t of this.towers.values()) {
+      if (t.owner && this.hostile(u.owner, t.owner) && !this.isShielded(this.players.get(t.owner))) take(t, t.x + 0.5, t.y + 0.5);
+    }
+    for (const p of this.players.values()) if (p.alive && this.hostile(u.owner, p.id) && !this.isShielded(p)) take(p, p.core.x + 0.5, p.core.y + 0.5);
+    return best;
+  },
+
   onHomeLand(u) {
     const x = Math.floor(u.x);
     const y = Math.floor(u.y);
@@ -188,7 +207,7 @@ module.exports = {
     }
     const [tx, ty] = posOf(target);
     const isStruct = target.isTower || target.isPlayer;
-    const wallBonus = target.isWall && u.kind === 'soldier' ? C.WALL_SOLDIER_BONUS : 1;
+    const wallBonus = !target.isWall ? 1 : def.wallBreaker || (u.kind === 'soldier' ? C.WALL_SOLDIER_BONUS : 1);
     const home = this.onHomeLand(u) ? 1 + C.HOME_DAMAGE_BONUS : 1;
     const buff = this.buffed(u.owner) ? 1 + C.JUNGLE_BUFF_DAMAGE : 1;
     const base = s.damage * buff;
@@ -758,8 +777,9 @@ module.exports = {
         if (this.medicTick(u, def, s, tgt, speed, dt)) continue;
       } else {
         // In range of something? Stand and fight. (In sudden death, a troop sent at a building hits
-        // that building whenever it can reach it, defenders or not: cores are at 1 HP by then.)
-        let shoot = null;
+        // that building whenever it can reach it, defenders or not: cores are at 1 HP by then. Siege
+        // rams always go for walls and buildings in reach first.)
+        let shoot = def.breaker ? this.breakerTarget(u, s.range) : null;
         if (tgt && tgt.struct && this.suddenDeath() && u.attack) {
           const obj = u.attack.k === 'c' ? this.players.get(u.attack.id) : this.towers.get(u.attack.id);
           if (obj && dist(u.x, u.y, tgt.x, tgt.y) <= s.range + 0.6 && !this.isShielded(u.attack.k === 'c' ? obj : this.players.get(obj.owner))) shoot = obj;

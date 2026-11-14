@@ -66,20 +66,20 @@ test('allies see each other\'s bases, but not what each other\'s troops see', ()
   const bk = g.idx(b.core.x, b.core.y);
   assert.strictEqual(a.vis[bk], 0);
   ally(g, a, b);
-  // one of b's scouts out in the open, away from both bases
+  // one of b's troops out in the open, away from both bases
   let spot = -1;
   for (let k = 0; k < g.terr.length && spot < 0; k++) {
     const x = k % g.w;
     const y = Math.floor(k / g.w);
     if (!g.terr[k] && !a.vis[k] && Math.hypot(x - a.core.x, y - a.core.y) > 20 && Math.hypot(x - b.core.x, y - b.core.y) > 20) spot = k;
   }
-  troops(g, b, 'scout', 1, (spot % g.w) + 0.5, Math.floor(spot / g.w) + 0.5);
+  troops(g, b, 'archer', 1, (spot % g.w) + 0.5, Math.floor(spot / g.w) + 0.5);
   g.update(0.05);
   g.update(0.05);
   assert.strictEqual(a.vis[bk], 1, 'a sees b\'s core');
   assert.strictEqual(a.explored[bk], 1);
-  assert.strictEqual(b.vis[spot], 1, 'b\'s scout sees around it');
-  assert.strictEqual(a.vis[spot], 0, 'but a doesn\'t see what b\'s scout sees');
+  assert.strictEqual(b.vis[spot], 1, 'b\'s troop sees around it');
+  assert.strictEqual(a.vis[spot], 0, 'but a doesn\'t see what b\'s troop sees');
 });
 
 test('sudden death ends every alliance', () => {

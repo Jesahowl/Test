@@ -26,12 +26,12 @@ test('every player has 4 lasting squads; fallen troops respawn into them every i
   assert.strictEqual(a.squads.length, C.MAX_SQUADS);
   assert.deepStrictEqual(a.squads.map((q) => q.num), [1, 2, 3, 4]);
   setMix(a, 0, { soldier: 2, archer: 1 });
-  Object.assign(a.squads[1].mix, { scout: 1, medic: 1 });
+  Object.assign(a.squads[1].mix, { siege: 1, medic: 1 });
   respawn(g, a);
   const s1 = mine(g, a).filter((u) => u.sq === a.squads[0].id);
   const s2 = mine(g, a).filter((u) => u.sq === a.squads[1].id);
   assert.deepStrictEqual(s1.map((u) => u.kind).sort(), ['archer', 'soldier', 'soldier']);
-  assert.deepStrictEqual(s2.map((u) => u.kind).sort(), ['medic', 'scout']);
+  assert.deepStrictEqual(s2.map((u) => u.kind).sort(), ['medic', 'siege']);
   respawn(g, a);
   assert.strictEqual(mine(g, a).length, 5, 'a squad at full strength gets no more');
   // two fall; at the next respawn exactly those two come back
@@ -186,17 +186,47 @@ test('archers shoot from range', () => {
   assert.strictEqual(C.slotsOf('archer'), 1);
 });
 
-test('scouts never fight, explore on their own, and see further', () => {
-  const { g, a, b } = duel(19);
-  const [scout] = troops(g, a, 'scout', 1, a.core.x + 0.5, a.core.y + 1.5);
-  troops(g, b, 'soldier', 1, a.core.x + 1, a.core.y + 1.5); // an enemy right next to it
-  const start = { x: scout.x, y: scout.y };
+test('scouting is a worker job: they explore on their own and see further', () => {
+  const { g, a } = duel(19);
+  for (const j of C.WORKER_JOBS) a.jobs[j] = j === 'scout' ? 2 : 0;
+  respawn(g, a);
+  run(g, 2);
+  const scouts = [...g.units.values()].filter((u) => u.owner === a.id && u.worker && u.job && u.job.type === 'scout');
+  assert.strictEqual(scouts.length, Math.min(C.SCOUT_WORKERS, g.workerCap(a)), 'at most SCOUT_WORKERS go scouting');
+  const start = scouts.map((u) => [u.x, u.y]);
   const exploredBefore = a.explored.reduce((n, v) => n + v, 0);
   run(g, 15);
-  assert.ok(g.units.has(scout.id));
-  assert.ok(Math.hypot(scout.x - start.x, scout.y - start.y) > 10, 'went exploring');
+  assert.ok(scouts.some((u, i) => Math.hypot(u.x - start[i][0], u.y - start[i][1]) > 10), 'went exploring');
   assert.ok(a.explored.reduce((n, v) => n + v, 0) > exploredBefore + 200, 'uncovered new ground');
-  assert.ok(C.UNITS.scout.sight > C.UNITS.soldier.sight);
+  assert.strictEqual(g.unitSight(scouts[0]), C.SCOUT_SIGHT);
+  assert.ok(C.SCOUT_SIGHT > C.UNITS.soldier.sight);
+  assert.ok(!C.UNITS.scout, 'no scout troops any more');
+});
+
+test('siege rams smash walls and buildings far faster than soldiers', () => {
+  const { g, a, b } = duel(39);
+  const mx = Math.round((a.core.x + b.core.x) / 2);
+  const my = Math.round((a.core.y + b.core.y) / 2);
+  const wall = { isWall: true, id: 1e6, owner: b.id, hp: 1e5, maxHp: 1e5, progress: 1, x: mx, y: my };
+  const s = C.towerStats('soldier', 1);
+  const r = C.towerStats('siege', 1);
+  const [sol] = troops(g, a, 'soldier', 1, mx - 1, my);
+  const [ram] = troops(g, a, 'siege', 1, mx - 1, my + 1);
+  g.walls.set(wall.id, wall);
+  g.unitFire(sol, wall, s, C.UNITS.soldier);
+  const bySoldier = 1e5 - wall.hp;
+  wall.hp = 1e5;
+  g.unitFire(ram, wall, r, C.UNITS.siege);
+  const byRam = 1e5 - wall.hp;
+  assert.ok(byRam * r.rate > 3 * bySoldier * s.rate, `a ram breaks walls much faster (${(byRam * r.rate).toFixed(0)}/s vs ${(bySoldier * s.rate).toFixed(0)}/s)`);
+  assert.strictEqual(C.slotsOf('siege'), 2, 'a ram takes two army slots');
+  // a ram goes for the wall in reach rather than the enemy troop beside it
+  const [foe] = troops(g, b, 'soldier', 1, ram.x + 0.4, ram.y);
+  wall.x = ram.x + 0.8;
+  wall.y = ram.y - 0.5;
+  assert.strictEqual(g.breakerTarget(ram, r.range), wall);
+  g.walls.delete(wall.id);
+  assert.notStrictEqual(g.breakerTarget(ram, r.range), foe, 'troops are not its target');
 });
 
 test('fog of war: you see your land and what your core, buildings and troops can see', () => {
@@ -440,11 +470,11 @@ test('cleared fog stays clear: explored areas keep showing live activity', () =>
   g.update(0.05);
   const spot = { x: b.core.x + 0.5, y: b.core.y + 0.5 };
   assert.ok(!g.sees(a, spot.x, spot.y), 'unexplored at first');
-  const [scout] = troops(g, a, 'scout', 1, spot.x, spot.y + 6);
+  const [scout] = troops(g, a, 'soldier', 1, spot.x, spot.y + 6);
   g.update(0.05);
   g.update(0.05);
-  assert.ok(g.sees(a, spot.x, spot.y + 4), 'the scout reveals it');
-  g.units.delete(scout.id); // the scout is gone...
+  assert.ok(g.sees(a, spot.x, spot.y + 4), 'the troop reveals it');
+  g.units.delete(scout.id); // the troop is gone...
   g.update(0.05);
   g.update(0.05);
   assert.ok(g.sees(a, spot.x, spot.y + 4), '...but the area stays revealed');
@@ -504,7 +534,7 @@ test('hold: troops at home never chase intruders, defensive ones do', () => {
 
 test('squads stay together on the march and stand guard together at home', () => {
   const { g, a, b } = duel(28);
-  setMix(a, 0, { soldier: 2, scout: 1, archer: 1 }); // a fast scout in a squad of soldiers
+  setMix(a, 0, { soldier: 2, siege: 1, archer: 1 }); // a slow ram in a squad of soldiers
   respawn(g, a);
   const sq = mine(g, a);
   assert.strictEqual(sq.length, 4);

@@ -22,7 +22,7 @@ module.exports = {
     }
     for (const u of this.units.values()) {
       const list = sources.get(u.owner);
-      if (list) list.push({ x: u.x, y: u.y, r: C.UNITS[u.kind].sight || 5 });
+      if (list) list.push({ x: u.x, y: u.y, r: this.unitSight(u) });
     }
     for (const [pid, list] of sources) {
       const p = this.players.get(pid);

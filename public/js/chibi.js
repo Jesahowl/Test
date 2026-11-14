@@ -5,6 +5,7 @@
 //   scout:   Ranger (pointed hood, short cape, dagger)
 //   medic:   Field nurse (white cap and tunic with crosses, healing staff)
 //   archer:  Hunter (felt hat with a feather, short bow)
+//   siege:   Siege ram (a helmeted crew member behind a log ram with an iron head, on wheels)
 //   caravan: Ox wagon (an open wagon of barrels behind a horned ox)
 //   worker:  hard hat and apron, with a hammer / wrench / axe / hoe for its job
 // Troops are drawn from a cache of little pre-drawn images (one per type, colour and zoom).
@@ -92,6 +93,47 @@ function body(T, { torso = T.c, back, head, front }) {
 }
 
 const FIGURES = {
+  // Siege ram: a helmeted crew member behind a heavy log ram with an iron head, on small wheels.
+  siege: (T) => {
+    body(T, {
+      torso: T.d,
+      head() {
+        begin();
+        g.arc(0, -0.6, 0.56, Math.PI, 0);
+        g.lineTo(0.56, -0.68);
+        g.lineTo(-0.56, -0.68);
+        g.closePath();
+        fillOut(METAL_D);
+        g.fillStyle = T.c;
+        g.fillRect(-0.5, -0.78, 1.0, 0.1);
+      },
+      front() {
+        // the ram: a log with an iron head, on a little cart
+        rr(-0.75, 0.05, 1.75, 0.3, 0.15);
+        fillOut(WOOD);
+        g.strokeStyle = 'rgba(0,0,0,0.35)';
+        g.lineWidth = 0.04;
+        begin();
+        g.moveTo(-0.6, 0.2);
+        g.lineTo(0.8, 0.2);
+        g.stroke();
+        g.strokeStyle = OUT;
+        g.lineWidth = LW;
+        rr(0.85, -0.02, 0.32, 0.44, 0.1);
+        fillOut(METAL);
+        rr(-0.2, 0.0, 0.1, 0.4, 0.03);
+        fillOut(T.c);
+        rr(0.45, 0.0, 0.1, 0.4, 0.03);
+        fillOut(T.c);
+        for (const wx of [-0.45, 0.6]) {
+          circ(wx, 0.62, 0.2);
+          fillOut(WOOD_D);
+          circ(wx, 0.62, 0.06);
+          fillOut(METAL_D);
+        }
+      },
+    });
+  },
   soldier: (T) => body(T, {
     head() {
       begin();
@@ -200,6 +242,7 @@ const FIGURES = {
 // build, a wrench to repair, an axe to chop (with logs on the back when carrying wood), a hoe to farm.
 function workerFigure(T, job, carry) {
   const farming = job === 4;
+  const scouting = job === 5;
   body(T, {
     back: carry ? () => {
       for (const [y, l] of [[-0.18, 0.95], [0.02, 0.85]]) {
@@ -214,6 +257,17 @@ function workerFigure(T, job, carry) {
       }
     } : null,
     head() {
+      if (scouting) {
+        // a pointed hood, like the old scouts
+        begin();
+        g.moveTo(-0.6, -0.45);
+        g.quadraticCurveTo(-0.55, -1.2, 0.1, -1.4);
+        g.quadraticCurveTo(0.55, -1.1, 0.6, -0.45);
+        g.quadraticCurveTo(0.3, -0.9, -0.2, -0.85);
+        g.closePath();
+        fillOut(T.c);
+        return;
+      }
       if (farming) {
         ell(0, -0.86, 0.78, 0.15);
         fillOut('#d9b25f');
@@ -235,6 +289,18 @@ function workerFigure(T, job, carry) {
       }
     },
     front() {
+      if (scouting) {
+        // a spyglass
+        g.save();
+        g.translate(0.55, -0.1);
+        g.rotate(-0.5);
+        rr(-0.08, -0.4, 0.16, 0.5, 0.04);
+        fillOut('#c9a26a');
+        rr(-0.1, -0.48, 0.2, 0.12, 0.03);
+        fillOut(METAL_D);
+        g.restore();
+        return;
+      }
       // apron
       rr(-0.3, 0.05, 0.6, 0.6, 0.12);
       fillOut('#8a6a48');

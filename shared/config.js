@@ -21,8 +21,11 @@
     BASE_WORKERS: 3,
     WORKSHOP_WORKERS: 2,
     MAX_WORKSHOPS: 3,
-    WORKER_JOBS: ['build', 'repair', 'gather', 'farm'],
-    START_JOBS: { build: 2, repair: 2, gather: 1, farm: 1 },
+    WORKER_JOBS: ['build', 'repair', 'gather', 'farm', 'scout'],
+    START_JOBS: { build: 2, repair: 2, gather: 1, farm: 1, scout: 1 },
+    SCOUT_WORKERS: 2, // at most this many workers out scouting
+    SCOUT_SPEED: 4.2, // scouting workers run fast...
+    SCOUT_SIGHT: 11, // ...and see far (they never fight: they explore, staying clear of enemy guns)
     BUILD_TIME: { tower: 20, barracks: 30, trade: 25, workshop: 15 }, // worker-seconds to put one up
     WALL_BUILD_TIME: 3,
     SITE_WORKERS: 3, // at most this many workers on one building site
@@ -91,7 +94,7 @@
     STRUCT_BODY: 0.6,
     CORE_BODY: 0.85,
     CREEP_BODY: 0.55,
-    START_SQUAD: { scout: 1, medic: 1, archer: 2 }, // squad 1 to start with (the rest of the army as soldiers)
+    START_SQUAD: { medic: 1, archer: 2 }, // squad 1 to start with (the rest of the army as soldiers)
     LAND_PER_UNIT: 10,
     MIN_UNITS: 10,
     MAX_UNITS: 45,
@@ -122,7 +125,7 @@
     CHAIN_FALLOFF: 0.75,
     TOWER_SIGHT_BONUS: 2, // towers see this much past their range
     BARRACKS_SIGHT: 5,
-    SCOUT_RANGE: 45, // scouts explore up to this far from their core
+    SCOUT_RANGE: 45, // scouting workers explore up to this far from their core
     SCOUT_LEG_TIME: 25, // seconds before a scout picks a new place to explore // troops on the march engage enemies within (attack range + this)
     TROOP_BOUNTY: 14, // gold for killing an enemy troop
     TROOP_BOUNTY_PER_LEVEL: 6, // extra gold per level of the troop killed
@@ -190,7 +193,6 @@
     // ---- Walls: built on the edges between your hexes and land that isn't yours. They block everyone's
     // troops and caravans; gates let yours and your allies' through.
     WALL_COST: 15,
-    WALL_WOOD: 5, // wood a wall segment takes too
     WALL_HP: 600, // every wall is the same (no upgrades)
     WALL_GATE_COST: 40,
     WALL_REFUND: 0.6, // gold back when a wall is knocked down or ends up inside your land
@@ -207,10 +209,6 @@
         melee: true,
         color: '#a5d6a7', desc: 'Sword and shield: the backbone of every wave. Empty wave slots are filled with soldiers',
       },
-      scout: {
-        name: 'Scout', key: '2', cost: 50, slots: 1, hp: 110, speed: 4.2, sight: 11, scout: true,
-        color: '#fff59d', desc: 'Very fast, sees far, never fights. While your troops defend, scouts explore on their own, uncovering camps and enemy land',
-      },
       medic: {
         name: 'Medic', key: '3', cost: 90, slots: 1, hp: 200, range: 3, heal: 15, patients: 2, rate: 1, speed: 2.4, sight: 5,
         color: '#f48fb1', desc: 'Heals the two most wounded troops near it, cannot attack',
@@ -220,12 +218,19 @@
         ranged: true,
         color: '#4fc3f7', desc: 'Shoots arrows from range. Fragile: keep soldiers in front of them',
       },
+      // The siege ram: slow and weak against troops, but it smashes walls (wallBreaker x their
+      // damage) and buildings (siege x), and goes for them first when they're in reach.
+      siege: {
+        name: 'Siege Ram', key: '5', cost: 110, slots: 2, hp: 700, range: 1.4, damage: 16, rate: 0.6, speed: 1.7, sight: 4,
+        melee: true, siege: 8, wallBreaker: 25, breaker: true, size: 1.2,
+        color: '#c9a27a', desc: 'A heavy battering ram: weak against troops, but it smashes walls and buildings. Takes 2 army slots',
+      },
       // Not a troop you pick: a trade post sends one along its trade route. Its stats grow with the
       // post's level; its two guards (drawn riding along) fight back with this damage and range.
       // Not a troop either: workers (see BASE_WORKERS). They never fight.
       worker: {
         name: 'Worker', worker: true, hp: 160, speed: 2.6, sight: 4,
-        color: '#ffcc80', desc: 'Builds, repairs, chops wood and farms',
+        color: '#ffcc80', desc: 'Builds, repairs, chops wood, farms and scouts',
       },
       caravan: {
         name: 'Caravan', caravan: true, hp: 500, range: 2.5, damage: 14, rate: 1, speed: 1.6, sight: 4,

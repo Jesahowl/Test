@@ -33,7 +33,7 @@ function updateFog(terrChanged) {
   const me0 = players.get(S.myId);
   const sources = [{ x: me0.x + 0.5, y: me0.y + 0.5, r: C.CORE_SIGHT }];
   for (const t of S.towers.values()) if (t.owner === S.myId) sources.push({ x: t.x + 0.5, y: t.y + 0.5, r: C.structSight(t.kind, t.level) });
-  for (const u of S.units.values()) if (u.owner === S.myId) sources.push({ x: u.x, y: u.y, r: C.UNITS[u.kind].sight || 5 });
+  for (const u of S.units.values()) if (u.owner === S.myId) sources.push({ x: u.x, y: u.y, r: u.kind === 'worker' && u.job === 5 ? C.SCOUT_SIGHT : C.UNITS[u.kind].sight || 5 });
   Vision.computeVision(vis, C.MAP_W, C.MAP_H, S.myId, terr, sources);
   // (explored ground comes from the server: see net.js, msg.exp)
   // Territory is always drawn with its real borders; the fog simply covers what I haven't
