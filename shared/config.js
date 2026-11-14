@@ -147,6 +147,18 @@
     PRIVATE_DEFAULT_BOTS: 2, // bots in a new private room (the host can change it)
     PRIVATE_MAX_BOTS: 10,
 
+    // ---- Trade: a trade post sends a caravan to an ally's trade post every CARAVAN_EVERY seconds.
+    // When it arrives both players get its cargo: CARAVAN_BASE + CARAVAN_PER_TILE for every tile
+    // between the posts, +CARAVAN_LEVEL_CARGO for each post level past 1. Enemies who destroy one
+    // take RAID_SHARE of its cargo. Caravans steer around hostile towers and cores.
+    MAX_TRADE_POSTS: 2,
+    CARAVAN_EVERY: 30,
+    CARAVAN_BASE: 15,
+    CARAVAN_PER_TILE: 0.3,
+    CARAVAN_LEVEL_CARGO: 0.3,
+    RAID_SHARE: 0.5,
+    CARAVAN_DANGER: 6, // extra path cost (in steps) for each tile in reach of a hostile tower or core
+
     // Troop types. `cost` sets the price of levelling the type up (see armyLevelCost).
     UNITS: {
       soldier: {
@@ -167,6 +179,12 @@
         ranged: true,
         color: '#4fc3f7', desc: 'Shoots arrows from range. Fragile: keep soldiers in front of them',
       },
+      // Not a troop you pick: a trade post sends one along its trade route. Its stats grow with the
+      // post's level; its two guards (drawn riding along) fight back with this damage and range.
+      caravan: {
+        name: 'Caravan', caravan: true, hp: 500, range: 2.5, damage: 14, rate: 1, speed: 1.6, sight: 4,
+        color: '#d9c7a0', desc: 'A covered wagon carrying trade goods to an ally. Two guards ride with it',
+      },
     },
 
     // Fixed structures.
@@ -178,6 +196,10 @@
       barracks: {
         name: 'Barracks', key: 'R', cost: 250, hp: 1600, maxLevel: 1,
         color: '#9fb4c7', desc: `+4 troops in every wave, spawning here. Build on your own land`,
+      },
+      trade: {
+        name: 'Trade Post', key: 'T', cost: 220, hp: 900, maxLevel: 3,
+        color: '#ffd54f', desc: 'Sends a caravan to an ally\'s trade post every 30s: you both get paid when it arrives',
       },
     },
 
@@ -251,7 +273,7 @@
 
   // Sight radius of a structure.
   CONFIG.structSight = function (kind, level) {
-    if (kind === 'barracks') return CONFIG.BARRACKS_SIGHT;
+    if (kind === 'barracks' || kind === 'trade') return CONFIG.BARRACKS_SIGHT;
     return CONFIG.towerStats(kind, level).range + CONFIG.TOWER_SIGHT_BONUS;
   };
 

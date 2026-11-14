@@ -231,6 +231,8 @@ class Room {
         if (msg.op === 'break') return game.breakAlliance(client.pid, other);
         return null;
       }
+      case 'trade':
+        return game.setTradePartner(client.pid, Number(msg.id), Number(msg.partner));
       case 'squad':
         if (msg.op === 'assign' || msg.op === 'merge') {
           const err = msg.op === 'assign'

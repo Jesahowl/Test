@@ -16,7 +16,7 @@ function targetPos(key) {
     const p = players.get(id);
     return p ? hexSpot(p.x, p.y) : null;
   }
-  if (k === 'u') {
+  if (k === 'u' || k === 'e') {
     const u = S.units.get(id);
     return u ? { x: u.rx, y: u.ry, unit: true } : null;
   }
@@ -39,6 +39,7 @@ function targetName(key) {
     const u = S.units.get(id);
     return u ? `${(players.get(u.owner) || { name: '?' }).name}'s ${C.UNITS[u.kind].name}` : 'a troop';
   }
+  if (k === 'e') return 'your caravan';
   const t = S.towers.get(id);
   if (!t) return 'a tower';
   return t.owner === S.myId ? 'your tower' : `${(players.get(t.owner) || { name: '?' }).name}'s tower`;
@@ -52,14 +53,14 @@ function orderTargetAt(wx, wy) {
   let best = null;
   let bestD = 0.55;
   for (const u of S.units.values()) {
-    if (u.owner === S.myId) continue;
+    if (u.owner === S.myId && u.kind !== 'caravan') continue;
     const d = Math.hypot(u.rx - wx, u.ry - wy);
-    if (d < bestD) {
+    if (d < (u.kind === 'caravan' ? bestD + 0.5 : bestD)) {
       bestD = d;
       best = u;
     }
   }
-  if (best) return { k: 'u', id: best.id };
+  if (best) return best.owner === S.myId ? { k: 'e', id: best.id } : { k: 'u', id: best.id }; // my own caravan: escort it
   for (const p of S.coresView.values()) {
     const cs = hexSpot(p.x, p.y);
     if (Math.hypot(cs.x - wx, cs.y - baseLift('core') - wy) < 1.2) return { k: 'c', id: p.id };
@@ -82,7 +83,7 @@ function campVerb(id) {
 }
 
 function isMineTarget(tg) {
-  return (tg.k === 'c' && tg.id === S.myId) || (tg.k === 't' && S.towers.get(tg.id)?.owner === S.myId);
+  return tg.k === 'e' || (tg.k === 'c' && tg.id === S.myId) || (tg.k === 't' && S.towers.get(tg.id)?.owner === S.myId);
 }
 
 export { campVerb, isMineTarget, orderTargetAt, targetName, targetPos };

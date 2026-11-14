@@ -66,6 +66,8 @@ closes after a minute. **Play** still drops you into the always-running public g
 |---|---|
 | **Waves** | Every 20s your core sends out a free wave of **4 troops**: to start with, one of each type (soldier, scout, medic, archer). |
 | **Barracks** | Build **barracks** (`R`, on your own land) for **+4 troops in every wave**. Each barracks' 4 march out from the barracks itself and join that wave's squad. Up to 5 barracks (24 troops per wave). They cost 250g, then 150g more for each one you own. They don't shoot or level up, and like towers they can be destroyed: whoever destroys one takes it over, with its +4. |
+| **Alliances** | Offer an alliance with the **+🤝** button in the player list; the other player accepts (bots weigh it up). Allies don't fight each other and can see each other's bases. Attacking an ally asks first and breaks the alliance. At most 2 allies; every alliance ends when sudden death starts. |
+| **Trade** | Build a **Trade Post** (`T`, 220g, up to 2) and, with an ally who has one too, a **caravan** sets off for their post every 30s along a road that steers round hostile towers. When it arrives you **both** get its cargo (more for longer routes and higher post levels). Two guards ride with it and fight back; enemies who destroy it take half the cargo. Right-click your caravan to send a squad as **escort**. If the alliance ends, caravans on the road vanish. |
 | **Army mix** | The army panel decides **which troops fill your wave slots**, for free (`1`–`4` / `+`). Unassigned slots are filled with soldiers. Gold goes into **levelling troop types** (`Shift`+number), barracks and towers. |
 | **Squads** | **Every wave marches out as a squad of its own**, numbered 1, 2, 3… (the lowest free number; a wiped-out squad's number is reused). A squad **sticks together**: on the march it moves at its slowest troop's pace and troops that run ahead wait for it, and **standing troops form up inside a hex**: evenly spaced, one in the middle, a ring of 6 round it and an outer ring of 12 (a bigger squad spills into the next hex). At home each squad takes its own hex next to the core, guards of a tower form up round it in its hex, and a squad holding a spot fills the hex you clicked. **Troops at home defend automatically**: any enemy troop (or angry barbarian) that comes onto your land or into a hex next to it, within 8 tiles of them, gets attacked, and they fight from their own side of the border, never chasing it off your land. Its number floats above it on the map, nudged to a free spot so it never covers another squad's number, an enemy or a building. Troops also keep a little **personal space** from their own side and never stand inside buildings. In a fight, **melee troops close right in** on their enemy (front lines meet and interlock), and **every sword swing is a quick lunge** at the target that springs back. **Click any of its troops** (or its chip in the Squads panel, or press its number `1`–`9`) to pick it, `Shift` to pick more, `Q` for all squads, then **right-click** a target. `M` merges the picked squads. New squads **guard home**, or with **F** they **follow your last order**. `H` sends every squad home. |
 | **Fog of war** | The map starts dark except your own land and what your core (9 tiles), towers (range + 2), barracks and troops can see; scouts see furthest. **Once an area has been explored, the fog there is cleared for good**: you keep seeing everything that happens there (troops, fights, buildings, camps), even after your troops leave. Enemy troops in unexplored fog aren't even sent to your browser. Spectators see everything. |
@@ -117,6 +119,7 @@ and get a turning gold rune ring at level 4 and a radiant aura at level 5.
 | `Esc` | Clear picked troops / selected building |
 | `H` | Every squad defends your core |
 | `R` | Place a barracks (your own land only): +4 troops per wave |
+| `T` | Place a trade post (your own land only): sends caravans to an ally's trade post |
 | `L` | Claim land: click empty hexes at your border, or drag along it (shows the price) |
 | Double-click outside your land | Grow your land one hex outward all round |
 | `B` | Place a tower in one of your hexes (it stands at the hex's centre) |
@@ -187,5 +190,5 @@ test/                   node:test suite (game rules, waves & orders, jungle, rou
 
 - Champions: one hero unit per player with abilities, leveling from kills
 - Lanes or rally points, and attack-move orders
-- Team mode (2v2 / 3v3) and alliances
+- Team mode (2v2 / 3v3)
 - Mobile touch controls

@@ -48,7 +48,7 @@ module.exports = {
       kills: 0,
       coresDestroyed: 0,
       towersDestroyed: 0,
-      earned: { income: 0, troops: 0, camps: 0, towers: 0, cores: 0 }, // gold by source
+      earned: { income: 0, troops: 0, camps: 0, towers: 0, cores: 0, trade: 0 }, // gold by source
       spawnTime: this.time,
       buffUntil: 0, // jungle buff active until this time
       vis: new Uint8Array(this.w * this.h), // fog of war: what this player sees now
@@ -261,7 +261,7 @@ module.exports = {
     let defectors = 0; // the squad they form for the conqueror
     for (const u of this.units.values()) {
       if (u.owner !== p.id) continue;
-      if (!conquered) {
+      if (!conquered || u.trade) {
         this.units.delete(u.id);
         continue;
       }

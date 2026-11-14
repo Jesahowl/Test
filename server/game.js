@@ -14,7 +14,7 @@
 // snapshots); the rest live in ./game/*.js and are mixed into Game's prototype below.
 
 const Hex = require('../shared/hex');
-const { C, KIND_KEYS, UNIT_KEYS, CREEP_KEYS, CAMP_KEYS, UGRID, UGRID_SLACK, dist } = require('./game/common');
+const { C, KIND_KEYS, UNIT_KEYS, ALL_UNIT_KEYS, CREEP_KEYS, CAMP_KEYS, UGRID, UGRID_SLACK, dist } = require('./game/common');
 
 class Game {
   constructor(opts = {}) {
@@ -136,6 +136,7 @@ class Game {
 
     this.updateDiplomacy();
     this.updateWaves();
+    this.updateTrade();
     this.buildUnitGrid();
     this.updateBots();
     this.updateUnits(dt);
@@ -167,13 +168,13 @@ class Game {
     }
     const towers = [];
     for (const t of this.towers.values()) {
-      towers.push([t.id, KIND_KEYS.indexOf(t.kind), t.x, t.y, t.owner, t.level, Math.ceil(t.hp), t.maxHp, t.ruinOf || 0]);
+      towers.push([t.id, KIND_KEYS.indexOf(t.kind), t.x, t.y, t.owner, t.level, Math.ceil(t.hp), t.maxHp, t.ruinOf || 0, t.partner || 0, t.road || 0]);
     }
     const units = [];
     for (const u of this.units.values()) {
       const a = u.attack;
       // positions in tenths of a tile; max HP follows from kind + level on the client
-      units.push([u.id, UNIT_KEYS.indexOf(u.kind), Math.round(u.x * 10), Math.round(u.y * 10), u.owner, u.level, Math.ceil(u.hp), u.anchor,
+      units.push([u.id, ALL_UNIT_KEYS.indexOf(u.kind), Math.round(u.x * 10), Math.round(u.y * 10), u.owner, u.level, Math.ceil(u.hp), u.anchor,
         a ? `${a.k}:${a.id}` : 0, u.sq || 0]);
     }
     const creeps = [];
@@ -228,6 +229,7 @@ Object.assign(Game.prototype,
   require('./game/fog'),
   require('./game/bots'),
   require('./game/diplomacy'),
+  require('./game/trade'),
 );
 
 Game.KIND_KEYS = KIND_KEYS;

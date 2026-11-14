@@ -82,6 +82,13 @@ module.exports = {
       a.ly = v.y;
       return { x: v.x, y: v.y, goal: this.idx(Math.floor(v.x), Math.floor(v.y)), struct: false, unit: v };
     }
+    if (a.k === 'e') {
+      // Escorting one of our caravans: keep up with it and fight what comes near it. Done when it's
+      // delivered (or lost).
+      const v = this.units.get(a.id);
+      if (!v || !v.trade || v.owner !== u.owner) return null;
+      return { x: v.x, y: v.y, goal: this.idx(Math.floor(v.x), Math.floor(v.y)), struct: false, hold: true, escort: true };
+    }
     if (a.k === 'j') {
       const camp = this.camps[a.id];
       if (!camp) return null;
@@ -335,7 +342,7 @@ module.exports = {
     const groups = new Map();
     for (const u of this.units.values()) {
       const def = C.UNITS[u.kind];
-      if (def.scout && !u.attack) continue;
+      if ((def.scout && !u.attack) || u.trade) continue;
       let g = groups.get(u.sq);
       if (!g) groups.set(u.sq, (g = { x: 0, y: 0, n: 0, speed: Infinity }));
       g.x += u.x;
@@ -419,7 +426,7 @@ module.exports = {
     const byHex = new Map();
     for (const u of this.units.values()) {
       u.slotPos = null;
-      if (C.UNITS[u.kind].scout && !u.attack) continue; // scouts off exploring
+      if ((C.UNITS[u.kind].scout && !u.attack) || u.trade) continue; // scouts off exploring; caravans
       const h = this.postHex(u);
       if (h < 0) continue;
       const key = `${u.owner}:${h}`;
@@ -555,6 +562,10 @@ module.exports = {
     this.assignSlots();
     for (const u of this.units.values()) {
       if (u.hp <= 0 || !this.units.has(u.id)) continue;
+      if (u.trade) {
+        this.caravanTick(u, dt);
+        continue;
+      }
       const def = C.UNITS[u.kind];
       const s = C.towerStats(u.kind, u.level);
       u.cd -= dt;
@@ -663,7 +674,7 @@ module.exports = {
           }
         }
         // (waiting for a camp to come back: stand round its edge, ready to pounce)
-        const stop = tgt.struct ? Math.max(0.6, s.range * 0.85) : tgt.hold ? 0.05 : tgt.campWait ? 2.5 : 1;
+        const stop = tgt.struct ? Math.max(0.6, s.range * 0.85) : tgt.escort ? 1.8 : tgt.hold ? 0.05 : tgt.campWait ? 2.5 : 1;
         // holding a hex: each troop heads for its own spot in the formation
         const gx = tgt.hold && u.slotPos ? u.slotPos.x : tgt.x;
         const gy = tgt.hold && u.slotPos ? u.slotPos.y : tgt.y;

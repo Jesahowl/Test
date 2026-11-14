@@ -94,11 +94,17 @@ module.exports = {
       if (!Number.isInteger(id) || id < 0 || id >= this.w * this.h) return 'Invalid spot';
       return { type: 'attack', target: { k: 'p', id } };
     }
+    if (k === 'e') {
+      // Escort one of my caravans.
+      const v = this.units.get(id);
+      if (!v || !v.trade || v.owner !== pid) return 'That caravan is gone';
+      return { type: 'attack', target: { k: 'e', id } };
+    }
     if (k === 'u') {
       // Hunt an enemy troop: chase it down, then go after its nearby squadmates.
       const v = this.units.get(id);
       if (!v) return 'That troop is gone';
-      if (v.owner === pid) return 'That is your own troop';
+      if (v.owner === pid) return v.trade ? { type: 'attack', target: { k: 'e', id } } : 'That is your own troop';
       if (this.allied(pid, v.owner)) return 'That is your ally: break the alliance first';
       return { type: 'attack', target: { k: 'u', id, owner: v.owner, lx: v.x, ly: v.y } };
     }
@@ -140,11 +146,11 @@ module.exports = {
     if (typeof ord === 'string') return ord;
     let chosen;
     if (Array.isArray(ids) && ids.length) {
-      chosen = ids.slice(0, C.MAX_UNITS).map((id) => this.units.get(id)).filter((u) => u && u.owner === pid);
+      chosen = ids.slice(0, C.MAX_UNITS).map((id) => this.units.get(id)).filter((u) => u && u.owner === pid && !u.trade);
       if (!chosen.length) return 'No troops selected';
       this.splitOff(p, chosen);
     } else if (squads === null || squads === undefined) {
-      chosen = [...this.units.values()].filter((u) => u.owner === pid);
+      chosen = [...this.units.values()].filter((u) => u.owner === pid && !u.trade);
       if (!chosen.length && ord.target?.k === 'u') return 'No troops available';
     } else {
       if (!Array.isArray(squads) || !squads.length) return 'Invalid squad';
@@ -152,7 +158,7 @@ module.exports = {
       chosen = [...this.units.values()].filter((u) => u.owner === pid && which.has(u.sq));
       if (!chosen.length) return 'That squad has no troops left';
     }
-    if (ord.target?.k !== 'u') p.lastOrder = ord;
+    if (ord.target?.k !== 'u' && ord.target?.k !== 'e') p.lastOrder = ord;
     for (const u of chosen) this.applyOrder(u, ord);
     this.lastOrderCount = chosen.length;
     return null;
@@ -176,7 +182,7 @@ module.exports = {
     const p = this.players.get(pid);
     if (!p || !p.alive) return 'Invalid order';
     if (!Array.isArray(ids) || !ids.length) return 'No troops selected';
-    const moved = ids.slice(0, C.MAX_UNITS).map((id) => this.units.get(id)).filter((u) => u && u.owner === pid);
+    const moved = ids.slice(0, C.MAX_UNITS).map((id) => this.units.get(id)).filter((u) => u && u.owner === pid && !u.trade);
     if (!moved.length) return 'No troops selected';
     if (sq === 'new') {
       const id = this.newSquad(p);
@@ -251,6 +257,10 @@ module.exports = {
       return { x: p.core.x + 0.5, y: p.core.y + 0.5 };
     }
     if (k === 'u') return { x: ord.target.lx, y: ord.target.ly };
+    if (k === 'e') {
+      const v = this.units.get(id);
+      return v ? { x: v.x, y: v.y } : null;
+    }
     if (k === 'p') return { x: (id % this.w) + 0.5, y: Math.floor(id / this.w) + 0.5 };
     const camp = this.camps[id];
     return { x: camp.x + 0.5, y: camp.y + 0.5 };
@@ -275,7 +285,7 @@ module.exports = {
     const t = ord.target;
     if (t.k === 'c') return !!this.players.get(t.id)?.alive;
     if (t.k === 'j') return !!this.camps[t.id] && (this.camps[t.id].alive || !!t.wait);
-    if (t.k === 'u') return this.units.has(t.id);
+    if (t.k === 'u' || t.k === 'e') return this.units.has(t.id);
     if (t.k === 'p') return true;
     return !!this.players.get(t.owner)?.alive; // tower orders roll on to that player's next structure
   },
@@ -298,7 +308,7 @@ module.exports = {
     const ord = p.newWaves === 'follow' ? p.lastOrder : { type: 'defend', anchor: 0 };
     const sq = this.newSquad(p); // this wave marches out as a squad of its own
     let alive = 0; // in wave slots
-    for (const u of this.units.values()) if (u.owner === p.id) alive += C.slotsOf(u.kind);
+    for (const u of this.units.values()) if (u.owner === p.id && !u.trade) alive += C.slotsOf(u.kind);
     const cap = C.unitCap(p.territory, this.waveSize(p));
     const barracks = [...this.towers.values()].filter((t) => t.owner === p.id && t.kind === 'barracks')
       .sort((a, b) => a.id - b.id).slice(0, C.MAX_BARRACKS);

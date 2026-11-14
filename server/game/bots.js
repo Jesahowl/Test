@@ -61,8 +61,8 @@ module.exports = {
     const age = this.time - p.spawnTime;
     const structures = [...this.towers.values()].filter((t) => t.owner === p.id);
     const towers = structures.filter((t) => t.kind === 'tower');
-    const barracks = structures.length - towers.length;
-    const troops = [...this.units.values()].filter((u) => u.owner === p.id);
+    const barracks = structures.filter((t) => t.kind === 'barracks').length;
+    const troops = [...this.units.values()].filter((u) => u.owner === p.id && !u.trade);
     const roll = this.rand();
 
     // Grow: buy land at the border, keeping some gold back for buildings and troops.
@@ -96,6 +96,19 @@ module.exports = {
         const x = Math.round(p.core.x + Math.cos(ang) * r);
         const y = Math.round(p.core.y + Math.sin(ang) * r);
         if (this.inBounds(x, y) && this.build(p.id, x, y, 'barracks') === null) break;
+      }
+      return;
+    }
+
+    // Trade: with an ally, put up a trade post near the core (the route opens by itself).
+    const posts = structures.filter((t) => t.kind === 'trade').length;
+    if (posts < 1 && this.alliesOf(p.id).length && p.gold >= C.TOWERS.trade.cost + 60 && roll < 0.5) {
+      for (let i = 0; i < 25; i++) {
+        const ang = this.rand() * Math.PI * 2;
+        const r = 3 + this.rand() * 3;
+        const x = Math.round(p.core.x + Math.cos(ang) * r);
+        const y = Math.round(p.core.y + Math.sin(ang) * r);
+        if (this.inBounds(x, y) && this.build(p.id, x, y, 'trade') === null) break;
       }
       return;
     }

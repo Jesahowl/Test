@@ -16,6 +16,7 @@ import { drawBackground, resize } from './render.js';
 import { specNext } from './screens.js';
 import { S, $, C, cam, keys, mouse, players } from './state.js';
 import { drawTowers } from './structures.js';
+import { drawTradeRoads } from './trade.js';
 import { drawUnits } from './troops.js';
 
 // ------------------------------------------------------------------ main loop
@@ -52,6 +53,7 @@ function frame(now) {
   updateMouseWorld();
 
   drawBackground();
+  drawTradeRoads();
   drawCamps();
   drawTowers(dt);
   drawCreeps(dt);

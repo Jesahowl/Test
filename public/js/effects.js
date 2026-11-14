@@ -84,7 +84,7 @@ function drawZap(f, p, s) {
 
 function drawEffects(now) {
   const s = scale();
-  S.effects = S.effects.filter((f) => now - f.born < (f.k === 'coreDown' || f.k === 'buff' ? 1200 : f.k === 'arrow' ? 250 : f.k === 'tshot' ? 260 : f.k === 'ping' ? 600 : f.k === 'campSpawn' ? 1000 : f.k === 'wave' ? 700 : f.k === 'gold' ? 1100 : 450));
+  S.effects = S.effects.filter((f) => now - f.born < (f.k === 'coreDown' || f.k === 'buff' || f.k === 'trade' ? 1200 : f.k === 'raid' ? 1000 : f.k === 'arrow' ? 250 : f.k === 'tshot' ? 260 : f.k === 'ping' ? 600 : f.k === 'campSpawn' ? 1000 : f.k === 'wave' ? 700 : f.k === 'gold' ? 1100 : 450));
   for (const f of S.effects) {
     const age = (now - f.born) / 1000;
     if (age < 0) continue; // not due yet (effects are delayed to match troop interpolation)
@@ -120,6 +120,49 @@ function drawEffects(now) {
         ctx.font = `bold ${Math.round(s * 0.5)}px system-ui, sans-serif`;
         ctx.textAlign = 'center';
         ctx.fillText('+', x, y - s * (0.5 + p * 0.6));
+        break;
+      }
+      case 'trade': {
+        // a caravan delivered: coins burst up from the trade post
+        const life = 1.2;
+        if (age > life) break;
+        const [x, y] = toScreen(f.x, f.y - 0.6);
+        const p = age / life;
+        ctx.fillStyle = `rgba(255, 213, 79, ${1 - p})`;
+        ctx.strokeStyle = `rgba(165, 124, 0, ${1 - p})`;
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 9; i++) {
+          const a = -Math.PI / 2 + (i - 4) * 0.28;
+          const d = s * (0.4 + p * 1.6) * (0.8 + (i % 3) * 0.15);
+          const cx = x + Math.cos(a) * d;
+          const cy = y + Math.sin(a) * d + s * p * p * 1.6; // they fall back down
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, s * 0.12, s * 0.08, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+        break;
+      }
+      case 'raid': {
+        // a caravan destroyed: splinters and spilled coins
+        const life = 1.0;
+        if (age > life) break;
+        const [x, y] = toScreen(f.x, f.y);
+        const p = age / life;
+        for (let i = 0; i < 10; i++) {
+          const a = (i / 10) * Math.PI * 2 + 0.4;
+          const d = s * (0.3 + p * 1.1);
+          ctx.fillStyle = i % 2 ? `rgba(255, 213, 79, ${1 - p})` : `rgba(107, 74, 47, ${1 - p})`;
+          ctx.save();
+          ctx.translate(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.6);
+          ctx.rotate(a + p * 4);
+          if (i % 2) {
+            ctx.beginPath();
+            ctx.ellipse(0, 0, s * 0.1, s * 0.07, 0, 0, Math.PI * 2);
+            ctx.fill();
+          } else ctx.fillRect(-s * 0.15, -s * 0.04, s * 0.3, s * 0.08);
+          ctx.restore();
+        }
         break;
       }
       case 'boom': {

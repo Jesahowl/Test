@@ -161,6 +161,44 @@ function drawShape(kind, x, y, r, fill) {
       ctx.restore();
       break;
     }
+    case 'trade': {
+      // market hall: a roofed stall with a striped awning and a coin on top
+      ctx.fillRect(x - r * 0.8, y - r * 0.05, r * 1.6, r * 0.8);
+      ctx.beginPath();
+      ctx.moveTo(x - r * 0.92, y - r * 0.05);
+      ctx.lineTo(x - r * 0.55, y - r * 0.4);
+      ctx.lineTo(x + r * 0.55, y - r * 0.4);
+      ctx.lineTo(x + r * 0.92, y - r * 0.05);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(x - r * 0.5, y + r * 0.2, r * 1.0, r * 0.3);
+      ctx.fillStyle = fill;
+      for (let i = 0; i < 5; i++) {
+        if (i % 2) continue;
+        ctx.fillRect(x - r * 0.62 + i * r * 0.248, y + r * 0.02, r * 0.248, r * 0.16);
+      }
+      ctx.fillStyle = '#fff2b0';
+      ctx.beginPath();
+      ctx.arc(x, y - r * 0.62, r * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'caravan': {
+      // covered wagon: a hooped canvas top on a cart with two wheels
+      ctx.beginPath();
+      ctx.moveTo(x - r * 0.75, y + r * 0.1);
+      ctx.bezierCurveTo(x - r * 0.8, y - r * 0.75, x + r * 0.75, y - r * 0.75, x + r * 0.7, y + r * 0.1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillRect(x - r * 0.8, y + r * 0.1, r * 1.6, r * 0.25);
+      for (const wx of [-0.45, 0.45]) {
+        ctx.beginPath();
+        ctx.arc(x + wx * r, y + r * 0.45, r * 0.22, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
     case 'barracks': {
       // crystal hall: a stone hall with crystals on the roof ridge and a lit doorway
       ctx.fillRect(x - r * 0.85, y - r * 0.05, r * 1.7, r * 0.8);

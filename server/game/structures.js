@@ -1,6 +1,6 @@
 'use strict';
 
-// Building, upgrading, selling and rebuilding towers and barracks.
+// Building, upgrading, selling and rebuilding towers, barracks and trade posts.
 // These methods are mixed into Game (see ../game.js), so `this` is the game.
 
 const { C } = require('./common');
@@ -24,6 +24,7 @@ module.exports = {
     if (this.nearEnemyBuilding(pid, x, y)) return 'Too close to an enemy building (not in the hex next to one)';
     const owned = this.countOwned(pid, kind);
     if (kind === 'barracks' && owned >= C.MAX_BARRACKS) return `You can have at most ${C.MAX_BARRACKS} barracks`;
+    if (kind === 'trade' && owned >= C.MAX_TRADE_POSTS) return `You can have at most ${C.MAX_TRADE_POSTS} trade posts`;
     const cost = C.buildCost(kind, owned);
     if (p.gold < cost) return 'Not enough gold';
     p.gold -= cost;

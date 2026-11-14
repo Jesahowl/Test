@@ -1,5 +1,6 @@
 // Towers, barracks and ruins: sprites, health bars and build effects.
 
+import { drawTradeSprite } from './trade.js';
 import { label, onScreen } from './render.js';
 import { S, C, baseLift, colorOf, ctx, hexSpot, mouse, scale, toScreen, towerInHex } from './state.js';
 
@@ -592,8 +593,9 @@ function drawTowers(dt) {
     ctx.ellipse(x, gy, s * 1.4, s * 0.75, 0, 0, Math.PI * 2);
     ctx.fill();
     if (t.kind === 'barracks') drawBarracksSprite(t, x, y, s, now);
+    else if (t.kind === 'trade') drawTradeSprite(t, x, y, s, now);
     else drawTowerSprite(t, x, y, s, now);
-    structBar(t, x, y - r * (t.kind === 'barracks' ? 1.4 : 2.1), s * 1.0, now, t.id === S.selectedId || t.id === hover, dt);
+    structBar(t, x, y - r * (t.kind === 'tower' ? 2.1 : 1.4), s * 1.0, now, t.id === S.selectedId || t.id === hover, dt);
   }
 }
 

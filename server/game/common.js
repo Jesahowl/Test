@@ -12,7 +12,9 @@ const BOT_NAMES = [
 ];
 
 const KIND_KEYS = Object.keys(C.TOWERS);
-const UNIT_KEYS = Object.keys(C.UNITS);
+// troop types you can put in a wave (not caravans); ALL_UNIT_KEYS also has caravans, for snapshots
+const UNIT_KEYS = Object.keys(C.UNITS).filter((k) => !C.UNITS[k].caravan);
+const ALL_UNIT_KEYS = Object.keys(C.UNITS);
 const CREEP_KEYS = Object.keys(C.CREEPS);
 const CAMP_KEYS = Object.keys(C.CAMP_TYPES);
 
@@ -43,4 +45,4 @@ function posOf(o) {
   return [o.x, o.y];
 }
 
-module.exports = { C, Vision, Path, BOT_NAMES, KIND_KEYS, UNIT_KEYS, CREEP_KEYS, CAMP_KEYS, DIRS8, BOT_JUNGLE_RANGE, UGRID, UGRID_SLACK, dist, round2, sanitizeName, posOf };
+module.exports = { C, Vision, Path, BOT_NAMES, KIND_KEYS, UNIT_KEYS, ALL_UNIT_KEYS, CREEP_KEYS, CAMP_KEYS, DIRS8, BOT_JUNGLE_RANGE, UGRID, UGRID_SLACK, dist, round2, sanitizeName, posOf };

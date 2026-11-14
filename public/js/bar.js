@@ -23,6 +23,11 @@ function buildBar() {
   bb.dataset.tip = `<span class="t">Barracks <kbd>${bd.key}</kbd></span><b>+${C.BARRACKS_TROOPS} troops in every wave</b>, marching out from the barracks. Build on your own land. Up to ${C.MAX_BARRACKS}; each costs ${C.BARRACKS_COST_STEP}g more than the last. <span class="m">Enemies who take one get its troops.</span>`;
   bb.innerHTML = `<kbd>${bd.key}</kbd><span class="count"></span><img src="${iconURL('barracks')}" alt="">${bd.name}<span class="cost"></span>`;
   bb.onclick = () => toggleBuild('barracks');
+  const xb = $('trade-button');
+  const xd = C.TOWERS.trade;
+  xb.dataset.tip = `<span class="t">Trade Post <kbd>${xd.key}</kbd></span>Sends a <b>caravan</b> to an <b>ally's</b> trade post every ${C.CARAVAN_EVERY}s. When it arrives, you <b>both</b> get its cargo (more for longer routes and higher levels). Up to ${C.MAX_TRADE_POSTS}. <span class="m">Enemies can raid caravans for half their cargo: right-click your caravan to send a squad as escort.</span>`;
+  xb.innerHTML = `<kbd>${xd.key}</kbd><span class="count"></span><img src="${iconURL('trade')}" alt="">Trade<span class="cost">${xd.cost}g</span>`;
+  xb.onclick = () => toggleBuild('trade');
   const lb = $('land-button');
   lb.dataset.tip = `<span class="t">Claim land <kbd>L</kbd></span>Click an empty <b>hex</b> touching your border, or <b>drag along it</b> to claim a strip. <b>Double-click</b> outside your land to grow it one hex outward all round. A hex costs more the more land you own. <span class="m">Land = more gold and a bigger army. Enemy land can't be claimed: take their buildings or destroy their core.</span>`;
   lb.innerHTML = `<kbd>L</kbd><img src="${iconURL('land')}" alt="">Land<span class="cost"></span>`;
@@ -235,7 +240,7 @@ function sendOrder(tg, opts) {
   if (!isMineTarget(tg)) tipDone('attack');
   if (tg.k === 'j') tipDone('jungle');
   if (!ids && !everyone) tipDone('send');
-  const verb = isMineTarget(tg) ? 'defending' : tg.k === 'j' ? (S.camps[tg.id]?.alive === false ? 'waiting to clear' : 'clearing') : tg.k === 'u' ? 'hunting' : tg.k === 'p' ? 'holding a spot' : 'attacking';
+  const verb = isMineTarget(tg) ? 'defending' : tg.k === 'e' ? 'escorting' : tg.k === 'j' ? (S.camps[tg.id]?.alive === false ? 'waiting to clear' : 'clearing') : tg.k === 'u' ? 'hunting' : tg.k === 'p' ? 'holding a spot' : 'attacking';
   const what = tg.k === 'p' ? '' : ` ${targetName(`${tg.k}:${tg.id}`)}`;
   const who = ids ? 'New squad' : opts.everyone ? 'All squads' : squadsLabel();
   S.pendingOrder = (n) => `${who} (${n} troop${n === 1 ? '' : 's'}): ${verb}${what}`;

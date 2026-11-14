@@ -4,6 +4,7 @@ import { interpPos, renderTime } from './net.js';
 import { drawShape, hpBar, lungeOffset, onScreen, tokenPath } from './render.js';
 import { S, C, colorOf, ctx, grid, players, scale, selUnits, toScreen } from './state.js';
 import { squadPicked } from './squads.js';
+import { drawCaravan } from './trade.js';
 
 // Is this spot on top of a tower, barracks or core (their drawings are about 2 tiles wide)?
 function overBuilding(wx, wy) {
@@ -25,7 +26,22 @@ function drawUnits(dt) {
   const rt = renderTime();
   for (const u of S.units.values()) {
     const r = s * 0.34 * (C.UNITS[u.kind].size || 1);
+    const px = u.rx;
+    const py = u.ry;
     [u.rx, u.ry] = interpPos(u, rt);
+    if (u.kind === 'caravan') {
+      // faces the way it's rolling; wheels and legs move only while it does
+      if (px !== undefined) {
+        const dx = u.rx - px;
+        u.moving = Math.hypot(dx, u.ry - py) > 1e-4;
+        if (Math.abs(dx) > 1e-4) u.face = dx > 0 ? 1 : -1;
+      }
+      const [cx, cy] = toScreen(u.rx, u.ry);
+      if (!onScreen(cx, cy, s * 2)) continue;
+      drawCaravan(u, cx, cy, s, now);
+      hpBar(cx, cy - s * 0.95, s * 1.1, u.hp / u.maxHp);
+      continue;
+    }
     const [lx, ly] = lungeOffset(u.id, u.rx, u.ry, now);
     const [x, y] = toScreen(u.rx + lx, u.ry + ly);
     if (!onScreen(x, y, s)) continue;

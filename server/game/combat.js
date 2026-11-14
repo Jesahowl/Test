@@ -19,6 +19,10 @@ module.exports = {
     if (u.hp > 0) return;
     this.units.delete(u.id);
     this.fx.push({ k: 'boom', x: round2(u.x), y: round2(u.y), r: 0.5 });
+    if (u.trade) {
+      this.raidCaravan(u, byPid);
+      return;
+    }
     const p = this.players.get(byPid);
     if (p && p.alive && byPid !== u.owner) {
       this.award(p, C.TROOP_BOUNTY + C.TROOP_BOUNTY_PER_LEVEL * (u.level - 1), 'troops', u.x, u.y);

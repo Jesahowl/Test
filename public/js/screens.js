@@ -48,7 +48,7 @@ function showDeath(info) {
     <div><b>${(info.towersDestroyed || 0) + info.coresDestroyed}</b><span>buildings taken</span></div>`;
   const e = info.earned || {};
   const total = Object.values(e).reduce((a, b) => a + b, 0);
-  const parts = [['troops', 'troop kills', '#ff7b72'], ['camps', 'jungle', '#d7a86e'], ['towers', 'towers', '#ffd54f'], ['cores', 'cores', '#d2a8ff'], ['income', 'land', '#3fb950']]
+  const parts = [['troops', 'troop kills', '#ff7b72'], ['camps', 'jungle', '#d7a86e'], ['towers', 'towers', '#ffd54f'], ['cores', 'cores', '#d2a8ff'], ['trade', 'trade', '#f0c674'], ['income', 'land', '#3fb950']]
     .filter(([k]) => e[k]);
   $('death-gold').innerHTML = total ? `<b>${total.toLocaleString()}g earned</b>
     <div class="gbar">${parts.map(([k, , c]) => `<i style="width:${(100 * e[k]) / total}%;background:${c}"></i>`).join('')}</div>

@@ -61,7 +61,7 @@ canvas.addEventListener('mousedown', (e) => {
   let hit = null;
   let hitD = 0.6;
   for (const u of S.units.values()) {
-    if (u.owner !== S.myId) continue;
+    if (u.owner !== S.myId || u.kind === 'caravan') continue;
     const d = Math.hypot(u.rx - mouse.wx, u.ry - mouse.wy);
     if (d < hitD) {
       hitD = d;
@@ -168,6 +168,7 @@ window.addEventListener('keydown', (e) => {
   if (!S.myId) return;
   if (k === 'b') toggleBuild('tower');
   if (k === 'r') toggleBuild('barracks');
+  if (k === 't') toggleBuild('trade');
   if (k === 'l') toggleBuild('land');
   if (k === 'escape') {
     S.buildKind = null;

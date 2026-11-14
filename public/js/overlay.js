@@ -238,7 +238,7 @@ function drawOverlay() {
       const pos = targetPos(`${tg.k}:${tg.id}`);
       const mine = isMineTarget(tg);
       const who = selUnits.size ? `${selUnits.size} picked troop${selUnits.size === 1 ? '' : 's'}` : squadsLabel();
-      const verb = mine ? 'defend' : tg.k === 'j' ? campVerb(tg.id) : tg.k === 'u' ? `hunt ${targetName(`u:${tg.id}`)}` : 'attack';
+      const verb = tg.k === 'e' ? 'escort your caravan' : mine ? 'defend' : tg.k === 'j' ? campVerb(tg.id) : tg.k === 'u' ? `hunt ${targetName(`u:${tg.id}`)}` : 'attack';
       const [hx, hy] = toScreen(pos.x, pos.y);
       if (tg.k === 'u') drawTargetMarker(pos, true, false, 0.6);
       const ally = !mine && allyOfTarget(tg);

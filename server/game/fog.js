@@ -69,7 +69,7 @@ module.exports = {
           patient = f;
         }
       }
-      if (f !== u && !C.UNITS[f.kind].heal && fd < buddyD && (!tgt || f.attack)) {
+      if (f !== u && !C.UNITS[f.kind].heal && !f.trade && fd < buddyD && (!tgt || f.attack)) {
         buddyD = fd;
         buddy = f;
       }
