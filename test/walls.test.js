@@ -88,7 +88,7 @@ test('soldiers hit walls harder', () => {
   assert.ok(afterS / C.towerStats('soldier', 1).damage > 1.9 * (afterA / C.towerStats('archer', 1).damage));
 });
 
-test('buying the hex beyond a wall refunds it; losing a hex makes its walls crumble', () => {
+test('buying the hex beyond a wall moves it out; losing a hex makes its walls crumble', () => {
   const { g, a } = duel(74);
   // a border edge whose outside hex is empty and can be bought
   const e = border(g, a).find(([, j]) => g.canBuyHex(a.id, j));
@@ -97,8 +97,9 @@ test('buying the hex beyond a wall refunds it; losing a hex makes its walls crum
   assert.strictEqual(g.buyLand(a.id, [e[1]]), null);
   const cost = gold - a.gold;
   g.update(0.05);
-  assert.strictEqual(g.wallBetween(e[0], e[1]), null, 'the wall is gone');
-  assert.ok(a.gold - (gold - cost) >= Math.floor(C.WALL_COST * C.WALL_REFUND), 'and refunded');
+  assert.strictEqual(g.wallBetween(e[0], e[1]), null, 'the wall is gone from inside my land');
+  assert.ok(g.hex.hexes[e[1]].n.some((j) => g.hexOwner[j] !== a.id && g.wallBetween(e[1], j)), 'and stands on the new border');
+  assert.ok(a.gold - (gold - cost) < 1, 'no refund: it moved (only a moment of income)');
   // now a wall whose own side is released
   const e2 = border(g, a).find(([i]) => i !== g.hexAt(a.core.x, a.core.y));
   g.buildWalls(a.id, [e2]);
@@ -150,4 +151,43 @@ test('a broken wall can\'t be rebuilt straight away, nor walls built with enemie
   const hb = g.hex.hexes[e2[1]];
   troops(g, a, 'soldier', 1, (ha.cx + hb.cx) / 2, (ha.cy + hb.cy) / 2);
   assert.match(g.buildWalls(b.id, [e2]), /too close/);
+});
+
+test('buying a hex beyond your walls moves those walls out onto its outer edges', () => {
+  const { g, a } = duel(77);
+  g.buildWalls(a.id, border(g, a));
+  // find buyable hexes touching 1, 2 and 3 of my walls
+  const touching = (i) => g.hex.hexes[i].n.filter((j) => g.hexOwner[j] === a.id && g.wallBetween(i, j)).length;
+  const seen = new Set();
+  for (const want of [1, 2, 3]) {
+    const i = g.hex.hexes.map((h) => h.i).find((k) => !seen.has(k) && g.canBuyHex(a.id, k) && touching(k) === want);
+    if (i === undefined) continue;
+    seen.add(i);
+    const h = g.hex.hexes[i];
+    const before = g.walls.size;
+    const gold = a.gold;
+    const free = h.n.filter((j) => g.hexOwner[j] !== a.id && !g.wallBetween(i, j)).length;
+    assert.strictEqual(g.buyLand(a.id, [i]), null);
+    g.update(0.05);
+    const inner = h.n.filter((j) => g.hexOwner[j] === a.id && g.wallBetween(i, j)).length;
+    const outer = h.n.filter((j) => g.hexOwner[j] !== a.id && g.wallBetween(i, j)).length;
+    assert.strictEqual(inner, 0, `${want}: no wall left inside`);
+    assert.strictEqual(outer, Math.min(want, free), `${want}: ${want} walls moved onto the new hex's outer edges`);
+    assert.strictEqual(g.walls.size, before, `${want}: no walls lost`);
+    assert.ok(a.gold <= gold, `${want}: no refund for walls that moved`);
+  }
+  assert.ok(seen.size >= 2, 'found hexes to test');
+});
+
+test('a gate keeps being a gate when it moves out', () => {
+  const { g, a } = duel(78);
+  g.buildWalls(a.id, border(g, a));
+  const i = g.hex.hexes.map((h) => h.i).find((k) => g.canBuyHex(a.id, k) && g.hex.hexes[k].n.filter((j) => g.hexOwner[j] === a.id && g.wallBetween(k, j)).length === 1);
+  const j = g.hex.hexes[i].n.find((n) => g.hexOwner[n] === a.id && g.wallBetween(i, n));
+  g.toggleGate(a.id, g.wallBetween(i, j).id);
+  const gates = [...g.walls.values()].filter((w) => w.gate).length;
+  g.buyLand(a.id, [i]);
+  g.update(0.05);
+  assert.strictEqual([...g.walls.values()].filter((w) => w.gate).length, gates);
+  assert.ok(g.hex.hexes[i].n.some((n) => g.hexOwner[n] !== a.id && g.wallBetween(i, n)?.gate), 'the gate is on the new hex\'s border');
 });

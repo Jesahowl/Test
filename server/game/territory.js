@@ -123,6 +123,7 @@ module.exports = {
       }
       p.gold -= cost;
       this.setHex(i, pid);
+      this.carryWallsOut(pid, i);
       land += this.hex.hexes[i].tiles.length;
       this.lastBuy.n++;
       this.lastBuy.gold += cost;

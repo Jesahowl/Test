@@ -157,6 +157,74 @@ module.exports = {
     this.removeWall(w);
   },
 
+  // The two corners of the edge between neighbouring hexes a and b (or null).
+  edgeCorners(a, b) {
+    const ha = this.hex.hexes[a];
+    for (let k = 0; k < 6; k++) {
+      if (this.hex.across(ha, k) === b) {
+        const cs = this.hex.corners(ha);
+        return [cs[k], cs[(k + 1) % 6]];
+      }
+    }
+    return null;
+  },
+
+  // pid just bought hex i: the walls of theirs on its edges with their land (now inside it) move out
+  // onto i's free outer edges, as many as there were, so the wall line follows the border. Edges
+  // that join up with pid's other walls take them first, then the ones nearest where they stood;
+  // a gate stays a gate and a wall keeps its damage. Any that find no free edge are refunded.
+  carryWallsOut(pid, i) {
+    if (!this.walls.size) return;
+    const h = this.hex.hexes[i];
+    const moving = [];
+    for (const j of h.n) {
+      const w = this.wallBetween(i, j);
+      if (w && w.owner === pid && this.hexOwner[j] === pid) moving.push(w);
+    }
+    if (!moving.length) return;
+    for (const w of moving) this.removeWall(w);
+    const key = ([x, y]) => `${Math.round(x * 100)},${Math.round(y * 100)}`;
+    const cornersOfMine = new Set();
+    for (const w of this.walls.values()) {
+      if (w.owner !== pid) continue;
+      const e = this.edgeCorners(w.a, w.b);
+      if (e) for (const c of e) cornersOfMine.add(key(c));
+    }
+    const mx = moving.reduce((t, w) => t + w.x, 0) / moving.length;
+    const my = moving.reduce((t, w) => t + w.y, 0) / moving.length;
+    const spots = [];
+    for (const j of h.n) {
+      if (this.hexOwner[j] === pid || this.wallBetween(i, j)) continue;
+      const e = this.edgeCorners(i, j);
+      if (!e) continue;
+      const hj = this.hex.hexes[j];
+      spots.push({ j, e, d: Math.hypot((h.cx + hj.cx) / 2 - mx, (h.cy + hj.cy) / 2 - my) });
+    }
+    const owner = this.players.get(pid);
+    moving.sort((p, q) => Math.hypot(p.x - mx, p.y - my) - Math.hypot(q.x - mx, q.y - my));
+    for (const old of moving) {
+      // the free edge that joins most of pid's walls (counting ones just moved), then the nearest
+      let best = -1;
+      let bestJoins = -1;
+      spots.forEach((sp, k) => {
+        const joins = sp.e.filter((c) => cornersOfMine.has(key(c))).length;
+        if (joins > bestJoins || (joins === bestJoins && sp.d < spots[best].d)) {
+          best = k;
+          bestJoins = joins;
+        }
+      });
+      if (best < 0) {
+        if (owner && owner.alive) owner.gold += Math.floor(this.wallSpent(old) * C.WALL_REFUND);
+        continue;
+      }
+      const [spot] = spots.splice(best, 1);
+      const w = this.addWall(pid, i, spot.j);
+      w.hp = Math.min(w.maxHp, old.hp);
+      w.gate = old.gate;
+      for (const c of spot.e) cornersOfMine.add(key(c));
+    }
+  },
+
   // After land changes hands: walls with their owner on both sides are refunded and removed; walls
   // with their owner on neither side crumble.
   maintainWalls() {
