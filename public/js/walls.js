@@ -201,6 +201,15 @@ function drawRun(run, s, now, ghost) {
       open = true;
     }
     if (loop) ctx.lineTo(first.a[0], first.a[1] - first.h);
+    // the gates' side edges, ground to top, in the same path: each glow layer is painted once over
+    // the whole run, so where an edge meets a wall top nothing doubles up
+    for (const { a, b, h, w } of P) {
+      if (!w.gate) continue;
+      for (const [x, y] of [a, b]) {
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y - h);
+      }
+    }
   };
   ctx.strokeStyle = colorOf(owner, 70, 0.25);
   ctx.lineWidth = Math.max(5, s * 0.36);
@@ -225,21 +234,6 @@ function drawRun(run, s, now, ghost) {
       ctx.lineTo(b[0], b[1] - h);
       ctx.stroke();
       ctx.setLineDash([]);
-    }
-  }
-  // both sides of a gate: a highlighted edge from the ground up to the wall top, lit like the top
-  // line, so the walls either side turn down into the doorway
-  for (const { a, b, h, w } of P) {
-    if (!w.gate) continue;
-    for (const [x, y] of [a, b]) {
-      for (const [width, color] of [[Math.max(5, s * 0.36), colorOf(owner, 70, 0.25)], [Math.max(2.5, s * 0.17), colorOf(owner, 80, 0.75)], [Math.max(1, s * 0.05), colorOf(owner, 90)]]) {
-        ctx.strokeStyle = color;
-        ctx.lineWidth = width;
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x, y - h);
-        ctx.stroke();
-      }
     }
   }
   ctx.restore();
