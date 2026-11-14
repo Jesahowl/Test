@@ -20,7 +20,7 @@ function buildBar() {
   tb.onclick = () => toggleBuild('tower');
   const bb = $('barracks-button');
   const bd = C.TOWERS.barracks;
-  bb.dataset.tip = `<span class="t">Barracks <kbd>${bd.key}</kbd></span><b>+${C.BARRACKS_TROOPS} troops in every wave</b>, marching out from the barracks. Build on your own land. Up to ${C.MAX_BARRACKS}; each costs ${C.BARRACKS_COST_STEP}g more than the last. <span class="m">Enemies who take one get its troops.</span>`;
+  bb.dataset.tip = `<span class="t">Barracks <kbd>${bd.key}</kbd></span><b>Raises a squad</b>: your 1st barracks raises squad 1, the 2nd squad 2, and so on. It gives its squad <b>${C.BARRACKS_TROOPS} troops</b>, +${C.BARRACKS_TROOPS} for each upgrade, up to ${C.SQUAD_MAX_TROOPS}. Troops respawn there too. Up to ${C.MAX_BARRACKS}; each costs ${C.BARRACKS_COST_STEP}g more than the last.`;
   bb.innerHTML = `<kbd>${bd.key}</kbd><span class="count"></span><img src="${iconURL('barracks')}" alt="">${bd.name}<span class="cost"></span>`;
   bb.onclick = () => toggleBuild('barracks');
   const xb = $('trade-button');
@@ -174,42 +174,44 @@ function updateSquadsUi() {
   const squads = allSquads();
   for (const id of S.selSquads) if (!squads.some((q) => q.id === id)) S.selSquads.delete(id);
   if (!S.allSquads && !S.selSquads.size) S.allSquads = true;
-  const used = squads.reduce((n, q) => n + UNIT_KEYS.reduce((m, k) => m + q.mix[k] * C.slotsOf(k), 0), 0);
-  const free = S.me.armySize - used;
+  const free = squads.reduce((n, q) => n + Math.max(0, q.cap - q.slots), 0);
   const box = $('squads');
-  const key = squads.map((q) => `${q.id}:${q.stance}:${UNIT_KEYS.map((k) => `${q.mix[k]}/${q.kinds[k] || 0}`).join(',')}:${q.status}:${squadPicked(q.id) ? 1 : 0}:${Math.round(10 * hpFrac(q))}`).join('|') + `|${S.allSquads}|${free}`;
+  const key = squads.map((q) => `${q.id}:${q.stance}:${q.cap}:${UNIT_KEYS.map((k) => `${q.mix[k]}/${q.kinds[k] || 0}`).join(',')}:${q.status}:${squadPicked(q.id) ? 1 : 0}:${Math.round(10 * hpFrac(q))}`).join('|') + `|${S.allSquads}`;
   if (box.dataset.key !== key) {
     box.dataset.key = key;
     box.innerHTML = squads.map((q) => {
       const [kind, short, long] = squadStatus(q);
       const on = S.allSquads || squadPicked(q.id);
       const alive = q.units.length;
+      const room = q.cap - q.slots;
+      // + fits in a free slot, or swaps soldiers out of a full squad
+      const canAdd = (k) => q.cap && (room >= C.slotsOf(k) || (k !== 'soldier' && q.mix.soldier >= C.slotsOf(k) - Math.max(0, room)));
       const mixHtml = UNIT_KEYS.map((k) => {
         const n = q.mix[k];
         const down = Math.max(0, n - (q.kinds[k] || 0));
         return `<div class="mx${n ? '' : ' none'}" data-tip="<span class='t'>${C.UNITS[k].name}s in squad ${q.num}</span>${n} in the squad${down ? `, ${down} respawning` : ''}">`
           + `<img src="${iconURL(k)}" alt=""><b>${n}</b>${down ? `<i class="down">−${down}</i>` : ''}`
-          + `<span class="pm"><button data-act="add" data-kind="${k}"${free < C.slotsOf(k) && !canMove(squads, q, k) ? ' disabled' : ''} data-tip="${free >= C.slotsOf(k) ? `One more ${C.UNITS[k].name.toLowerCase()} (it arrives at the next respawn)` : `Move a ${C.UNITS[k].name.toLowerCase()} here from your biggest squad (your army is full)`}">+</button><button data-act="rem" data-kind="${k}"${n ? '' : ' disabled'} data-tip="One fewer ${C.UNITS[k].name.toLowerCase()} (frees a slot for another squad)">−</button></span></div>`;
+          + `<span class="pm"><button data-act="add" data-kind="${k}"${canAdd(k) ? '' : ' disabled'} data-tip="${!q.cap ? `Build a barracks to raise squad ${q.num}` : room >= C.slotsOf(k) ? `One more ${C.UNITS[k].name.toLowerCase()} (it arrives at the next respawn)` : `Swap ${C.slotsOf(k) > 1 ? 'soldiers' : 'a soldier'} for a ${C.UNITS[k].name.toLowerCase()} (the squad is full)`}">+</button><button data-act="rem" data-kind="${k}"${n ? '' : ' disabled'} data-tip="One fewer ${C.UNITS[k].name.toLowerCase()} (frees a slot for another squad)">−</button></span></div>`;
       }).join('');
       const stances = STANCES.map(([k, ic, name, what]) => `<button data-act="stance" data-stance="${k}" class="${q.stance === k ? 'on' : ''}" data-tip="<span class='t'>${name} <kbd>G</kbd></span>${what}">${ic}${q.stance === k ? ` ${name}` : ''}</button>`).join('');
-      return `<div class="sq-card ${kind}${on ? ' on' : ''}${squadPicked(q.id) ? ' picked' : ''}${q.size ? '' : ' empty'}" data-id="${q.id}">
+      const lv = q.cap / C.BARRACKS_TROOPS;
+      const cap = q.cap
+        ? `<div class="sq-cap" data-tip="Squad ${q.num}'s barracks gives it ${q.cap} troop slots. Upgrade the barracks for +${C.BARRACKS_TROOPS} (up to ${C.SQUAD_MAX_TROOPS}).">Barracks Lv ${lv} · <b>${q.slots}/${q.cap}</b> slots${room > 0 ? ` · <span class="free">${room} free</span>` : ''}</div>`
+        : `<div class="sq-cap none">No barracks: build one (<kbd>R</kbd>) to raise squad ${q.num}</div>`;
+      return `<div class="sq-card ${kind}${on ? ' on' : ''}${squadPicked(q.id) ? ' picked' : ''}${q.cap ? '' : ' empty'}" data-id="${q.id}">
         <div class="sq-top" data-act="pick" data-tip="<span class='t'>Squad ${q.num} <kbd>${q.num}</kbd></span>${escapeHtml(long)}.<br><span class='m'>Click to pick it, then right-click a target. <kbd>Shift</kbd>-click to pick several.</span>">
           <span class="num">${q.num}</span><span class="st">${STATUS_ICON[kind]} ${escapeHtml(short)}</span><span class="cnt">${alive}/${q.size}</span>
           <button class="find" data-act="find" data-tip="Find squad ${q.num} on the map"${alive ? '' : ' disabled'}>◎</button></div>
         <div class="sq-hp"><i style="width:${Math.round(100 * hpFrac(q))}%"></i></div>
+        ${cap}
         <div class="sq-mix">${mixHtml}</div>
         <div class="sq-stance">${stances}</div>
       </div>`;
     }).join('');
   }
   $('squad-all').classList.toggle('on', S.allSquads);
-  const hint = free > 0 ? `${free} free troop slot${free === 1 ? '' : 's'}: add troops to a squad` : 'army full: claim land or build barracks for more';
+  const hint = free > 0 ? `${free} free troop slot${free === 1 ? '' : 's'}: add troops to a squad` : squads.some((q) => !q.cap) ? 'each barracks raises a squad: build more for more squads' : 'upgrade barracks for bigger squads';
   if ($('squad-hint').textContent !== hint) $('squad-hint').textContent = hint;
-}
-
-// With the army full, can a troop of kind k be moved into squad q from another squad?
-function canMove(squads, q, k) {
-  return squads.some((o) => o !== q && (o.mix[k] > 0 || o.mix.soldier > 0));
 }
 
 // How healthy a squad is: its troops' HP over the HP its whole mix would have.

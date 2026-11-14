@@ -68,9 +68,40 @@ module.exports = {
     // With an ally and a tower up, a trade post comes next (saved up for).
     const wantTrade = towers.length >= 1 && this.alliesOf(p.id).length > 0 && !structures.some((t) => t.kind === 'trade');
 
+    // A barracks raises a squad, and there are no troops without one: the first comes before anything.
+    const placeBarracks = () => {
+      for (let i = 0; i < 25; i++) {
+        const ang = this.rand() * Math.PI * 2;
+        const r = 2 + this.rand() * 3;
+        const x = Math.round(p.core.x + Math.cos(ang) * r);
+        const y = Math.round(p.core.y + Math.sin(ang) * r);
+        if (this.inBounds(x, y) && this.build(p.id, x, y, 'barracks') === null) return true;
+      }
+      return false;
+    };
+    if (!barracks) {
+      if (p.gold >= C.buildCost('barracks', 0) && p.wood >= C.TOWERS.barracks.wood) placeBarracks();
+      return;
+    }
+
+    // The army comes first: more squads (another barracks near the core once a tower or two is up)...
+    const bCost = C.buildCost('barracks', barracks);
+    if (barracks < C.MAX_BARRACKS && towers.length >= Math.min(2, barracks) && p.gold >= bCost && p.wood >= C.TOWERS.barracks.wood && roll < 0.7) {
+      placeBarracks();
+      return;
+    }
+    // ...and bigger squads: upgrade the lowest-level barracks.
+    const low = structures.filter((t) => t.kind === 'barracks' && !(t.progress < 1) && t.level < C.maxLevel('barracks')).sort((a, b) => a.level - b.level)[0];
+    if (low && p.gold >= C.upgradeCost('barracks', low.level) && roll < 0.7) {
+      this.upgrade(p.id, low.id);
+      return;
+    }
+    // (land and towers only get gold beyond what the army's next step needs)
+    const armyStep = Math.min(low ? C.upgradeCost('barracks', low.level) : Infinity, barracks < C.MAX_BARRACKS ? bCost : Infinity);
+
     // Grow: buy land at the border, keeping some gold back for buildings and troops.
     const hexCost = C.landCost(p.territory) * 16; // about one hex
-    const keep = 60 + (towers.length < 2 ? C.TOWERS.tower.cost : 0) + (wantTrade ? C.TOWERS.trade.cost : 0);
+    const keep = 60 + (towers.length < 2 ? C.TOWERS.tower.cost : 0) + (wantTrade ? C.TOWERS.trade.cost : 0) + (Number.isFinite(armyStep) ? armyStep : 0);
     if (p.gold >= keep + hexCost && roll < 0.75) {
       const n = Math.min(2, Math.floor((p.gold - keep) / hexCost));
       this.botBuyLand(p, n);
@@ -121,18 +152,6 @@ module.exports = {
       return;
     }
 
-    // Bigger waves: build barracks near the core once a couple of towers are up.
-    const bCost = C.buildCost('barracks', barracks);
-    if (barracks < C.MAX_BARRACKS && towers.length >= Math.min(2, 1 + barracks) && p.gold >= bCost && p.wood >= C.TOWERS.barracks.wood && roll < 0.6) {
-      for (let i = 0; i < 25; i++) {
-        const ang = this.rand() * Math.PI * 2;
-        const r = 2 + this.rand() * 3;
-        const x = Math.round(p.core.x + Math.cos(ang) * r);
-        const y = Math.round(p.core.y + Math.sin(ang) * r);
-        if (this.inBounds(x, y) && this.build(p.id, x, y, 'barracks') === null) break;
-      }
-      return;
-    }
 
     // Squads: shape the army (free), then buy levels.
     this.botArmy(p);
@@ -152,7 +171,7 @@ module.exports = {
     // Orders.
     if (this.time < p.bot.nextOrder) return;
     p.bot.nextOrder = this.time + 8 + this.rand() * 6;
-    const [strike, guard, jungle] = p.squads;
+    const [strike, guard, jungle, second] = p.squads;
     const alive = (q) => troops.filter((u) => u.sq === q.id).length;
     const size = (q) => this.mixSlots(q.mix);
     const send = (q, target) => this.order(p.id, null, target, [q.id]);
@@ -197,8 +216,8 @@ module.exports = {
     // it has been worn down.
     const enemy = this.nearestEnemy(p.core.x, p.core.y, p.id, true);
     if (strike.order.type === 'attack' && alive(strike) < size(strike) * 0.35) {
-      send(strike, { k: 'c', id: p.id });
-    } else if (enemy && strike.order.type === 'defend' && alive(strike) >= Math.max(6, size(strike) * 0.75)) {
+      this.order(p.id, null, { k: 'c', id: p.id }, [strike.id, second.id]);
+    } else if (enemy && strike.order.type === 'defend' && size(strike) && alive(strike) >= size(strike) * 0.75) {
       let target = { k: 'c', id: enemy.id };
       let bestD = Infinity;
       for (const t of this.towers.values()) {
@@ -209,27 +228,25 @@ module.exports = {
           target = { k: 't', id: t.id };
         }
       }
-      send(strike, target);
+      this.order(p.id, null, target, [strike.id, second.id]); // the second strike force goes too
     }
   },
 
-  // A bot's squads: 1 a strike force (with a siege ram or two once it's big enough), 2 a home guard
-  // and 3 a jungle party; 4 stays empty. Each is mostly soldiers, with archers and a medic or two.
+  // A bot's squads: 1 and 4 strike forces (with a siege ram or two once they're big enough), 2 a
+  // home guard and 3 a jungle party. Each is mostly soldiers, with archers and a medic or two, and
+  // fills whatever its barracks gives it.
   botArmy(p) {
-    const size = this.armySize(p);
-    const rest = size;
-    const jungle = Math.max(3, Math.round(rest * C.BOT_JUNGLE_SHARE * 0.7));
-    const guard = Math.round((rest - jungle) * (1 - C.BOT_STRIKE_SHARE));
-    const strike = rest - jungle - guard;
     const mixOf = (n, rams = 0) => {
       const left = n - rams * C.slotsOf('siege');
       const medic = left >= 5 ? Math.max(1, Math.round(left * 0.15)) : 0;
       const archer = Math.round(left * 0.3);
       return { soldier: left - medic - archer, medic, archer, siege: rams };
     };
-    const rams = strike >= 16 ? 2 : strike >= 9 ? 1 : 0;
-    const want = [mixOf(strike, rams), mixOf(guard), mixOf(jungle), { soldier: 0, medic: 0, archer: 0, siege: 0 }];
-    p.squads.forEach((q, i) => Object.assign(q.mix, want[i]));
+    p.squads.forEach((q, i) => {
+      const n = this.squadCap(p, q);
+      const strike = i === 0 || i === 3;
+      Object.assign(q.mix, mixOf(n, strike ? (n >= 15 ? 2 : n >= 10 ? 1 : 0) : 0));
+    });
     if (!p.bot.stances) {
       p.bot.stances = true;
       this.squadStance(p.id, p.squads[2].id, 'aggressive');

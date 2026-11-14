@@ -181,7 +181,7 @@ class Game {
     const towers = [];
     for (const t of this.towers.values()) {
       towers.push([t.id, KIND_KEYS.indexOf(t.kind), t.x, t.y, t.owner, t.level, Math.ceil(t.hp), t.maxHp, t.ruinOf || 0, t.partner || 0, t.road || 0,
-        t.progress < 1 ? Math.floor(t.progress * 100) : 100]);
+        t.progress < 1 ? Math.floor(t.progress * 100) : 100, t.squad || 0]);
     }
     const units = [];
     for (const u of this.units.values()) {
@@ -213,9 +213,9 @@ class Game {
 
   // Personal state for one player (sent only to them).
   personal(p) {
-    // My squads: [id, number, stance, mix (per UNIT_KEYS), order ("attack t:12", "defend c:5")]. Their troops carry the id.
+    // My squads: [id, number, stance, mix (per UNIT_KEYS), order ("attack t:12", "defend c:5"), troop slots]. Their troops carry the id.
     const okey = (o) => (o.type === 'defend' ? `defend ${o.anchor ? `t:${o.anchor}` : `c:${p.id}`}` : `attack ${o.target.k}:${o.target.id}`);
-    const squads = p.squads.map((q) => [q.id, q.num, q.stance, UNIT_KEYS.map((k) => q.mix[k] || 0), okey(q.order)]);
+    const squads = p.squads.map((q) => [q.id, q.num, q.stance, UNIT_KEYS.map((k) => q.mix[k] || 0), okey(q.order), this.squadCap(p, q)]);
     return {
       id: p.id,
       gold: Math.floor(p.gold),

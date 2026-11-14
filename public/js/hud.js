@@ -312,7 +312,7 @@ function updateSelectionPanel(gold) {
   panel.classList.remove('hidden');
   const d = C.TOWERS[t.kind];
   const ruined = t.ruin || !t.owner;
-  const key = `${t.id}:${t.level}:${t.owner}:${t.partner || 0}`;
+  const key = `${t.id}:${t.level}:${t.owner}:${t.partner || 0}:${t.squad || 0}:${t.progress < 1 ? 0 : 1}`;
   const img = `<img src="${iconURL(t.kind)}" alt="">`;
   if (panel.dataset.key !== key) {
     panel.dataset.key = key;
@@ -331,23 +331,24 @@ function updateSelectionPanel(gold) {
       const upTip = !next ? 'Max level' : isT
         ? `Level ${t.level + 1}: +${Math.round(C.CARAVAN_LEVEL_CARGO * 100)}% cargo, tougher caravans and guards, ${next.hp} HP <kbd>U</kbd>`
         : `Level ${t.level + 1}: damage ${Math.round(next.damage)}, range ${next.range}, ${next.hp} HP <kbd>U</kbd>`;
-      panel.innerHTML = `<h4>${img}Your ${d.name}${isB ? '' : ` · Lv ${t.level}`}</h4>
+      const upB = maxed ? 'Max level' : `Level ${t.level + 1}: squad ${t.squad || '?'} gets ${C.squadCap(t.level + 1)} troops (+${C.squadCap(t.level + 1) - C.squadCap(t.level)}) <kbd>U</kbd>`;
+      panel.innerHTML = `<h4>${img}Your ${d.name} · Lv ${t.level}</h4>
         <div id="sel-info" class="stats"></div>
         <div class="stats" id="sel-kind">${isB
-          ? `<div style="grid-column:span 2">+<b>${C.BARRACKS_TROOPS}</b> troops every wave, from here</div>`
+          ? `<div style="grid-column:span 2">${t.squad ? `Raises <b>squad ${t.squad}</b>: <b>${C.squadCap(t.level)}</b> of ${C.SQUAD_MAX_TROOPS} troops` : 'Raises no squad (you have one for every squad already)'}</div>`
           : isT ? tradeInfo(t)
             : `<div>Damage <b>${st.damage.toFixed(0)}/s</b></div><div>Range <b>${st.range}</b></div>`}<div>Sight <b>${C.structSight(t.kind, t.level)}</b></div></div>
         <div class="btns">
-          ${isB ? '' : `<button id="sel-up" class="primary" data-tip="${upTip}">${maxed ? 'Max level' : `▲ Upgrade ${C.upgradeCost(t.kind, t.level)}g`}</button>`}
+          <button id="sel-up" class="primary" data-tip="${isB ? upB : upTip}">${maxed ? 'Max level' : `▲ ${isB ? `+${C.squadCap(t.level + 1) - C.squadCap(t.level)} troops` : 'Upgrade'} ${C.upgradeCost(t.kind, t.level)}g`}</button>
           <button id="sel-sell" data-tip="Sell for ${C.sellValue(t.kind, t.level)}g. Its land goes too. <kbd>Del</kbd>">Sell +${C.sellValue(t.kind, t.level)}g</button>
         </div>
         <div class="btns"><button id="sel-defend">🛡 Defend here</button></div>`;
-      if (!isB) $('sel-up').onclick = () => sendMsg({ t: 'upgrade', id: t.id });
+      $('sel-up').onclick = () => sendMsg({ t: 'upgrade', id: t.id });
       if (isT) bindTradePanel(t);
       $('sel-sell').onclick = () => sendMsg({ t: 'sell', id: t.id });
       $('sel-defend').onclick = () => orderAt({ k: 't', id: t.id });
     } else {
-      panel.innerHTML = `<h4>${img}${escapeHtml((players.get(t.owner) || { name: '?' }).name)}'s ${d.name}${t.kind === 'barracks' ? '' : ` · Lv ${t.level}`}</h4>
+      panel.innerHTML = `<h4>${img}${escapeHtml((players.get(t.owner) || { name: '?' }).name)}'s ${d.name} · Lv ${t.level}</h4>
         <div id="sel-info" class="stats"></div>${t.kind === 'trade' && isAlly(t.owner) ? `<div class="stats">${tradeInfo(t)}</div>` : ''}<div class="muted">Right-click it to attack. Destroying it knocks it down for +${C.TOWER_BOUNTY}g; the land stays theirs.</div>`;
     }
   }
@@ -360,7 +361,7 @@ function updateSelectionPanel(gold) {
     $('sel-info').innerHTML = t.progress < 1
       ? `<div style="grid-column:span 2">🔨 Being built: <b>${Math.round(t.progress * 100)}%</b>${t.owner === S.myId ? ' · your workers put it up' : ''}</div>`
       : `<div>HP <b>${t.hp}/${t.maxHp}</b></div><div>Guards <b>${garrison}</b></div>`;
-    if (t.owner === S.myId && t.kind !== 'barracks') $('sel-up').disabled = t.level >= C.maxLevel(t.kind) || gold < C.upgradeCost(t.kind, t.level);
+    if (t.owner === S.myId) $('sel-up').disabled = t.level >= C.maxLevel(t.kind) || gold < C.upgradeCost(t.kind, t.level);
   }
 }
 

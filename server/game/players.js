@@ -219,6 +219,7 @@ module.exports = {
       if (t.owner !== p.id) continue;
       if (conquered) {
         t.owner = killer.id;
+        if (t.kind === 'barracks') t.squad = this.freeBarracksSquad(killer.id, t); // raises one of their squads, if one is free
         towersTaken++;
         this.fx.push({ k: 'capture', x: t.x + 0.5, y: t.y + 0.5, o: killer.id });
       } else {

@@ -69,17 +69,20 @@
     RUIN_LIFETIME: 120, // seconds before an unclaimed ruin crumbles
 
     // ---- Squads and reinforcements
-    // You have up to MAX_SQUADS lasting squads, each with its own troop mix and stance. Every
-    // WAVE_INTERVAL seconds every fallen troop respawns (at the core and barracks) and marches out
-    // to rejoin its squad. The mixes together can use up to armySize() troop slots: one per
-    // LAND_PER_UNIT tiles of land (at least MIN_UNITS), plus BARRACKS_TROOPS per barracks.
+    // You have up to MAX_SQUADS lasting squads, each with its own troop mix and stance. Each squad is
+    // raised by a barracks: your 1st barracks raises squad 1, the 2nd squad 2 and so on. A barracks
+    // gives its squad BARRACKS_TROOPS troop slots per level (up to SQUAD_MAX_TROOPS); you start with
+    // no troops at all. Every WAVE_INTERVAL seconds every fallen troop respawns (at the core and
+    // barracks) and marches out to rejoin its squad.
     WAVE_INTERVAL: 20,
     FIRST_WAVE_DELAY: 6,
     MAX_SQUADS: 4,
     STANCES: ['aggressive', 'defensive', 'hold'],
-    BARRACKS_TROOPS: 4,
-    MAX_BARRACKS: 5,
+    BARRACKS_TROOPS: 5, // troop slots a barracks gives its squad per level...
+    SQUAD_MAX_TROOPS: 20, // ...up to this many (level 4)
+    MAX_BARRACKS: 4, // one per squad
     BARRACKS_COST_STEP: 150, // each extra barracks costs this much more than the last
+    BARRACKS_UPGRADE_STEP: 150, // a barracks upgrade costs this much per level it has
     // Squads stay together: on the march a squad moves at its slowest troop's pace, and troops
     // more than SQUAD_SPREAD (+ a little per troop) from the squad's centre wait for it or catch up.
     SQUAD_SPREAD: 1.4,
@@ -94,10 +97,7 @@
     STRUCT_BODY: 0.6,
     CORE_BODY: 0.85,
     CREEP_BODY: 0.55,
-    START_SQUAD: { medic: 1, archer: 2 }, // squad 1 to start with (the rest of the army as soldiers)
-    LAND_PER_UNIT: 10,
-    MIN_UNITS: 10,
-    MAX_UNITS: 45,
+    MAX_UNITS: 80, // (a cap on troops picked in one order)
     HOLD_LEASH: 6, // troops holding a spot fight enemies within this distance of it
     HUNT_ROLL_RANGE: 6, // when a hunted troop dies, hunters go after its squadmates within this range
     TROOP_AGGRO: 2,
@@ -245,8 +245,8 @@
         color: '#80deea', desc: 'Zaps enemy troops that come near. Build on your own land',
       },
       barracks: {
-        name: 'Barracks', key: 'R', cost: 250, wood: 80, hp: 1600, maxLevel: 1,
-        color: '#9fb4c7', desc: `+4 troops in every wave, spawning here. Build on your own land`,
+        name: 'Barracks', key: 'R', cost: 200, wood: 80, hp: 1600, maxLevel: 4,
+        color: '#9fb4c7', desc: 'Raises a squad: your 1st barracks raises squad 1, the 2nd squad 2 and so on. +5 troops for its squad per level (up to 20). Troops respawn here too',
       },
       trade: {
         name: 'Trade Post', key: 'T', cost: 220, wood: 60, hp: 900, maxLevel: 3,
@@ -355,6 +355,7 @@
 
   // Tower upgrades: cost to go from `level` to `level + 1`.
   CONFIG.upgradeCost = function (kind, level) {
+    if (kind === 'barracks') return CONFIG.BARRACKS_UPGRADE_STEP * level;
     return Math.round(CONFIG.defOf(kind).cost * level * CONFIG.latePrice(level));
   };
 
@@ -374,11 +375,9 @@
     return Math.round(CONFIG.UNITS[kind].cost * 2 * level * CONFIG.latePrice(level));
   };
 
-  // Army size: the troop slots a player's squads may use. One per LAND_PER_UNIT tiles of land (at
-  // least MIN_UNITS), plus BARRACKS_TROOPS for each barracks; never more than MAX_UNITS.
-  CONFIG.armySize = function (territory, barracks) {
-    const land = Math.max(CONFIG.MIN_UNITS, Math.floor(territory / CONFIG.LAND_PER_UNIT));
-    return Math.min(CONFIG.MAX_UNITS, land + CONFIG.BARRACKS_TROOPS * Math.min(barracks, CONFIG.MAX_BARRACKS));
+  // Troop slots a barracks of this level gives its squad.
+  CONFIG.squadCap = function (level) {
+    return Math.min(CONFIG.SQUAD_MAX_TROOPS, CONFIG.BARRACKS_TROOPS * level);
   };
 
   // Gold for the next tile of land, for a player who owns `territory` tiles.

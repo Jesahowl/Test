@@ -1,8 +1,8 @@
 'use strict';
 
-// The army: up to MAX_SQUADS lasting squads, each with its own troop mix, stance and order; troop
-// levels; orders; and reinforcements (every WAVE_INTERVAL seconds every fallen troop respawns and
-// marches out to rejoin its squad).
+// The army: up to MAX_SQUADS lasting squads, each raised by a barracks (5 troops per barracks level,
+// up to 20), with its own troop mix, stance and order; troop levels; orders; and reinforcements
+// (every WAVE_INTERVAL seconds every fallen troop respawns and marches out to rejoin its squad).
 // These methods are mixed into Game (see ../game.js), so `this` is the game.
 
 const { C, UNIT_KEYS } = require('./common');
@@ -10,10 +10,26 @@ const { C, UNIT_KEYS } = require('./common');
 const HOME = () => ({ type: 'defend', anchor: 0 });
 
 module.exports = {
-  // ---- army size and squad mixes
+  // ---- squads, their barracks and their mixes
 
+  // The barracks that raises squad q (its highest-level finished one), or null.
+  barracksOf(p, q) {
+    let best = null;
+    for (const t of this.towers.values()) {
+      if (t.owner === p.id && t.kind === 'barracks' && t.squad === q.num && !(t.progress < 1) && (!best || t.level > best.level)) best = t;
+    }
+    return best;
+  },
+
+  // Troop slots squad q may use: BARRACKS_TROOPS per level of its barracks (none without one).
+  squadCap(p, q) {
+    const b = this.barracksOf(p, q);
+    return b ? C.squadCap(b.level) : 0;
+  },
+
+  // Every squad's slots together.
   armySize(p) {
-    return C.armySize(p.territory, this.countBuilt(p.id, 'barracks'));
+    return p.squads.reduce((n, q) => n + this.squadCap(p, q), 0);
   },
 
   mixSlots(mix) {
@@ -25,67 +41,71 @@ module.exports = {
     return p.squads.reduce((n, q) => n + this.mixSlots(q.mix), 0);
   },
 
-  // Player p's lasting squads: numbered 1..MAX_SQUADS, each { id, num, mix, stance, order }.
-  // Squad 1 starts with START_SQUAD and soldiers for the rest of the army; the others start empty.
+  // The squad number a new barracks of pid's raises: the lowest one without a barracks (0: none).
+  freeBarracksSquad(pid, except = null) {
+    const used = new Set();
+    for (const t of this.towers.values()) if (t !== except && t.owner === pid && t.kind === 'barracks' && t.squad) used.add(t.squad);
+    for (let n = 1; n <= C.MAX_SQUADS; n++) if (!used.has(n)) return n;
+    return 0;
+  },
+
+  // Player p's lasting squads: numbered 1..MAX_SQUADS, each { id, num, mix, stance, order }. They
+  // all start empty: a squad gets troops when a barracks raises it.
   makeSquads(p) {
     p.squads = [];
     p.squadNum = new Map();
     for (let num = 1; num <= C.MAX_SQUADS; num++) {
       const id = this.nextId++;
       const mix = {};
-      for (const k of UNIT_KEYS) mix[k] = num === 1 ? C.START_SQUAD[k] || 0 : 0;
-      p.squads.push({ id, num, mix, stance: 'defensive', order: HOME() });
+      for (const k of UNIT_KEYS) mix[k] = 0;
+      p.squads.push({ id, num, mix, stance: 'defensive', order: HOME(), capSeen: 0 });
       p.squadNum.set(id, num);
     }
-    p.armySeen = 0; // army size the mixes were last fitted to (see fitArmy)
   },
 
   squadOf(p, id) {
     return p.squads.find((q) => q.id === id) || null;
   },
 
-  // Keep the mixes within the army size. When it grows (more land or barracks) the new slots join
-  // squad 1 as soldiers; when it shrinks, troops come off the last squads first (soldiers first).
+  // Keep each squad's mix within what its barracks gives it. When that grows (a new or upgraded
+  // barracks) the new slots join the squad as soldiers; when it shrinks (barracks lost), troops come
+  // off the mix, soldiers first.
   fitArmy(p) {
-    const size = this.armySize(p);
-    if (size > p.armySeen) {
-      const add = size - Math.max(p.armySeen, this.slotsUsed(p));
-      if (add > 0) p.squads[0].mix.soldier += add;
-    }
-    let over = this.slotsUsed(p) - size;
-    for (let i = p.squads.length - 1; i >= 0 && over > 0; i--) {
-      const mix = p.squads[i].mix;
+    for (const q of p.squads) {
+      const cap = this.squadCap(p, q);
+      if (cap > q.capSeen) {
+        const add = cap - Math.max(q.capSeen, this.mixSlots(q.mix));
+        if (add > 0) q.mix.soldier += add;
+      }
+      let over = this.mixSlots(q.mix) - cap;
       for (const k of ['soldier', ...UNIT_KEYS.filter((x) => x !== 'soldier')]) {
-        while (mix[k] > 0 && over > 0) {
-          mix[k]--;
+        while (q.mix[k] > 0 && over > 0) {
+          q.mix[k]--;
           over -= C.slotsOf(k);
         }
       }
+      q.capSeen = cap;
     }
-    p.armySeen = size;
   },
 
-  // One more (d = 1) or one fewer (d = -1) troop of `kind` in squad `sq`'s mix. With the army
-  // full, adding one moves it over from another squad (the biggest that has one, else a soldier from
-  // the biggest), and a living troop of that squad walks over to join straight away.
+  // One more (d = 1) or one fewer (d = -1) troop of `kind` in squad `sq`'s mix. A full squad swaps
+  // soldiers for the new troop instead.
   squadMix(pid, sq, kind, d) {
     const p = this.players.get(pid);
     if (!p || !p.alive) return 'Invalid order';
     const q = this.squadOf(p, sq);
     if (!q) return 'Invalid squad';
-    if (!C.UNITS[kind] || C.UNITS[kind].caravan) return 'Invalid troop type';
+    if (!C.UNITS[kind] || !UNIT_KEYS.includes(kind)) return 'Invalid troop type';
     if (d > 0) {
-      if (this.slotsUsed(p) + C.slotsOf(kind) > this.armySize(p)) {
-        const others = p.squads.filter((o) => o !== q).sort((a, b) => this.mixSlots(b.mix) - this.mixSlots(a.mix));
-        let from = others.find((o) => o.mix[kind] > 0);
-        let take = kind;
-        if (!from) {
-          from = others.find((o) => o.mix.soldier > 0);
-          take = 'soldier';
+      const cap = this.squadCap(p, q);
+      if (!cap) return `Squad ${q.num} has no barracks: build one to raise it`;
+      const need = this.mixSlots(q.mix) + C.slotsOf(kind) - cap;
+      if (need > 0) {
+        if (kind === 'soldier' || q.mix.soldier < need) {
+          return q.mix.soldier < need && kind !== 'soldier' ? `Squad ${q.num} is full: take a troop out first` : `Squad ${q.num} is full: upgrade its barracks for more troops`;
         }
-        if (!from || C.slotsOf(take) < C.slotsOf(kind)) return 'Your army is full: claim land or build a barracks for more troops';
-        from.mix[take]--;
-        if (take === kind) this.transferOne(p, from, q, kind);
+        q.mix.soldier -= need; // swap soldiers for it
+        for (let i = 0; i < need; i++) this.retireOne(p, q, 'soldier');
       }
       q.mix[kind]++;
     } else {
@@ -95,16 +115,10 @@ module.exports = {
     return null;
   },
 
-  // If squad `from` now has more living `kind` troops than its mix, one of them joins squad `to`.
-  transferOne(p, from, to, kind) {
-    const mine = [...this.units.values()].filter((u) => u.owner === p.id && u.sq === from.id && u.kind === kind);
-    if (mine.length <= from.mix[kind]) return;
-    const u = mine[mine.length - 1];
-    u.sq = to.id;
-    u.stance = to.stance;
-    const lead = [...this.units.values()].find((o) => o.owner === p.id && o.sq === to.id && o !== u);
-    if (lead) this.copyOrder(lead, u);
-    else this.applyOrder(u, this.orderValid(p.id, to.order) ? to.order : HOME());
+  // A squad now has more living `kind` troops than its mix: one of them is let go (it walks off).
+  retireOne(p, q, kind) {
+    const mine = [...this.units.values()].filter((u) => u.owner === p.id && u.sq === q.id && u.kind === kind);
+    if (mine.length > q.mix[kind]) this.units.delete(mine[mine.length - 1].id);
   },
 
   // A squad's stance: 'aggressive' (fights everything on the way), 'defensive' (marches past
@@ -304,8 +318,6 @@ module.exports = {
   spawnWave(p) {
     this.tidySquadOrders(p);
     this.spawnWorkers(p);
-    let room = this.armySize(p);
-    for (const u of this.units.values()) if (u.owner === p.id && !u.trade && !u.worker) room -= C.slotsOf(u.kind);
     const barracks = [...this.towers.values()].filter((t) => t.owner === p.id && t.kind === 'barracks' && !(t.progress < 1))
       .sort((a, b) => a.id - b.id).slice(0, C.MAX_BARRACKS);
     const spots = [null, ...barracks];
@@ -313,6 +325,9 @@ module.exports = {
     for (const q of p.squads) {
       const missing = this.missingOf(p, q);
       if (!missing.length) continue;
+      // never more troops in a squad than its barracks gives it (extra ones, e.g. defectors, count)
+      let room = this.squadCap(p, q);
+      for (const u of this.units.values()) if (u.owner === p.id && u.sq === q.id && !u.trade && !u.worker) room -= C.slotsOf(u.kind);
       const lead = [...this.units.values()].find((u) => u.owner === p.id && u.sq === q.id && !u.trade && !u.worker);
       for (const kind of missing) {
         if (room < C.slotsOf(kind)) break;

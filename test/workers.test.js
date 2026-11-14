@@ -15,7 +15,6 @@ function setup(seed) {
     p.spawnTime = -1000;
     p.nextWaveAt = Infinity;
     for (const q of p.squads) for (const k of Object.keys(q.mix)) q.mix[k] = 0; // no troops in the way
-    p.armySeen = 1e9;
   }
   g.update(0.05);
   return { g, a, b };

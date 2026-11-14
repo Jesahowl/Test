@@ -500,14 +500,13 @@ function drawBarracksSprite(t, x, y, s, now) {
   }
   ctx.restore();
   if (t.hp / t.maxHp < 0.3) drawSmoke(x, y, r, now, t.id);
-  // "+4" tag
-  if (s >= 12) {
-    // "+4" badge: troops this barracks adds to every wave
+  if (s >= 12 && t.squad) {
+    // badge: the squad this barracks raises, and how many troops it gives it
     const bx = x - r * 1.0;
     const by = y - r * 0.82;
     const fs = Math.max(11, Math.round(s * 0.36));
     ctx.font = `800 ${fs}px system-ui, sans-serif`;
-    const txt = `+${C.BARRACKS_TROOPS}`;
+    const txt = `${t.squad} · ${C.squadCap(t.level)}`;
     const w = ctx.measureText(txt).width + fs * 0.7;
     ctx.fillStyle = 'rgba(13, 17, 23, 0.85)';
     ctx.strokeStyle = 'rgba(255, 213, 79, 0.8)';

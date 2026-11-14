@@ -191,7 +191,7 @@ function applyState(msg) {
   if (S.selWall && !S.walls.has(S.selWall)) S.selWall = null;
   S.towers = merge(S.towers, msg.towers, (a, old) => {
     const t = { id: a[0], kind: KIND_KEYS[a[1]], x: a[2], y: a[3], owner: a[4], level: a[5], hp: a[6], maxHp: a[7], ruinOf: a[8] || '', partner: a[9] || 0, road: a[10] || null,
-      progress: (a[11] ?? 100) / 100 };
+      progress: (a[11] ?? 100) / 100, squad: a[12] || 0 };
     t.ruin = !t.owner;
     if (old) {
       // remember render state: when it was last hit, when it changed hands, where its turret points
