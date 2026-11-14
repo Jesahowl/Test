@@ -150,7 +150,7 @@ module.exports = {
       const foe = this.pickTarget(u, def, s.range, false);
       if (foe) this.unitFire(u, foe, s, def);
     }
-    if (dist(u.x, u.y, o.x + 0.5, o.y + 0.5) <= 1.4) {
+    if (dist(u.x, u.y, o.x + 0.5, o.y + 0.5) <= 1.8) {
       this.deliverCaravan(u, o);
       return;
     }

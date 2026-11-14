@@ -145,3 +145,21 @@ test('at most two trade posts each', () => {
   const [x, y] = spotFor(g, a);
   assert.match(g.build(a.id, x, y, 'trade'), /at most/);
 });
+
+test('caravans roll straight through a crowd of friendly troops at the trade post', () => {
+  const { g, a, b } = duel(60);
+  ally(g, a, b);
+  post(g, a);
+  const pb = post(g, b);
+  const guards = troops(g, b, 'soldier', 30, pb.x + 0.5, pb.y + 0.5);
+  g.order(b.id, guards.map((v) => v.id), { k: 't', id: pb.id }); // standing guard round the post
+  assert.ok(run(g, 15, () => caravans(g, a).length > 0));
+  const [u] = caravans(g, a);
+  let near = null;
+  run(g, 200, () => {
+    if (near === null && Math.hypot(u.x - pb.x - 0.5, u.y - pb.y - 0.5) < 5) near = g.time;
+    return !g.units.has(u.id);
+  });
+  assert.ok(!g.units.has(u.id), 'delivered');
+  assert.ok(g.time - near < 6, `the last 5 tiles took ${(g.time - near).toFixed(1)}s`);
+});

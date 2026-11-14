@@ -462,6 +462,9 @@ module.exports = {
     for (const u of this.units.values()) {
       for (const v of this.nearUnits(u.x, u.y, C.UNIT_SPACING)) {
         if (v.id <= u.id) continue;
+        // caravans roll straight through friendly and allied troops (and each other): only enemies
+        // can block their way
+        if ((u.trade || v.trade) && !this.hostile(u.owner, v.owner)) continue;
         // friends keep their full spacing; enemies may close in, so front lines meet
         const R = this.hostile(u.owner, v.owner) ? C.ENEMY_SPACING : C.UNIT_SPACING;
         let dx = v.x - u.x;
