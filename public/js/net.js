@@ -167,7 +167,7 @@ function applyState(msg) {
   };
 
   const np = merge(players, msg.players, (a, old) => {
-    const p = { id: a[0], name: a[1], hue: a[2], x: a[3], y: a[4], hp: a[5], maxHp: a[6], territory: a[7], kills: a[8], isBot: !!a[9],
+    const p = { id: a[0], name: a[1], hue: a[2], tone: a[13] || 0, x: a[3], y: a[4], hp: a[5], maxHp: a[6], territory: a[7], kills: a[8], isBot: !!a[9],
       shield: a[10] || 0, buff: a[11] || 0, allies: a[12] || [], hitAt: old ? old.hitAt : 0, trail: old ? old.trail : undefined, shotAt: old ? old.shotAt : 0 };
     if (old && p.hp < old.hp) p.hitAt = now;
     return p;

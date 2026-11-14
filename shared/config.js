@@ -136,6 +136,10 @@
     BOT_STRIKE_SHARE: 0.6, // share of its home troops a bot sends on each attack
     BOT_JUNGLE_SHARE: 0.35, // share of its home troops a bot sends to farm jungle camps
     MAX_PLAYERS: 24,
+    // Player colours: 12 well-separated hues, picked so players in a game are as far apart as
+    // possible; past 12 players the hues come round again in a paler tone, then a deeper one.
+    PLAYER_HUES: [0, 25, 48, 90, 130, 168, 195, 220, 255, 285, 315, 340],
+    HUE_ORDER: [0, 6, 3, 9, 1, 7, 4, 10, 2, 8, 5, 11], // most spread-out first
     MAX_ROOMS: 200, // private rooms open at once
     PRIVATE_DEFAULT_BOTS: 2, // bots in a new private room (the host can change it)
     PRIVATE_MAX_BOTS: 10,

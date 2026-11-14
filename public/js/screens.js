@@ -2,7 +2,7 @@
 
 import { sendMsg } from './net.js';
 import { clearSelection } from './overlay.js';
-import { S, $, C, players } from './state.js';
+import { S, $, C, hslOf, players } from './state.js';
 
 let toastTimer = null;
 
@@ -86,7 +86,7 @@ function showRoundOver(msg) {
   $('ro-sub').textContent = w ? 'Last core standing' : 'No cores survived';
   const rows = msg.standings.map((r) => `<tr class="${r.id === S.myId ? 'me' : ''}${r.place === 1 ? ' win' : ''}">
     <td>${r.left ? '–' : r.place === 1 ? '🏆' : `#${r.place}`}</td>
-    <td class="n"><span class="dot" style="background:hsl(${r.hue},75%,55%)"></span>${escapeHtml(r.name)}${r.isBot ? ' 🤖' : ''}${r.left ? ' <span style="color:#8b949e">(left)</span>' : ''}</td>
+    <td class="n"><span class="dot" style="background:${hslOf(r.hue, r.tone || 0)}"></span>${escapeHtml(r.name)}${r.isBot ? ' 🤖' : ''}${r.left ? ' <span style="color:#8b949e">(left)</span>' : ''}</td>
     <td>${fmtTime(r.survived)}</td><td>${r.coresDestroyed}</td><td>${r.towersDestroyed}</td><td>${r.kills}</td><td>${r.gold}g</td></tr>`).join('');
   $('ro-table').innerHTML = `<tr><th></th><th class="n">Player</th><th>Lasted</th><th>Cores</th><th>Towers</th><th>Kills</th><th>Gold</th></tr>${rows}`;
   $('roundover').classList.remove('hidden');

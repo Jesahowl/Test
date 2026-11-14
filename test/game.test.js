@@ -281,3 +281,21 @@ test("a building can't be sold while it's under attack", () => {
   for (let i = 0; i < 20 * (C.SELL_LOCK + 0.5); i++) g.update(0.05);
   assert.strictEqual(g.sell(b.id, t.id), null);
 });
+
+test('players get clearly different colours: 12 hues, then paler tones', () => {
+  const g = new Game({ botTarget: 0, rand: seeded(7) });
+  const ps = [];
+  for (let i = 0; i < 14; i++) ps.push(g.addPlayer(`P${i}`));
+  const first = ps.slice(0, 12).map((p) => `${p.hue}:${p.tone}`);
+  assert.strictEqual(new Set(first).size, 12);
+  assert.ok(ps.slice(0, 12).every((p) => p.tone === 0));
+  assert.strictEqual(ps[12].tone, 1);
+  // the first few are spread round the colour wheel
+  const gap = (a, b) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
+  assert.ok(gap(ps[0].hue, ps[1].hue) >= 150);
+  // a knocked-out player's colour goes to the next newcomer
+  g.killPlayer(ps[3], null);
+  const late = g.addPlayer('Late');
+  assert.strictEqual(late.hue, ps[3].hue);
+  assert.strictEqual(late.tone, 0);
+});

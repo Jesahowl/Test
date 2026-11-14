@@ -6,6 +6,23 @@
 const { C, UNIT_KEYS, dist, round2, sanitizeName } = require('./common');
 
 module.exports = {
+  // The colour slot furthest from everyone else's: the first free one in HUE_ORDER (starting at
+  // a random place each game), in the normal tone, then paler, then deeper.
+  pickColour() {
+    // (Math.random, not this.rand: colours shouldn't shift the seeded game sequence)
+    if (this.hueStart === undefined) this.hueStart = Math.floor(Math.random() * C.PLAYER_HUES.length);
+    const used = new Set();
+    for (const q of this.players.values()) if (q.alive) used.add(`${q.hue}:${q.tone}`);
+    const n = C.PLAYER_HUES.length;
+    for (let tone = 0; tone < 3; tone++) {
+      for (const k of C.HUE_ORDER) {
+        const hue = C.PLAYER_HUES[(k + this.hueStart) % n];
+        if (!used.has(`${hue}:${tone}`)) return { hue, tone };
+      }
+    }
+    return { hue: Math.floor(this.rand() * 360), tone: 0 };
+  },
+
   addPlayer(name, isBot = false) {
     if (this.players.size >= C.MAX_PLAYERS) return null;
     const pos = this.findSpawn();
@@ -23,7 +40,7 @@ module.exports = {
       name: sanitizeName(name),
       isBot,
       alive: true,
-      hue: Math.round((id * 137.508) % 360),
+      ...this.pickColour(),
       gold: C.START_GOLD,
       core: { x: pos.x, y: pos.y, hp: C.CORE_HP, maxHp: C.CORE_HP, cd: 0 },
       territory: 0,
@@ -47,7 +64,7 @@ module.exports = {
       bot: isBot ? { next: this.time + 1, nextOrder: this.time + 10 } : null,
     };
     this.players.set(id, p);
-    this.roster.set(id, { id, name: p.name, hue: p.hue, isBot, place: 0, left: false, survived: 0, peakTerritory: 0,
+    this.roster.set(id, { id, name: p.name, hue: p.hue, tone: p.tone, isBot, place: 0, left: false, survived: 0, peakTerritory: 0,
       kills: 0, towersDestroyed: 0, coresDestroyed: 0, gold: 0 });
     this.grid[this.idx(pos.x, pos.y)] = -id;
     this.claimStart(p);

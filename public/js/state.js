@@ -173,8 +173,16 @@ const toScreen = (wx, wy) => [(wx - cam.x) * scale() + canvas.width / 2, (wy - c
 
 const toWorld = (sx, sy) => [(sx - canvas.width / 2) / scale() + cam.x, (sy - canvas.height / 2) / scale() + cam.y];
 
-const hueOf = (pid) => (players.get(pid) || { hue: 0 }).hue;
 
-const colorOf = (pid, l = 55, a = 1) => (pid ? `hsla(${hueOf(pid)}, 75%, ${l}%, ${a})` : `rgba(140, 120, 90, ${a})`);
+// tone 0: the normal colour; 1: paler; 2: deeper (for games with more than 12 players)
+const hslOf = (hue, tone, l = 55, a = 1) => {
+  const sat = tone === 1 ? 45 : tone === 2 ? 90 : 75;
+  const lit = Math.max(8, Math.min(92, l + (tone === 1 ? 14 : tone === 2 ? -14 : 0)));
+  return `hsla(${hue}, ${sat}%, ${lit}%, ${a})`;
+};
+const colorOf = (pid, l = 55, a = 1) => {
+  const p = pid && players.get(pid);
+  return p ? hslOf(p.hue, p.tone, l, a) : pid ? hslOf(0, 0, l, a) : `rgba(140, 120, 90, ${a})`;
+};
 
-export { baseLift, hexSpot, towerInHex, HEX, FOG_PAD, FOG_RES, fogSoft, fogSoftCtx, $, C, CAMP_KEYS, CREEP_KEYS, KIND_KEYS, NTILES, TPX, UNIT_KEYS, Vision, cam, canvas, colorOf, ctx, explored, feed, fogCanvas, fogCtx, fogImg, grid, keys, mctx, mini, mouse, players, scale, selUnits, tctx, terr, terrCanvas, toScreen, toWorld, vis, withContext };
+export { hslOf, baseLift, hexSpot, towerInHex, HEX, FOG_PAD, FOG_RES, fogSoft, fogSoftCtx, $, C, CAMP_KEYS, CREEP_KEYS, KIND_KEYS, NTILES, TPX, UNIT_KEYS, Vision, cam, canvas, colorOf, ctx, explored, feed, fogCanvas, fogCtx, fogImg, grid, keys, mctx, mini, mouse, players, scale, selUnits, tctx, terr, terrCanvas, toScreen, toWorld, vis, withContext };

@@ -163,7 +163,7 @@ class Game {
     for (const p of this.players.values()) {
       players.push([p.id, p.name, p.hue, p.core.x, p.core.y, Math.max(0, Math.round(p.core.hp)), p.core.maxHp,
         p.territory, p.kills, p.isBot ? 1 : 0, this.isShielded(p) ? Math.ceil(C.SPAWN_SHIELD - (this.time - p.spawnTime)) : 0,
-        Math.max(0, Math.ceil(p.buffUntil - this.time)), this.alliesOf(p.id)]);
+        Math.max(0, Math.ceil(p.buffUntil - this.time)), this.alliesOf(p.id), p.tone]);
     }
     const towers = [];
     for (const t of this.towers.values()) {
