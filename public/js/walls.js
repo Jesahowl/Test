@@ -227,22 +227,21 @@ function drawRun(run, s, now, ghost) {
       ctx.setLineDash([]);
     }
   }
-  // where a wall meets a gate, its end is lit edge to edge (ground to top)
-  P.forEach(({ a, b, w }, k) => {
-    if (!w.gate) return;
-    const ends = [];
-    if (k > 0 && !P[k - 1].w.gate) ends.push([a, P[k - 1].h]);
-    else if (k === 0 && loop) ends.push([a, P[P.length - 1].h]);
-    if (k < P.length - 1 && !P[k + 1].w.gate) ends.push([b, P[k + 1].h]);
-    for (const [[x, y], hh] of ends) {
-      ctx.strokeStyle = colorOf(owner, 85);
-      ctx.lineWidth = Math.max(1.5, s * 0.06);
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x, y - hh);
-      ctx.stroke();
+  // both sides of a gate: a highlighted edge from the ground up to the wall top, lit like the top
+  // line, so the walls either side turn down into the doorway
+  for (const { a, b, h, w } of P) {
+    if (!w.gate) continue;
+    for (const [x, y] of [a, b]) {
+      for (const [width, color] of [[Math.max(5, s * 0.36), colorOf(owner, 70, 0.25)], [Math.max(2.5, s * 0.17), colorOf(owner, 80, 0.75)], [Math.max(1, s * 0.05), colorOf(owner, 90)]]) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y - h);
+        ctx.stroke();
+      }
     }
-  });
+  }
   ctx.restore();
 }
 
