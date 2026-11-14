@@ -146,11 +146,13 @@ class Game {
     this.buildUnitGrid();
     this.updateBots();
     for (const u of this.units.values()) {
-      u.moving = u.px !== undefined && Math.hypot(u.x - u.px, u.y - u.py) > 0.01; // (moved last tick)
       u.px = u.x; // where everyone stood, so walls can stop anyone stepping through them
       u.py = u.y;
     }
     this.updateUnits(dt);
+    // Walking this tick (on its own legs: being pushed apart doesn't count, or a troop nudged off
+    // its spot would be let through the crowd, walk back into it, and get pushed again: a wiggle).
+    for (const u of this.units.values()) u.moving = Math.hypot(u.x - u.px, u.y - u.py) > 0.01;
     this.updateStructures(dt);
     this.updateCreeps(dt);
     this.separateUnits();

@@ -92,8 +92,7 @@
     UNIT_SPACING: 0.95, // a little more than the widest troop icon, so icons never overlap
     ENEMY_SPACING: 0.55, // troops of different sides may stand this close (front lines meet)...
     MELEE_CLOSE: 0.7, // ...and melee troops close in to this distance from the troop they're fighting
-    SLOT_RING1: 1.2, // formation rings inside a hex (tiles from its centre): 6 troops...
-    SLOT_RING2: 2.05, // ...and 12 more
+    SLOT_SPACING: 1.0, // standing troops form up on an even grid of spots this far apart (> UNIT_SPACING)
     STRUCT_BODY: 0.6,
     CORE_BODY: 0.85,
     CREEP_BODY: 0.55,

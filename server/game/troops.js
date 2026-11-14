@@ -471,7 +471,12 @@ module.exports = {
     if (d <= stop) return true;
     // Close by, or no field available this tick: just walk straight there.
     // (with walls about, only the last stretch is walked straight: a wall could be in the way)
-    const f = d < (this.walls.size ? 1.5 : C.PATH_DIRECT_RANGE) ? null : this.getFieldTo(goal, u.owner);
+    // (also once it's as near the goal as its own spot is: its spot in a formation spilling round
+    // the goal is past the goal, and following the goal's field would pull it back and forth)
+    const ox = (goal % this.w) + 0.5;
+    const oy = Math.floor(goal / this.w) + 0.5;
+    const past = !this.walls.size && dist(u.x, u.y, ox, oy) <= dist(gx, gy, ox, oy) + 1;
+    const f = past || d < (this.walls.size ? 1.5 : C.PATH_DIRECT_RANGE) ? null : this.getFieldTo(goal, u.owner);
     if (!f) {
       this.stepToward(u, gx, gy, stop, speed, dt);
       return false;
@@ -535,22 +540,10 @@ module.exports = {
     return u.slotPos || this.players.get(u.owner).core;
   },
 
-  // ---- formations: troops standing still fill their hex evenly. A hex holds a troop in the
-  // middle, a ring of 6 round it and an outer ring of 12 (19 in all); a hex with a building keeps its
-  // middle free. More troops than fit spill into the next hexes.
-  hexSlots() {
-    if (!this.slotOffsets) {
-      const o = [[0, 0]];
-      for (let k = 0; k < 6; k++) o.push([C.SLOT_RING1 * Math.cos((k * Math.PI) / 3), C.SLOT_RING1 * Math.sin((k * Math.PI) / 3)]);
-      for (let k = 0; k < 12; k++) {
-        const a = ((15 + 30 * k) * Math.PI) / 180;
-        o.push([C.SLOT_RING2 * Math.cos(a), C.SLOT_RING2 * Math.sin(a)]);
-      }
-      this.slotOffsets = o;
-    }
-    return this.slotOffsets;
-  },
-
+  // ---- formations: troops standing still stand on an even triangular grid of spots laid over
+  // the whole map (SLOT_SPACING apart), so no two spots anywhere, even in neighbouring hexes, make
+  // troops overlap. A hex holds about 18; a squad fills its own hex from the middle out, then spills
+  // into the hexes round it.
   // The hex a standing troop forms up in: the hex it holds, the tower it guards, or (guarding the
   // core) one of the hexes round the core, a different one for each squad. -1: not standing still.
   postHex(u) {
@@ -573,9 +566,45 @@ module.exports = {
     return p.postRing[(num - 1) % p.postRing.length];
   },
 
-  // Give every standing troop its spot (u.slotPos) in its hex's formation.
+  // Every formation spot on the map, per hex, nearest the hex's middle first. Built once.
+  slotTable() {
+    if (this.slotsByHex) return this.slotsByHex;
+    const byHex = this.hex.hexes.map(() => []);
+    const sp = C.SLOT_SPACING;
+    const dy = sp * Math.sqrt(3) / 2;
+    for (let r = 0; r * dy + 0.5 < this.h - 0.4; r++) {
+      const y = 0.5 + r * dy;
+      for (let x = 0.5 + (r % 2 ? sp / 2 : 0); x < this.w - 0.4; x += sp) {
+        const h = this.hexAt(Math.floor(x), Math.floor(y));
+        if (h >= 0) byHex[h].push([x, y]);
+      }
+    }
+    for (const h of this.hex.hexes) byHex[h.i].sort((p, q) => Math.hypot(p[0] - h.cx, p[1] - h.cy) - Math.hypot(q[0] - h.cx, q[1] - h.cy));
+    this.slotsByHex = byHex;
+    return byHex;
+  },
+
+  // The formation spots of hex h that troops can use: none inside a building's body.
+  freeSlots(h) {
+    const key = this.structVersion;
+    if (this.freeSlotsKey !== key) {
+      this.freeSlotsKey = key;
+      this.freeSlotsCache = new Map();
+    }
+    let list = this.freeSlotsCache.get(h);
+    if (list) return list;
+    const all = this.slotTable()[h];
+    const solid = [];
+    for (const t of this.towers.values()) if (this.hexAt(t.x, t.y) === h) solid.push([t.x + 0.5, t.y + 0.5, C.STRUCT_BODY]);
+    for (const p of this.players.values()) if (p.alive && this.hexAt(p.core.x, p.core.y) === h) solid.push([p.core.x + 0.5, p.core.y + 0.5, C.CORE_BODY]);
+    list = solid.length ? all.filter(([x, y]) => solid.every(([sx, sy, r]) => Math.hypot(x - sx, y - sy) > r + 0.45)) : all;
+    this.freeSlotsCache.set(h, list);
+    return list;
+  },
+
+  // Give every standing troop its spot (u.slotPos) in its hex's formation. Squads fill their own
+  // hex first, then spill into the nearest hexes round it; each spot holds one troop of a side.
   assignSlots() {
-    const offs = this.hexSlots();
     const byHex = new Map();
     for (const u of this.units.values()) {
       u.slotPos = null;
@@ -583,33 +612,48 @@ module.exports = {
       const h = this.postHex(u);
       if (h < 0) continue;
       const key = `${u.owner}:${h}`;
-      if (!byHex.has(key)) byHex.set(key, { h, list: [] });
-      byHex.get(key).list.push(u);
+      if (!byHex.has(key)) byHex.set(key, { h, owner: u.owner, first: u.sq, home: !u.attack, list: [] });
+      const grp = byHex.get(key);
+      grp.list.push(u);
+      grp.first = Math.min(grp.first, u.sq);
     }
-    const bh = this.buildingHexes();
-    for (const { h, list } of byHex.values()) {
+    const taken = new Map(); // owner -> Set of spots in use
+    const groups = [...byHex.values()].sort((a, b) => a.owner - b.owner || a.first - b.first || a.h - b.h);
+    for (const { h, owner, home, list } of groups) {
+      if (!taken.has(owner)) taken.set(owner, new Set());
+      const used = taken.get(owner);
       list.sort((a, b) => a.sq - b.sq || a.id - b.id);
-      const hx = this.hex.hexes[h];
-      const free = bh[h] ? offs.slice(1) : offs; // keep the middle clear of a building
-      list.forEach((u, k) => {
-        let into = hx;
-        let slot = k;
-        if (k >= free.length) {
-          // spill into the next hexes round it
-          const extra = k - free.length;
-          into = this.hex.hexes[hx.n[Math.floor(extra / offs.length) % hx.n.length]];
-          slot = extra % offs.length;
-          u.slotPos = { x: into.cx + offs[slot][0], y: into.cy + offs[slot][1] };
-          return;
+      let k = 0;
+      // hexes outward from the post: the post, its neighbours, theirs...
+      const seen = new Set([h]);
+      let ring = [h];
+      // (troops guarding home only spill onto my own land: they don't step off it)
+      const mine = (j) => !home || this.hexOwner[j] === owner;
+      for (let depth = 0; depth < 6 && k < list.length && ring.length; depth++) {
+        for (const j of ring) {
+          for (const sp of this.freeSlots(j)) {
+            if (k >= list.length) break;
+            if (used.has(sp) || (home && this.terr[this.idx(Math.floor(sp[0]), Math.floor(sp[1]))] !== owner)) continue;
+            used.add(sp);
+            list[k++].slotPos = { x: sp[0], y: sp[1] };
+          }
         }
-        u.slotPos = { x: hx.cx + free[slot][0], y: hx.cy + free[slot][1] };
-      });
+        const next = [];
+        for (const j of ring) for (const n of this.hex.hexes[j].n) if (!seen.has(n) && mine(n)) { seen.add(n); next.push(n); }
+        ring = next;
+      }
+      // no spot left nearby: stand where it is rather than shove into the crowd
+      for (; k < list.length; k++) list[k].slotPos = { x: list[k].x, y: list[k].y, loose: true };
     }
   },
 
   // Push troops apart so none sit on top of each other (friend or foe), and out of buildings and
   // barbarians (but never push a defender off its own land). Each overlap is resolved part of the way per tick, so crowds settle smoothly.
   separateUnits() {
+    // In formation: at (or stepping onto) its own spot. Spots are SLOT_SPACING apart, so troops in
+    // formation never need pushing apart; one coming in to its spot past others is let through.
+    const member = (u) => u.slotPos && !u.slotPos.loose;
+    const inForm = (u) => member(u) && Math.abs(u.x - u.slotPos.x) + Math.abs(u.y - u.slotPos.y) < 1.2;
     const before = new Map();
     for (const u of this.units.values()) if (!u.attack) before.set(u, [u.x, u.y]);
     for (const u of this.units.values()) {
@@ -634,11 +678,18 @@ module.exports = {
           dx /= d;
           dy /= d;
         }
+        // A troop in formation holds its spot; one that isn't steps aside instead (otherwise the
+        // two would shove each other back and forth for ever).
+        const fu = !foes && inForm(u);
+        const fv = !foes && inForm(v);
+        // (both in formation, or one in it and the other on its way to its own spot: no pushing)
+        if ((fu || fv) && member(u) && member(v)) continue;
+        const pu = fu ? 0 : fv ? 2 : 1;
         const push = (R - Math.min(d, R)) * 0.45;
-        u.x -= dx * push;
-        u.y -= dy * push;
-        v.x += dx * push;
-        v.y += dy * push;
+        u.x -= dx * push * pu;
+        u.y -= dy * push * pu;
+        v.x += dx * push * (2 - pu);
+        v.y += dy * push * (2 - pu);
       }
     }
     const solid = []; // buildings and barbarians: troops step out of their way
@@ -928,7 +979,8 @@ module.exports = {
         // holding a hex: each troop heads for its own spot in the formation
         const gx = tgt.hold && u.slotPos ? u.slotPos.x : tgt.x;
         const gy = tgt.hold && u.slotPos ? u.slotPos.y : tgt.y;
-        const pace = this.squadPace(u, gx, gy, speed);
+        // (forming up at a held spot: no waiting for the squad, the formation spreads it out anyway)
+        const pace = tgt.hold ? speed : this.squadPace(u, gx, gy, speed);
         if (pace > 0) this.marchTo(u, tgt.goal, gx, gy, stop, pace, dt);
         continue;
       }
@@ -979,13 +1031,13 @@ module.exports = {
       // Stand guard in formation: walk to my spot in the squad's hex and stay there.
       const post = this.squadPost(u);
       const off = dist(u.x, u.y, post.x, post.y);
-      if (off <= 0.8) {
+      if (off <= 1.5) {
         this.stepToward(u, post.x, post.y, 0.02, speed * 0.6, dt); // the last bit, straight onto the spot
-      } else {
-        if (this.time >= u.idleUntil) {
-          this.planUnit(u, post.x, post.y);
-          u.idleUntil = this.time + 0.5;
-        }
+      } else if (this.time >= u.idleUntil) {
+        this.planUnit(u, post.x, post.y);
+        u.idleUntil = this.time + 0.5;
+        // (already in the tile nearest the spot: no path to walk, so just step straight there)
+        if (!u.dest) this.stepToward(u, post.x, post.y, 0.02, speed * 0.6, dt);
       }
     }
   },
