@@ -1,13 +1,14 @@
 // Sound: effects and music, all synthesised with the Web Audio API (no sound files).
 // - Effects follow what the server sends (arrows, sword hits, tower bolts, explosions, gold...):
 //   only things on screen are heard, a little quieter toward the edges and panned left/right, and
-//   each kind is rate-limited so a big battle doesn't turn into a wall of noise.
+//   quieter the further out you zoom (zoomed right out, a faint murmur). Each kind is rate-limited
+//   so a big battle doesn't turn into a wall of noise.
 // - Music: a slow, calm loop in A minor (pads, a soft bass and a sparse plucked melody) that grows
 //   drums and a busier melody while there's fighting in view, and settles again after.
 // - Settings (master / music / effects volume, mute) live in the Esc menu and in localStorage.
 // Browsers only allow sound after the player has clicked or pressed a key, so everything starts then.
 
-import { S, canvas, toScreen } from './state.js';
+import { S, cam, canvas, toScreen } from './state.js';
 
 const STORE = 'ts-sound';
 const settings = { master: 0.8, music: 0.5, sfx: 0.8, muted: false };
@@ -218,9 +219,17 @@ const GAP = { click: 40, ok: 80, err: 120, place: 60, order: 120, arrow: 45, sla
 const lastAt = new Map();
 let voices = 0;
 const MAX_VOICES = 18;
+let lastVol = 0; // (for checks) the volume the last effect played at
 
-// Play effect `kind` (now, or `delay` seconds from now). pos: { x, y } in tiles to place it on the
-// map (unheard if far off screen), or null for interface / always-heard sounds.
+// How loud the map sounds at this zoom: full when zoomed in, fading as you zoom out (default zoom
+// about 85%, all the way out about 15%).
+function zoomVolume() {
+  const f = Math.max(0, Math.min(1, (cam.zoom - 0.35) / (1.1 - 0.35)));
+  return 0.12 + 0.88 * Math.pow(f, 1.2);
+}
+
+// Play effect `kind` (now, or `delay` seconds from now). pos: { x, y } in tiles where it happens
+// on the map (heard only if that's on screen), or null for interface sounds.
 function play(kind, pos = null, delay = 0, f = {}) {
   if (!ac || settings.muted || !settings.sfx || !SFX[kind]) return;
   const now = performance.now();
@@ -231,15 +240,16 @@ function play(kind, pos = null, delay = 0, f = {}) {
     const [sx, sy] = toScreen(pos.x, pos.y);
     const w = canvas.width;
     const h = canvas.height;
-    const out = Math.max(0, -sx, sx - w) + Math.max(0, -sy, sy - h);
-    if (out > 150) return; // off screen
+    const edge = 24; // (just past the edge still counts: a troop half off screen)
+    if (sx < -edge || sy < -edge || sx > w + edge || sy > h + edge) return; // off screen: not heard
     const cx = sx / w - 0.5;
     const cy = sy / h - 0.5;
-    vol = Math.max(0.35, 1 - Math.hypot(cx, cy) * 0.9) * (out > 0 ? 0.5 : 1);
+    vol = Math.max(0.35, 1 - Math.hypot(cx, cy) * 0.9) * zoomVolume();
     pan = Math.max(-0.8, Math.min(0.8, cx * 1.4));
   }
   if (voices >= MAX_VOICES) return;
   lastAt.set(kind, now);
+  lastVol = vol;
   const t = ac.currentTime + delay + 0.01;
   const g = ac.createGain();
   g.gain.value = vol;
@@ -264,18 +274,14 @@ function onFx(f, delay) {
   const pos = f.x1 !== undefined ? { x: f.x1, y: f.y1 } : { x: f.x, y: f.y };
   if (COMBAT.has(f.k)) {
     const [sx, sy] = toScreen(pos.x, pos.y);
-    if (sx > -100 && sy > -100 && sx < canvas.width + 100 && sy < canvas.height + 100) heat += f.k === 'boom' ? 0.6 : 0.12;
+    if (sx > 0 && sy > 0 && sx < canvas.width && sy < canvas.height) heat += f.k === 'boom' ? 0.6 : 0.12;
   }
   const mine = f.o !== undefined && f.o === S.myId;
   switch (f.k) {
     case 'gold':
     case 'trade':
     case 'wave':
-      if (mine) play(f.k, null, delay); // my income and my troops coming back, wherever I'm looking
-      return;
-    case 'coreDown':
-    case 'capture':
-      play(f.k, null, delay); // big moments: heard everywhere
+      if (mine) play(f.k, pos, delay); // my income and my troops coming back (where it's on screen)
       return;
     case 'tshot':
       if (f.c) return; // chain jumps: the first bolt's sound covers them
@@ -393,6 +399,6 @@ function toggleMute() {
 }
 
 // (for checks) whether sound is running, voices playing now, and the music's tension
-const audioStatus = () => ({ state: ac ? ac.state : 'off', voices, tension: Math.round(tension * 100) / 100, step });
+const audioStatus = () => ({ state: ac ? ac.state : 'off', voices, lastVol: Math.round(lastVol * 100) / 100, tension: Math.round(tension * 100) / 100, step });
 
 export { audioStatus, onFx, play, settings, setSetting, toggleMute, start as startAudio };
