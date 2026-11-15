@@ -153,7 +153,7 @@
     }
     const want = 2 + Math.floor(hash(seed, 21, 21) * 3); // 2 to 4 lakes
     // candidates: well inland, the wetter the likelier, in a shuffled order
-    const cands = hex.hexes.filter((hx) => (far.get(hx.i) || 0) >= 4)
+    const cands = hex.hexes.filter((hx) => (far.get(hx.i) || 0) >= 3)
       .map((hx) => ({ hx, score: climate(seed, hx.cx, hx.cy, w, h).wet * 0.25 + hash(seed + 23, hx.q, hx.r) }))
       .sort((a, b) => b.score - a.score);
     const centres = [];
@@ -161,12 +161,12 @@
       if (centres.length >= want) break;
       if (centres.some((c) => Math.hypot(c.cx - hx.cx, c.cy - hx.cy) < Math.min(w, h) * 0.35)) continue; // (spread out)
       centres.push(hx);
-      const size = 1 + Math.floor(hash(seed + 24, hx.q, hx.r) * 4); // 1 to 4 hexes
+      const size = 1 + Math.floor(hash(seed + 24, hx.q, hx.r) * 3); // 1 to 3 hexes
       const lake = [hx.i];
       for (let k = 0; lake.length < size && k < 20; k++) {
         const from = hex.hexes[lake[Math.floor(hash(seed + 25, k, hx.i) * lake.length)]];
         const j = from.n[Math.floor(hash(seed + 26, k, hx.i) * from.n.length)];
-        if (!lake.includes(j) && (far.get(j) || 0) >= 3) lake.push(j);
+        if (!lake.includes(j) && (far.get(j) || 0) >= 2) lake.push(j);
       }
       for (const i of lake) lakes.add(i);
     }
@@ -343,7 +343,7 @@
     // or more mountain neighbours goes (blobs become lines); (2) an open hex with three or more
     // mountain neighbours loses some (no sheltered nooks); (3) ridges are at most MAX_RIDGE hexes,
     // with gaps cut in longer ones.
-    const MAX_RIDGE = 6;
+    const MAX_RIDGE = 4; // (hexes: about 24 tiles)
     const order = [...mountains].sort((a, b) => hash(seed + 62, a, 1) - hash(seed + 62, b, 1));
     const mNeighbours = (i) => hex.hexes[i].n.filter((j) => mountains.has(j));
     for (const i of order) if (mountains.has(i) && mNeighbours(i).length >= 3) mountains.delete(i);
@@ -426,7 +426,7 @@
         continue;
       }
       // gold veins: rare, nearly always in the foothills
-      if (hash(seed + 913, hx.q * 7 + 3, hx.r * 11 + 5) < (hill ? 0.04 : 0.001)) veins.add(hx.i);
+      if (hash(seed + 913, hx.q * 7 + 3, hx.r * 11 + 5) < (hill ? 0.08 : 0.002)) veins.add(hx.i); // (per hex: hexes are big, so a little likelier)
     }
     // (blocked: everywhere troops can't go, mountains and sea)
     const out = { rivers, mountains, ocean, oceanSides: sea.sides, lakes, blocked: new Set([...mountains, ...ocean, ...lakes]), forest, iron, veins, foothills };

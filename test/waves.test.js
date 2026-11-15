@@ -424,19 +424,22 @@ test('right-clicking the ground sends troops to hold that spot', () => {
   const spot = { x: a.core.x + 12, y: a.core.y + 3 };
   assert.strictEqual(g.order(a.id, squad.map((u) => u.id), { k: 'p', id: g.idx(spot.x, spot.y) }), null);
   run(g, 15);
-  for (const u of squad) assert.ok(Math.hypot(u.x - spot.x - 0.5, u.y - spot.y - 0.5) < 2.5, 'arrived and holding');
+  // (they hold the spot's hex, standing in its middle)
+  const held = g.hex.hexes[g.hexAt(spot.x, spot.y)];
+  const near = (u, r) => Math.hypot(u.x - held.cx, u.y - held.cy) < r;
+  for (const u of squad) assert.ok(near(u, 2.5), 'arrived and holding');
   // an enemy walks up: they fight it, then return to the spot
   const [foe] = troops(g, b, 'soldier', 1, spot.x + 3, spot.y + 0.5);
   foe.attack = { k: 'p', id: g.idx(spot.x + 3, spot.y) }; // it holds its own spot nearby
   run(g, 20, () => !g.units.has(foe.id));
   assert.ok(!g.units.has(foe.id), 'enemy near the spot is dealt with');
   run(g, 5);
-  for (const u of squad.filter((v) => g.units.has(v.id))) assert.ok(Math.hypot(u.x - spot.x - 0.5, u.y - spot.y - 0.5) < 3);
+  for (const u of squad.filter((v) => g.units.has(v.id))) assert.ok(near(u, 3.5));
   // an enemy far from the spot is ignored
   const [far] = troops(g, b, 'soldier', 1, spot.x + 9, spot.y + 0.5);
   far.attack = { k: 'c', id: b.id };
   run(g, 3, () => { far.x = spot.x + 9; far.y = spot.y + 0.5; return false; });
-  for (const u of squad.filter((v) => g.units.has(v.id))) assert.ok(Math.hypot(u.x - spot.x - 0.5, u.y - spot.y - 0.5) < 3, 'stayed put');
+  for (const u of squad.filter((v) => g.units.has(v.id))) assert.ok(near(u, 3.5), 'stayed put');
   assert.match(g.order(a.id, null, { k: 'p', id: -5 }), /Invalid/);
 });
 
@@ -460,6 +463,12 @@ test('stances: aggressive squads fight on the way, hold marches past and never c
   const { g, a, b } = duel(26, { rivers: false }); // (open ground between them)
   assert.strictEqual(a.squads[0].stance, 'defensive');
   assert.match(g.squadStance(a.id, a.squads[0].id, 'berserk'), /Invalid/);
+  // (no barbarians about: only the one enemy beside the path)
+  g.creeps.clear();
+  for (const c of g.camps) {
+    c.alive = false;
+    c.respawnAt = Infinity;
+  }
   const trial = (stance) => {
     for (const u of [...g.units.values()]) g.units.delete(u.id);
     g.squadStance(a.id, a.squads[0].id, stance);
@@ -643,7 +652,8 @@ test('home troops react to enemies within 1 tile of their border, not further ou
       for (let x = 0; x < g.w - 6; x++) {
         if (g.terr[g.idx(x, y)] !== a.id || g.terr[g.idx(x + 1, y)] === a.id) continue;
         let ok = true;
-        for (let k = 1; k <= gap + 2; k++) if (g.terr[g.idx(x + k, y)]) ok = false;
+        // (empty ground out there, on the rows above and below too: a straight stretch of border)
+        for (let k = 1; k <= gap + 2; k++) for (let dy = -2; dy <= 2; dy++) if (y + dy < 0 || y + dy >= g.h || g.terr[g.idx(x + k, y + dy)]) ok = false;
         if (ok) return [x + 1 + gap - 0.5, y + 0.5];
       }
     }
@@ -914,4 +924,44 @@ test('pillage: several pillaging squads go for different camps', () => {
   run(g, 10);
   const later = a.squads.slice(0, 3).map((q) => q.order.target && q.order.target.id);
   assert.strictEqual(new Set(later).size, 3, `still different (${later})`);
+});
+
+test('formations: one troop to a tile, 5-wide ranks in the middle of the hex, pushing up to face enemies', () => {
+  const { g, a, b } = duel(41);
+  for (const u of [...g.units.values()]) g.units.delete(u.id);
+  g.creeps.clear();
+  for (const c of g.camps) {
+    c.alive = false;
+    c.respawnAt = Infinity;
+  }
+  // an open hex well away from both bases, and the one east of it
+  const pick = g.hex.hexes.find((h) => h.full && h.cx > 60 && h.cx < 140 && h.cy > 30 && h.cy < 70
+    && !g.hexOwner[h.i] && h.n.length === 6 && [h, ...h.n.map((j) => g.hex.hexes[j])].every((x) => !g.mountains.has(x.i) && !g.hexOwner[x.i]));
+  const east = g.hex.hexes[pick.n.find((j) => Math.abs(g.hex.hexes[j].cy - pick.cy) < 0.1 && g.hex.hexes[j].cx > pick.cx)];
+  const sol = troops(g, a, 'soldier', 10, pick.cx - 1, pick.cy);
+  const arc = troops(g, a, 'archer', 10, pick.cx - 1, pick.cy + 1);
+  const squad = [...sol, ...arc];
+  for (const u of squad) u.sq = sol[0].sq;
+  g.order(a.id, squad.map((u) => u.id), { k: 'p', id: pick.centre });
+  run(g, 12);
+  // holding: every troop on its own tile, all in the hex, in rows 5 wide
+  const tiles = new Set(squad.map((u) => `${Math.floor(u.slotPos.x)},${Math.floor(u.slotPos.y)}`));
+  assert.strictEqual(tiles.size, 20, 'one troop to a tile');
+  assert.ok(squad.every((u) => u.slotPos.x % 1 === 0.5 && u.slotPos.y % 1 === 0.5), 'standing in the middle of their tiles');
+  assert.ok(squad.every((u) => g.hexAt(Math.floor(u.slotPos.x), Math.floor(u.slotPos.y)) === pick.i), 'all inside the held hex');
+  assert.ok(squad.every((u) => !u.slotPos.engaged));
+  const xs = new Set(squad.map((u) => u.slotPos.x));
+  const ys = new Set(squad.map((u) => u.slotPos.y));
+  assert.ok(Math.min(xs.size, ys.size) === 4 && Math.max(xs.size, ys.size) === 5, 'ranks 5 wide, 4 deep');
+  // an enemy squad holds the hex to the east: both push up to the shared edge, soldiers in front
+  const foes = troops(g, b, 'soldier', 10, east.cx + 1, east.cy);
+  for (const u of foes) u.hp = u.maxHp = 1e6;
+  g.order(b.id, foes.map((u) => u.id), { k: 'p', id: east.centre });
+  g.update(0.05);
+  assert.ok(squad.every((u) => u.slotPos.engaged), 'engaged');
+  const front = (list) => list.reduce((s, u) => s + u.slotPos.x, 0) / list.length;
+  assert.ok(front(sol) > pick.cx + 0.8, 'soldiers pushed up toward the enemy');
+  assert.ok(front(sol) > front(arc) + 1, 'archers behind the soldiers');
+  assert.ok(squad.every((u) => g.hexAt(Math.floor(u.slotPos.x), Math.floor(u.slotPos.y)) === pick.i), 'still in their own hex');
+  assert.ok(foes.every((u) => u.slotPos.x < east.cx), 'the enemy pushes up too');
 });

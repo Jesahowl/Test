@@ -668,7 +668,7 @@ function drawSite(t, x, y, s, now, draw) {
 }
 
 function drawTowers(dt) {
-  const s = scale();
+  const s = scale() * C.STRUCT_SCALE;
   const now = performance.now();
   const hoverT = towerInHex(mouse.wx, mouse.wy);
   const hover = hoverT ? hoverT.id : 0;

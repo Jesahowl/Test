@@ -24,7 +24,7 @@ function allSquads() {
   for (const [id, num, stance, mix, order, cap, formation] of (S.me && S.me.squads) || []) {
     const m = Object.fromEntries(UNIT_KEYS.map((k, i) => [k, mix[i] || 0]));
     const slots = UNIT_KEYS.reduce((n, k) => n + m[k] * C.slotsOf(k), 0);
-    by.set(id, { id, num, stance, formation: formation || 'spread', mix: m, size: mix.reduce((a, b) => a + b, 0), slots, cap: cap || 0, order, units: [], kinds: {}, votes: new Map() });
+    by.set(id, { id, num, stance, formation: formation || 'rect', mix: m, size: mix.reduce((a, b) => a + b, 0), slots, cap: cap || 0, order, units: [], kinds: {}, votes: new Map() });
   }
   for (const u of S.units.values()) {
     const q = u.owner === S.myId && by.get(u.sq);

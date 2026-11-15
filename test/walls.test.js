@@ -299,7 +299,7 @@ test('mountains: impassable ridges; every map stays connected; iron and gold sit
   assert.strictEqual(inside, 0, 'never set foot on the mountain');
 });
 
-test('mountains stay thin and spread out (no fortresses), and never near a base\'s starting land', () => {
+test('mountains stay thin and spread out (no fortresses), and never in a base\'s starting land', () => {
   for (let seed = 1; seed <= 20; seed++) {
     const g = new Game({ botTarget: 0, rand: seeded(seed * 17), rounds: true });
     const m = g.layout.mountains; // (g.mountains also has the sea)
@@ -314,7 +314,7 @@ test('mountains stay thin and spread out (no fortresses), and never near a base\
         n++;
         for (const j of g.hex.hexes[k].n) if (m.has(j) && !seen.has(j)) { seen.add(j); stack.push(j); }
       }
-      assert.ok(n <= 6, `seed ${seed}: a ridge of ${n} hexes`);
+      assert.ok(n <= 4, `seed ${seed}: a ridge of ${n} hexes`);
     }
     for (const h of g.hex.hexes) {
       const round = h.n.filter((j) => m.has(j)).length;
@@ -324,9 +324,8 @@ test('mountains stay thin and spread out (no fortresses), and never near a base\
       const p = g.addPlayer(`P${k}`, true);
       assert.ok(p, 'everyone finds a spot');
       const core = g.hex.hexes[g.hexAt(p.core.x, p.core.y)];
-      const near = new Set([core.i, ...core.n]);
-      for (const j of core.n) for (const x of g.hex.hexes[j].n) near.add(x);
-      assert.ok(![...near].some((j) => g.mountains.has(j)), `seed ${seed}: no mountain (or sea) within two rings of a base`);
+      const near = new Set([core.i, ...core.n]); // (the starting land)
+      assert.ok(![...near].some((j) => g.mountains.has(j)), `seed ${seed}: no mountain (or sea) in a base's starting land`);
     }
   }
 });

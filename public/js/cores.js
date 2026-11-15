@@ -2,14 +2,14 @@
 
 import { isAlly } from './diplomacy.js';
 import { label, onScreen } from './render.js';
-import { S, baseLift, colorOf, ctx, hexSpot, mouse, scale, toScreen } from './state.js';
+import { S, C, baseLift, colorOf, ctx, hexSpot, mouse, scale, toScreen } from './state.js';
 import { drawCracks, drawCrystal, drawSmoke, polygon, runeEllipse, structBar } from './structures.js';
 
 // A core: a great crystal in the player's colour floating over a stone dais on a rune circle,
 // with small shards orbiting it. It cracks and smokes as it takes damage, and flashes when hit;
 // it zaps nearby enemy troops with lightning like the towers.
 function drawCores(dt) {
-  const s = scale();
+  const s = scale() * C.STRUCT_SCALE;
   const now = performance.now();
   for (const p of S.coresView.values()) {
     const spot = hexSpot(p.x, p.y);

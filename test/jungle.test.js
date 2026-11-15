@@ -101,7 +101,9 @@ test('troops sent to a camp that is still respawning wait there, then clear it w
   g.update(0.05);
   assert.ok(!camp.alive && camp.respawnAt > g.time);
   camp.respawnAt = g.time + 40;
-  const squad = troops(g, a, 'soldier', 6, a.core.x + 0.5, a.core.y + 2.5, 3);
+  // (a cleared camp comes back somewhere new: the squad starts a little way from that spot)
+  const sx = camp.x > g.w / 2 ? camp.x - 12 : camp.x + 12;
+  const squad = troops(g, a, 'soldier', 6, sx, camp.y + 0.5, 3);
   assert.strictEqual(g.order(a.id, squad.map((u) => u.id), { k: 'j', id: camp.id }), null);
   run(g, 38);
   assert.ok(squad.every((u) => u.attack && u.attack.k === 'j'), 'still waiting for the camp');

@@ -96,6 +96,9 @@ function hexSpot(tx, ty) {
 // How far above its base (in tiles) a building's drawing is anchored: drawn this much higher, its
 // base (rune circle) sits right on the hex centre.
 function baseLift(kind, level = 1) {
+  return baseLift0(kind, level) * C.STRUCT_SCALE;
+}
+function baseLift0(kind, level) {
   if (kind === 'core') return 0.375;
   if (kind === 'barracks' || kind === 'trade' || kind === 'workshop') return 0.576;
   if (kind === 'tower') return 0.396 * (1 + 0.07 * (level - 1));

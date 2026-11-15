@@ -87,10 +87,9 @@ module.exports = {
       if (this.grid[k] !== 0 || this.hexOwner[hx.i] || hx.n.some((j) => this.hexOwner[j])) continue;
       if (this.riverHexes.has(hx.i) || hx.n.some((j) => this.riverHexes.has(j))) continue; // no river through a new base
       if (this.ore.has(hx.i) || this.veins.has(hx.i)) continue; // nor a core on an ore deposit or gold vein
-      // nor with mountains in or round the starting land (two rings out: no ready-made fortress)
-      const near = new Set([hx.i, ...hx.n]);
-      for (const j of hx.n) for (const k of this.hex.hexes[j].n) near.add(k);
-      if ([...near].some((j) => this.mountains.has(j))) continue;
+      // nor with mountains (or water) in the starting land: the core's hex and the six round it
+      // (with the bigger hexes that's as much room as two rings used to be: no ready-made fortress)
+      if (hx.n.length < 6 || [hx.i, ...hx.n].some((j) => this.mountains.has(j))) continue;
       if (this.camps.some((c) => c.alive && dist(x, y, c.x, c.y) < 7)) continue;
       let score = Infinity; // distance to the nearest base (buildings count as a bit closer than they are)
       for (const o of others) score = Math.min(score, dist(x, y, o.x, o.y) - o.w);

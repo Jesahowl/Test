@@ -58,7 +58,7 @@ module.exports = {
       const id = this.nextId++;
       const mix = {};
       for (const k of UNIT_KEYS) mix[k] = 0;
-      p.squads.push({ id, num, mix, stance: 'defensive', formation: 'spread', order: HOME(), capSeen: 0 });
+      p.squads.push({ id, num, mix, stance: 'defensive', formation: 'rect', order: HOME(), capSeen: 0 });
       p.squadNum.set(id, num);
     }
   },
@@ -136,8 +136,7 @@ module.exports = {
     return null;
   },
 
-  // A squad's formation when it stands: 'spread' (filling its hex evenly) or 'rect' (an evenly
-  // spaced rectangle facing out).
+  // A squad's formation when it stands: 'rect' (ranks, the default) or 'spread' (through its hex).
   squadFormation(pid, sq, formation) {
     const p = this.players.get(pid);
     if (!p || !p.alive) return 'Invalid order';

@@ -9,6 +9,9 @@
 import { S, C, HEX, ctx, players } from './state.js';
 
 const PLAINS = '#18211d';
+// things placed round a hex (trees, rocks, peaks) were laid out for hexes 2.5 tiles across: spread
+// them to fit the real size
+const HK = C.HEX_R / 2.5;
 const TREE_DARK = '#22422b';
 const TREE_LIGHT = '#346343';
 const TREE_SHADOW = 'rgba(0,0,0,0.35)';
@@ -314,7 +317,7 @@ function buildGround(seed) {
     // now and then a single small prop for the biome (most open hexes stay plain)
     const b = biomeOf(cl);
     if (hash(seed, h.i, 2100) > 0.25) continue;
-    const spots = [[0, 0.3], [-1.05, -0.6], [1.05, -0.5], [-0.85, 0.95], [0.95, 1.0]];
+    const spots = [[0, 0.3], [-1.05, -0.6], [1.05, -0.5], [-0.85, 0.95], [0.95, 1.0]].map(([x, y]) => [x * HK, y * HK]);
     const n = 1;
     const list = [];
     for (let k = 0; k < n; k++) {
@@ -783,9 +786,10 @@ function build(seed) {
   for (const i of L.mountains) {
     const h = HEX.hexes[i];
     const cold = climate(seed, h.cx, h.cy, C.MAP_W, C.MAP_H).temp < 0.35;
-    const spots = [[-0.75, -0.35, 1.25], [0.8, -0.15, 1.1], [0.05, 0.7, 1.35]];
+    const spots = [[-0.75, -0.35, 1.25], [0.8, -0.15, 1.1], [0.05, 0.7, 1.35], [-0.2, -1.05, 1.0]].map(([x, y, z]) => [x * HK, y * HK, z * (1 + (HK - 1) * 0.6)]);
     spots.forEach(([dx, dy, sz], k) => {
       if (k === 1 && hash(seed, i, 3100) < 0.3) return;
+      if (k === 3 && hash(seed, i, 3150) < 0.5) return;
       const pk = peak(h.cx + dx + (hash(seed, i * 3 + k, 3200) - 0.5) * 0.4, h.cy + dy + (hash(seed, i * 3 + k, 3300) - 0.5) * 0.3, sz * (0.85 + hash(seed, i, 3400 + k) * 0.3), cold ? 1.25 : 0.9);
       pk.i = i;
       peaks.push(pk);
@@ -813,7 +817,7 @@ function build(seed) {
     for (let k = 1; k < 6; k++) oreFill.lineTo(cs[k][0], cs[k][1]);
     oreFill.closePath();
     // five rocks; `rank` is the order they're mined away in
-    const rocks = [[0, 0.05], [-1.0, -0.6], [0.95, -0.7], [-0.9, 0.75], [1.0, 0.7]].map(([dx, dy], k) => {
+    const rocks = [[0, 0.05], [-1.0, -0.6], [0.95, -0.7], [-0.9, 0.75], [1.0, 0.7]].map(([dx, dy]) => [dx * HK, dy * HK]).map(([dx, dy], k) => {
       const r = oreRock(h.cx + dx + (hash(seed, h.i * 5 + k, 31) - 0.5) * 0.5, h.cy + dy + (hash(seed, h.i, 131 + k) - 0.5) * 0.4, 0.42 + hash(seed, k + 9, h.i) * 0.18);
       r.cut = hash(seed, h.i, 600 + k);
       r.specks = [0, 1].map((j) => [r.x + (hash(seed, h.i * 3 + k, 700 + j) - 0.5) * r.s, r.y + (hash(seed, h.i * 3 + k, 800 + j) - 0.6) * r.s * 0.6]);
@@ -831,7 +835,7 @@ function build(seed) {
     veinFill.moveTo(cs[0][0], cs[0][1]);
     for (let k = 1; k < 6; k++) veinFill.lineTo(cs[k][0], cs[k][1]);
     veinFill.closePath();
-    const rocks = [[-1.05, -0.75, 0.55], [1.0, -0.6, 0.48], [0.95, 0.85, 0.52], [-0.95, 0.9, 0.42]].map(([dx, dy, s]) => {
+    const rocks = [[-1.05, -0.75, 0.55], [1.0, -0.6, 0.48], [0.95, 0.85, 0.52], [-0.95, 0.9, 0.42]].map(([dx, dy, s]) => [dx * HK, dy * HK, s * 1.15]).map(([dx, dy, s]) => {
       const r = oreRock(h.cx + dx, h.cy + dy, s);
       r.flecks = [0, 1, 2].map((j) => [r.x + (hash(seed, h.i * 4 + j, 950) - 0.5) * r.s * 1.2, r.y + (hash(seed, h.i * 4 + j, 960) - 0.65) * r.s * 0.7]);
       return r;
@@ -849,7 +853,9 @@ function build(seed) {
     const cl = climate(seed, h.cx, h.cy, C.MAP_W, C.MAP_H);
     const snowy = cl.temp < 0.3;
     const autumn = !snowy && cl.temp > 0.45 && biomeOf(cl) !== 'taiga';
-    const trees = [[0, 0], [-1.05, -0.65], [1.05, -0.6], [-0.95, 0.8], [1.0, 0.85]].map(([dx, dy], k) => {
+    // ten trees, two to each of the five steps the hex is chopped down in
+    const trees = [[0, 0], [-1.05, -0.65], [1.05, -0.6], [-0.95, 0.8], [1.0, 0.85], [0.05, -1.25], [-0.05, 1.3], [-1.75, 0.05], [1.75, 0.1], [-0.5, -0.05]]
+      .map(([dx, dy]) => [dx * HK, dy * HK]).map(([dx, dy], k) => {
       const tx = h.cx + dx + (hash(seed, h.i * 7 + k, 11) - 0.5) * 0.6;
       const ty = h.cy + dy + (hash(seed, h.i, 91 + k) - 0.5) * 0.5 + 0.2;
       const ts = 0.38 + hash(seed, k, h.i) * 0.14;
@@ -860,7 +866,7 @@ function build(seed) {
       return t;
     });
     const order = [...trees].sort((a, b) => a.cut - b.cut);
-    order.forEach((t, n) => { t.rank = n; }); // trees with rank >= wood left are gone
+    order.forEach((t, n) => { t.rank = Math.floor((n * 5) / order.length); }); // trees with rank >= wood left are gone
     trees.sort((a, b) => a.y - b.y);
     forests.push({ i: h.i, x: h.cx, y: h.cy, trees });
   }

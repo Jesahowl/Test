@@ -14,8 +14,8 @@
     START_GOLD: 200,
     START_WOOD: 120,
     START_IRON: 20, // iron: mined from ore deposits, pays (with gold) for troop upgrades
-    IRON_ORE: 160, // iron in an ore deposit hex (it builds back up very slowly once mined)
-    IRON_REGROW: 0.12, // ...this much a second
+    IRON_ORE: 320, // iron in an ore deposit hex (it builds back up very slowly once mined)
+    IRON_REGROW: 0.24, // ...this much a second
     MINE_RATE: 0.5, // iron a second one worker mines...
     IRON_CARRY: 6, // ...until it carries this much home
     MINE_WORKERS: 2, // at most this many mining one deposit
@@ -42,16 +42,16 @@
     REPAIR_RATE: 30, // HP a second one worker repairs...
     REPAIR_GOLD_PER_HP: 0.05, // ...for this much gold per HP
     REPAIR_WORKERS: 2, // at most this many on one damaged building
-    FOREST_WOOD: 200, // wood in a forest hex (it regrows slowly once chopped)
-    FOREST_REGROW: 0.4, // wood a second
+    FOREST_WOOD: 400, // wood in a forest hex (it regrows slowly once chopped)
+    FOREST_REGROW: 0.8, // wood a second
     CHOP_RATE: 0.8, // wood a second one worker chops...
     WORKER_CARRY: 10, // ...until it carries this much back to the core or a workshop
-    TREE_WORKERS: 2, // at most this many chopping one forest hex
+    TREE_WORKERS: 3, // at most this many chopping one forest hex
     FARM_GOLD: 0.3, // gold a second each farming worker earns
     WORKER_BOUNTY: 20, // gold for killing an enemy worker (plus any wood it carried)
     BASE_INCOME: 1.5, // gold per second
-    INCOME_PER_TILE: 0.015, // extra gold per second for each owned tile...
-    INCOME_FULL_TILES: 400, // ...for the first this many tiles; beyond that each tile pays
+    INCOME_PER_TILE: 0.0075, // extra gold per second for each owned tile...
+    INCOME_FULL_TILES: 800, // ...for the first this many tiles; beyond that each tile pays
     INCOME_LATE_SHARE: 0.4, // this share of it (so a huge empire doesn't snowball out of reach)
 
     // The core: your base. It shoots like a tower; if it falls, you're out.
@@ -59,12 +59,13 @@
     CORE_RANGE: 5,
     CORE_DAMAGE: 60,
     CORE_RATE: 1,
-    CORE_CLAIM: 6, // how far apart bases must be (a new core starts with its hex and the six around it)
-    HEX_R: 2.5, // hex radius in tiles: land, buildings and borders work in hexes this big (about 16 tiles each)
+    CORE_CLAIM: 8.5, // how far apart bases must be (a new core starts with its hex and the six around it)
+    HEX_R: 3.5, // hex radius in tiles: land, buildings and borders work in hexes this big (about 32 tiles each:
+    // room for a full squad of 20 standing one to a tile, in 5-wide ranks)
     // Rival buildings must keep ENEMY_BUILD_GAP tiles apart.
-    ENEMY_BUILD_GAP: 4.6, // no building in a hex next to an enemy building
+    ENEMY_BUILD_GAP: 6.4, // no building in a hex next to an enemy building
     CORE_KILL_BOUNTY: 250, // plus all of the victim's gold
-    SPAWN_MARGIN: 10, // cores spawn at least this far from the map edge
+    SPAWN_MARGIN: 12, // cores spawn at least this far from the map edge
     SPAWN_CANDIDATES: 300, // random spots tried per spawn; the one furthest from other bases wins
     SPAWN_SHIELD: 120, // seconds after spawning during which your core and towers can't be damaged
 
@@ -101,11 +102,13 @@
     UNIT_SPACING: 0.95, // a little more than the widest troop icon, so icons never overlap
     ENEMY_SPACING: 0.55, // troops of different sides may stand this close (front lines meet)...
     MELEE_CLOSE: 0.7, // ...and melee troops close in to this distance from the troop they're fighting
-    FORMATIONS: ['spread', 'rect'], // how a standing squad forms up: filling its hex, or a rectangle (F)
-    RECT_SPACING: 1.05, // the gap between troops in a rectangle formation
-    SLOT_SPACING: 1.0, // standing troops form up on an even grid of spots this far apart (> UNIT_SPACING)
-    STRUCT_BODY: 0.6,
-    CORE_BODY: 0.85,
+    FORMATIONS: ['spread', 'rect'], // how a standing squad forms up: ranks ('rect', the default) or spread through its hex (F)
+    FORMATION_WIDE: 5, // a standing squad's ranks are this many troops (tiles) wide: 5, 10, 15, 20 a squad
+    FRONT_RANGE: 8, // with enemy troops this close to its hex's middle, a standing squad pushes up to face them
+    SLOT_SPACING: 1.0, // standing troops stand one to a tile (spots this far apart, > UNIT_SPACING)
+    STRUCT_SCALE: 1.25, // buildings and cores are drawn this much bigger than a tile scale (to fill the big hexes)
+    STRUCT_BODY: 0.75,
+    CORE_BODY: 1.05,
     CREEP_BODY: 0.55,
     MAX_UNITS: 80, // (a cap on troops picked in one order)
     HOLD_LEASH: 6, // troops holding a spot fight enemies within this distance of it
@@ -248,7 +251,7 @@
     // Troop types. `cost` sets the price of levelling the type up (see armyLevelCost).
     UNITS: {
       soldier: {
-        name: 'Soldier', key: '1', cost: 60, slots: 1, hp: 340, range: 1.3, damage: 22, rate: 1, speed: 2.3, sight: 5,
+        name: 'Soldier', key: '1', cost: 60, slots: 1, hp: 340, range: 1.5, damage: 22, rate: 1, speed: 2.3, sight: 5,
         melee: true,
         color: '#a5d6a7', desc: 'Sword and shield: the backbone of every wave. Empty wave slots are filled with soldiers',
       },
@@ -305,8 +308,8 @@
     // each tile in it, LAND_BASE_COST + LAND_COST_PER_TILE for every tile you already own (bigger
     // realms pay more). Enemy land can't be bought: taking an enemy tower opens up their hexes next to
     // it (for anyone to buy), and destroying a core wins all of that player's land.
-    LAND_BASE_COST: 5,
-    LAND_COST_PER_TILE: 0.07,
+    LAND_BASE_COST: 2.5,
+    LAND_COST_PER_TILE: 0.018,
     LAND_BUY_MAX: 120, // hexes one buy message may ask for (a drag, or a whole ring of border)
 
     // ---- Jungle: neutral camps that sit still, fight back when attacked, and pay out when cleared.
@@ -316,7 +319,7 @@
     // A cleared camp comes back somewhere new (preferring unclaimed land).
     CAMP_SPACING: 18, // minimum distance between camps (they're placed as far apart as they can be)
     CAMP_CANDIDATES: 150, // random spots tried when placing a camp
-    CAMP_CORE_DIST: 9, // minimum distance from any core
+    CAMP_CORE_DIST: 12, // minimum distance from any core
     CAMP_MOVE_MIN: 15, // a camp moves at least this far when it can
     CAMP_LEASH: 4.5, // monsters chase attackers this far from their camp, then reset
     CAMP_AGGRO: 1.6, // anyone's units (not caravans) this close to a barbarian wake the whole camp: it attacks them

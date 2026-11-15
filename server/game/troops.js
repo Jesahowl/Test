@@ -579,24 +579,16 @@ module.exports = {
     return p.postRing[(num - 1) % p.postRing.length];
   },
 
-  // Every formation spot on the map, per hex, nearest the hex's middle first. Built once.
+  // Every formation spot on the map, per hex: the middle of each tile (troops stand one to a tile),
+  // nearest the hex's middle first. Built once.
   slotTable() {
     if (this.slotsByHex) return this.slotsByHex;
-    const byHex = this.hex.hexes.map(() => []);
-    const sp = C.SLOT_SPACING;
     const mountains = this.mountains || new Set();
-    const dy = sp * Math.sqrt(3) / 2;
-    for (let r = 0; r * dy + 0.5 < this.h - 0.4; r++) {
-      const y = 0.5 + r * dy;
-      for (let x = 0.5 + (r % 2 ? sp / 2 : 0); x < this.w - 0.4; x += sp) {
-        const h = this.hexAt(Math.floor(x), Math.floor(y));
-        if (h >= 0 && !mountains.has(h)) byHex[h].push([x, y]); // (no spots on a mountain)
-      }
-    }
-    // no spots on a river or hard against a mountain (troops would stand in the water, or get
-    // caught on the rock's corners)
+    const byHex = this.hex.hexes.map((h) => (mountains.has(h.i) ? [] : h.tiles.map((k) => [(k % this.w) + 0.5, Math.floor(k / this.w) + 0.5])));
+    // no spots hard against a river or mountain (troops would stand in the water, or get caught
+    // on the rock's corners)
     for (const h of this.hex.hexes) {
-      if (byHex[h.i].length && this.nearBarrierHex(h.i)) byHex[h.i] = byHex[h.i].filter(([x, y]) => !this.nearBarrier(x, y, 0.8));
+      if (byHex[h.i].length && this.nearBarrierHex(h.i)) byHex[h.i] = byHex[h.i].filter(([x, y]) => !this.nearBarrier(x, y, 0.45));
       byHex[h.i].sort((p, q) => Math.hypot(p[0] - h.cx, p[1] - h.cy) - Math.hypot(q[0] - h.cx, q[1] - h.cy));
     }
     this.slotsByHex = byHex;
@@ -616,76 +608,165 @@ module.exports = {
     const solid = [];
     for (const t of this.towers.values()) if (this.hexAt(t.x, t.y) === h) solid.push([t.x + 0.5, t.y + 0.5, C.STRUCT_BODY]);
     for (const p of this.players.values()) if (p.alive && this.hexAt(p.core.x, p.core.y) === h) solid.push([p.core.x + 0.5, p.core.y + 0.5, C.CORE_BODY]);
-    list = solid.length ? all.filter(([x, y]) => solid.every(([sx, sy, r]) => Math.hypot(x - sx, y - sy) > r + 0.45)) : all;
+    list = solid.length ? all.filter(([x, y]) => solid.every(([sx, sy, r]) => Math.hypot(x - sx, y - sy) > r + 0.3)) : all;
     this.freeSlotsCache.set(h, list);
     return list;
   },
 
-  // Give every standing troop its spot (u.slotPos) in its hex's formation. Squads fill their own
-  // hex first, then spill into the nearest hexes round it; each spot holds one troop of a side.
-  // Squads in 'rect' formation (F) stand in an evenly spaced rectangle instead (see rectSlots); the
-  // others then fill the grid spots that don't clash with those rectangles.
+  // Has u (standing in a formation that faces an enemy) stepped out of the hex it holds?
+  leftPost(u) {
+    if (!u.slotPos || !u.slotPos.engaged) return false;
+    const tx = Math.max(0, Math.min(this.w - 1, Math.floor(u.x)));
+    const ty = Math.max(0, Math.min(this.h - 1, Math.floor(u.y)));
+    return this.hex.tileHex[this.idx(tx, ty)] !== u.slotPos.h;
+  },
+
+  // The enemy troop nearest the middle of hex h, if one is within FRONT_RANGE of it (squads
+  // standing there then push up to face it). null if none.
+  frontFoe(owner, h) {
+    const hx = this.hex.hexes[h];
+    let best = null;
+    let bd = C.FRONT_RANGE;
+    for (const v of this.nearUnits(hx.cx, hx.cy, C.FRONT_RANGE)) {
+      if (v.worker || v.trade || !this.hostile(owner, v.owner)) continue;
+      const d = Math.hypot(v.x - hx.cx, v.y - hx.cy);
+      if (d < bd) {
+        bd = d;
+        best = v;
+      }
+    }
+    return best;
+  },
+
+  // Give every standing troop its spot (u.slotPos): one troop to a tile. A squad holding a hex
+  // stands in its middle in ranks FORMATION_WIDE wide, facing out from its core, soldiers in front
+  // ('rect', the default) or spread out from the middle ('spread', F). With enemy troops near,
+  // it pushes up instead: it takes the tiles of its hex nearest them, soldiers in the front ranks,
+  // archers behind, medics at the back. Troops with no room left in the hex take the nearest tiles
+  // round it (never across a river; home guards only on their own land).
   assignSlots() {
-    const rectSq = new Set();
-    for (const p of this.players.values()) for (const q of p.squads || []) if (q.formation === 'rect') rectSq.add(q.id);
+    const spreadSq = new Set();
+    for (const p of this.players.values()) for (const q of p.squads || []) if (q.formation === 'spread') spreadSq.add(q.id);
     const byHex = new Map();
     for (const u of this.units.values()) {
       u.slotPos = null;
       if ((C.UNITS[u.kind].scout && !u.attack) || u.trade || u.worker) continue; // scouts off exploring; caravans; workers
       const h = this.postHex(u);
       if (h < 0) continue;
-      const rect = rectSq.has(u.sq);
-      const key = `${u.owner}:${h}:${rect ? 'r' : 's'}`;
-      if (!byHex.has(key)) byHex.set(key, { h, owner: u.owner, first: u.sq, home: !u.attack, rect, list: [] });
+      const key = `${u.owner}:${h}`;
+      if (!byHex.has(key)) byHex.set(key, { h, owner: u.owner, first: u.sq, home: !u.attack, spread: 0, list: [] });
       const grp = byHex.get(key);
       grp.list.push(u);
       grp.first = Math.min(grp.first, u.sq);
+      if (spreadSq.has(u.sq)) grp.spread++;
     }
-    const taken = new Map(); // owner -> Set of grid spots in use
-    const rects = new Map(); // owner -> spots taken by rectangles, by tile (grid spots near them are off limits)
-    const groups = [...byHex.values()].sort((a, b) => a.owner - b.owner || b.rect - a.rect || a.first - b.first || a.h - b.h);
+    const taken = new Map(); // owner -> tile keys in use
+    const groups = [...byHex.values()].sort((a, b) => a.owner - b.owner || a.first - b.first || a.h - b.h);
+    const rank = (u) => (C.UNITS[u.kind].heal ? 3 : C.UNITS[u.kind].melee || C.UNITS[u.kind].breaker ? 0 : 1);
     for (const grp of groups) {
-      if (!grp.rect) continue;
-      if (!rects.has(grp.owner)) rects.set(grp.owner, new Map());
-      // troops the rectangle has no room for form up the usual way nearby
-      const left = this.rectSlots(grp, rects.get(grp.owner));
-      if (left.length) groups.push({ ...grp, rect: false, list: left });
-    }
-    const nearRect = (owner, x, y) => {
-      const m = rects.get(owner);
-      if (!m) return false;
-      for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
-        for (const q of m.get(`${Math.floor(x) + ox},${Math.floor(y) + oy}`) || []) if (Math.hypot(q[0] - x, q[1] - y) < C.SLOT_SPACING) return true;
-      }
-      return false;
-    };
-    for (const { h, owner, home, list, rect } of groups) {
-      if (rect) continue;
+      const { h, owner, home, list } = grp;
       if (!taken.has(owner)) taken.set(owner, new Set());
       const used = taken.get(owner);
-      list.sort((a, b) => a.sq - b.sq || a.id - b.id);
-      let k = 0;
-      // hexes outward from the post: the post, its neighbours, theirs...
-      const seen = new Set([h]);
-      let ring = [h];
-      // (troops guarding home only spill onto my own land: they don't step off it)
-      const mine = (j) => !home || this.hexOwner[j] === owner;
-      for (let depth = 0; depth < 6 && k < list.length && ring.length; depth++) {
-        for (const j of ring) {
-          for (const sp of this.freeSlots(j)) {
-            if (k >= list.length) break;
-            if (used.has(sp) || (home && this.terr[this.idx(Math.floor(sp[0]), Math.floor(sp[1]))] !== owner) || nearRect(owner, sp[0], sp[1])) continue;
-            used.add(sp);
-            list[k++].slotPos = { x: sp[0], y: sp[1] };
-          }
+      const hx = this.hex.hexes[h];
+      const tkey = (x, y) => Math.floor(y) * this.w + Math.floor(x);
+      const free = (x, y) => !used.has(tkey(x, y)) && (!home || this.terr[tkey(x, y)] === owner);
+      // the post hex's free tiles, then (only if needed) those of the hexes round it
+      let cands = this.freeSlots(h).filter(([x, y]) => free(x, y));
+      if (cands.length < list.length) {
+        const extra = [];
+        for (const j of this.sameSideHexes(h, 2)) {
+          if (j === h || (home && this.hexOwner[j] !== owner)) continue;
+          for (const sp of this.freeSlots(j)) if (free(sp[0], sp[1])) extra.push(sp);
         }
-        const next = [];
-        for (const j of ring) for (const n of this.hex.hexes[j].n) if (!seen.has(n) && mine(n) && !this.riverBetween(j, n)) { seen.add(n); next.push(n); } // (never across a river)
-        ring = next;
+        extra.sort((p, q) => Math.hypot(p[0] - hx.cx, p[1] - hx.cy) - Math.hypot(q[0] - hx.cx, q[1] - hx.cy));
+        cands = cands.concat(extra.slice(0, list.length - cands.length + 8));
+      }
+      const inPost = new Set(this.hex.hexes[h].tiles);
+      list.sort((a, b) => rank(a) - rank(b) || a.sq - b.sq || a.id - b.id);
+      const foe = this.frontFoe(owner, h);
+      let spots;
+      if (foe) {
+        // engaged: the tiles nearest the enemy first (the front follows the hex's edge), the post
+        // hex before any spill-over
+        const fl = Math.hypot(foe.x - hx.cx, foe.y - hx.cy) || 1;
+        const ux = (foe.x - hx.cx) / fl;
+        const uy = (foe.y - hx.cy) / fl;
+        spots = cands.map(([x, y]) => {
+          const fwd = (x - hx.cx) * ux + (y - hx.cy) * uy;
+          const lat = Math.abs((y - hx.cy) * ux - (x - hx.cx) * uy);
+          return [x, y, fwd - lat * 0.55 - (inPost.has(tkey(x, y)) ? 0 : 100)];
+        }).sort((a, b) => b[2] - a[2]);
+      } else if (grp.spread * 2 > list.length) {
+        spots = cands; // spread: from the middle out
+      } else {
+        spots = this.rankSpots(grp, cands, inPost);
+      }
+      let k = 0;
+      for (const sp of spots) {
+        if (k >= list.length) break;
+        const t = tkey(sp[0], sp[1]);
+        if (used.has(t)) continue;
+        used.add(t);
+        list[k++].slotPos = { x: sp[0], y: sp[1], h, engaged: !!foe };
       }
       // no spot left nearby: stand where it is rather than shove into the crowd
-      for (; k < list.length; k++) list[k].slotPos = { x: list[k].x, y: list[k].y, loose: true };
+      for (; k < list.length; k++) list[k].slotPos = { x: list[k].x, y: list[k].y, loose: true, h };
     }
+  },
+
+  // A holding squad's ranks: rows FORMATION_WIDE tiles wide (wider for a big crowd) centred on its
+  // hex, square to the map and facing whichever way (up, down, left or right) points away from its
+  // core. Front row first, each row from the middle out. Spots the ranks want but can't have (a
+  // building, a river, the hex's edge) are made up from the free tiles nearest the middle.
+  rankSpots(grp, cands, inPost) {
+    const { h, owner, list } = grp;
+    const hx = this.hex.hexes[h];
+    const p = this.players.get(owner);
+    let fx = hx.cx - (p.core.x + 0.5);
+    let fy = hx.cy - (p.core.y + 0.5);
+    if (Math.hypot(fx, fy) < 0.5) {
+      fx = 0;
+      fy = -1;
+    } else if (Math.abs(fx) > Math.abs(fy)) {
+      fx = Math.sign(fx);
+      fy = 0;
+    } else {
+      fy = Math.sign(fy);
+      fx = 0;
+    }
+    const n = list.length;
+    const cols = n <= C.FORMATION_WIDE * 5 ? Math.min(n, C.FORMATION_WIDE) : Math.ceil(Math.sqrt(n * 1.3));
+    const rows = Math.ceil(n / cols);
+    const byTile = new Map();
+    for (const sp of cands) byTile.set(Math.floor(sp[1]) * this.w + Math.floor(sp[0]), sp);
+    const out = [];
+    const seen = new Set();
+    for (let r = rows - 1; r >= 0; r--) {
+      const inRow = Math.min(cols, n - (rows - 1 - r) * cols) || cols;
+      const along = [];
+      for (let c = 0; c < inRow; c++) along.push(c - (inRow - 1) / 2);
+      along.sort((a, b) => Math.abs(a) - Math.abs(b) || a - b);
+      const ro = r - (rows - 1) / 2;
+      for (const co of along) {
+        const x = hx.cx + -fy * co + fx * ro;
+        const y = hx.cy + fx * co + fy * ro;
+        const t = Math.floor(y) * this.w + Math.floor(x);
+        const sp = byTile.get(t);
+        if (sp && !seen.has(t)) {
+          seen.add(t);
+          out.push(sp);
+        }
+      }
+    }
+    // (what's missing: the free tiles nearest the middle)
+    for (const sp of cands) {
+      const t = Math.floor(sp[1]) * this.w + Math.floor(sp[0]);
+      if (!seen.has(t)) {
+        seen.add(t);
+        out.push(sp);
+      }
+    }
+    return out;
   },
 
   // The permanent barrier edges (rivers without bridges, mountain sides) as segments, and the
@@ -739,85 +820,6 @@ module.exports = {
       ring = next;
     }
     return seen;
-  },
-
-  // A rectangle formation for the troops of grp (one or more 'rect' squads sharing a post): rows of
-  // RECT_SPACING-spaced troops, wider than deep, centred on the post hex, square to the map and
-  // facing away from the owner's core (toward where it was sent). Melee troops stand in the front rows, ranged and
-  // medics behind. Spots inside buildings, off home land (for home guards) or too close to another
-  // rectangle are skipped, and extra rows are added for the troops they leave out. `placed` holds
-  // the owner's rectangle spots so far, by tile, and gets these added. Returns the troops left over.
-  rectSlots(grp, placed) {
-    const { h, owner, home, list } = grp;
-    const hx = this.hex.hexes[h];
-    const p = this.players.get(owner);
-    let fx = hx.cx - (p.core.x + 0.5);
-    let fy = hx.cy - (p.core.y + 0.5);
-    const fl = Math.hypot(fx, fy);
-    // (square to the map, facing whichever of up/down/left/right is nearest: neat rows on screen)
-    if (fl < 0.5) {
-      fx = 0;
-      fy = -1;
-    } else if (Math.abs(fx) > Math.abs(fy)) {
-      fx = Math.sign(fx);
-      fy = 0;
-    } else {
-      fy = Math.sign(fy);
-      fx = 0;
-    }
-    const rx = -fy; // along the rows
-    const ry = fx;
-    const n = list.length;
-    const S = C.RECT_SPACING;
-    const cols = Math.max(1, Math.min(n, Math.ceil(Math.sqrt(n * 2.2))));
-    const rows = Math.ceil(n / cols);
-    const solid = [];
-    for (const t of this.towers.values()) if (Math.hypot(t.x + 0.5 - hx.cx, t.y + 0.5 - hx.cy) < 12) solid.push([t.x + 0.5, t.y + 0.5, C.STRUCT_BODY]);
-    for (const o of this.players.values()) if (o.alive && Math.hypot(o.core.x + 0.5 - hx.cx, o.core.y + 0.5 - hx.cy) < 12) solid.push([o.core.x + 0.5, o.core.y + 0.5, C.CORE_BODY]);
-    const clash = (x, y) => {
-      for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
-        for (const q of placed.get(`${Math.floor(x) + ox},${Math.floor(y) + oy}`) || []) if (Math.hypot(q[0] - x, q[1] - y) < C.SLOT_SPACING) return true;
-      }
-      return false;
-    };
-    const side = this.sameSideHexes(h, 4);
-    const ok = (x, y) => x > 0.4 && y > 0.4 && x < this.w - 0.4 && y < this.h - 0.4
-      && side.has(this.hex.tileHex[this.idx(Math.floor(x), Math.floor(y))]) // (not across a river)
-      && !this.nearBarrier(x, y, 0.8) // (nor hard against a river or mountain)
-      && (!home || this.terr[this.idx(Math.floor(x), Math.floor(y))] === owner)
-      && solid.every(([sx, sy, r]) => Math.hypot(x - sx, y - sy) > r + 0.45) && !clash(x, y);
-    // rows centred on the hex (front = +), then extra rows behind and in front, in turn
-    const offs = [];
-    for (let i = 0; i < rows; i++) offs.push(i - (rows - 1) / 2);
-    for (let j = 0; j < rows + 10; j++) offs.push(j % 2 ? -((rows - 1) / 2 + 1 + (j >> 1)) : (rows - 1) / 2 + 1 + (j >> 1));
-    let spots = [];
-    for (const r of offs) {
-      for (let c = 0; c < cols; c++) {
-        const co = c - (cols - 1) / 2;
-        const x = hx.cx + (rx * co + fx * r) * S;
-        const y = hx.cy + (ry * co + fy * r) * S;
-        if (ok(x, y)) spots.push([x, y, r, co]);
-      }
-      if (spots.length >= n) break;
-    }
-    // front row first, each row from the middle out: a part-filled row is the back one, centred
-    spots.sort((a, b) => b[2] - a[2] || Math.abs(a[3]) - Math.abs(b[3]) || a[3] - b[3]);
-    spots = spots.slice(0, n);
-    const rank = (u) => (C.UNITS[u.kind].heal ? 3 : C.UNITS[u.kind].melee || C.UNITS[u.kind].breaker ? 0 : 1);
-    list.sort((a, b) => rank(a) - rank(b) || a.sq - b.sq || a.id - b.id);
-    const left = [];
-    list.forEach((u, k) => {
-      const sp = spots[k];
-      if (!sp) {
-        left.push(u);
-        return;
-      }
-      u.slotPos = { x: sp[0], y: sp[1] };
-      const key = `${Math.floor(sp[0])},${Math.floor(sp[1])}`;
-      if (!placed.has(key)) placed.set(key, []);
-      placed.get(key).push(sp);
-    });
-    return left; // the troops it had no room for
   },
 
   // Push troops apart so none sit on top of each other (friend or foe), and out of buildings and
@@ -1108,8 +1110,14 @@ module.exports = {
           u.path = [];
           u.dest = null;
           if (u.cd <= 0) this.unitFire(u, shoot, s, def);
-          // melee troops step right up to the troop or barbarian they're fighting
-          if (def.melee && !shoot.isTower && !shoot.isPlayer) {
+          const held = u.slotPos && !u.slotPos.loose && (u.slotPos.engaged || !def.melee);
+          if (held) {
+            // in a formation facing the enemy (and archers in any formation): fight from its own
+            // spot, walking on to it if it isn't there yet, so the ranks stay neat and the front
+            // lines meet at the hexes' border
+            if (Math.abs(u.x - u.slotPos.x) + Math.abs(u.y - u.slotPos.y) > 0.15) this.stepToward(u, u.slotPos.x, u.slotPos.y, 0.05, speed * 0.8, dt);
+          } else if (def.melee && !shoot.isTower && !shoot.isPlayer) {
+            // otherwise melee troops step right up to the troop or barbarian they're fighting
             const [fx, fy] = posOf(shoot);
             this.stepToward(u, fx, fy, C.MELEE_CLOSE, speed * 0.7, dt);
           }
@@ -1143,9 +1151,17 @@ module.exports = {
               }
             }
           }
+          // In formation facing an enemy: hold the line, fighting what's in reach from its spot,
+          // and only step out after enemies that have got into its own hex.
+          if (foe && u.slotPos && u.slotPos.engaged) {
+            const [fx0, fy0] = posOf(foe);
+            if (this.hex.tileHex[this.idx(Math.max(0, Math.min(this.w - 1, Math.floor(fx0))), Math.max(0, Math.min(this.h - 1, Math.floor(fy0))))] !== u.slotPos.h) foe = null;
+          }
           if (foe) {
             const [fx, fy] = posOf(foe);
+            const [ox, oy] = [u.x, u.y];
             this.stepToward(u, fx, fy, s.range * 0.9, speed, dt);
+            if (this.leftPost(u)) [u.x, u.y] = [ox, oy];
             continue;
           }
         }

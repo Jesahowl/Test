@@ -50,8 +50,14 @@ module.exports = {
     let best = null;
     let bestScore = -Infinity;
     for (let i = 0; i < C.CAMP_CANDIDATES; i++) {
-      const x = margin + Math.floor(this.rand() * (this.w - margin * 2));
-      const y = margin + Math.floor(this.rand() * (this.h - margin * 2));
+      let x = margin + Math.floor(this.rand() * (this.w - margin * 2));
+      let y = margin + Math.floor(this.rand() * (this.h - margin * 2));
+      // (camps stand at a hex's centre: judge the spot there, where it will really be)
+      const hc = this.hex.hexes[this.hexAt(x, y)].centre;
+      if (hc >= 0) {
+        x = hc % this.w;
+        y = (hc - x) / this.w;
+      }
       if (this.grid[this.idx(x, y)] !== 0) continue;
       if (this.mountains.has(this.hex.tileHex[this.idx(x, y)])) continue;
       let nearCore = false;

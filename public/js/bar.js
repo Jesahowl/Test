@@ -142,18 +142,18 @@ function cycleStance() {
 }
 
 const FORMATIONS = [
-  ['spread', '⬡', 'Spread', 'Standing troops spread out evenly over their hex'],
-  ['rect', '▦', 'Rectangle', 'Standing troops line up in an evenly spaced rectangle facing out, melee in front and ranged troops and medics behind'],
+  ['rect', '▦', 'Ranks', 'Standing troops line up one to a tile in ranks 5 wide in the middle of their hex, soldiers in front. With enemies near, they push up to the edge of the hex to face them'],
+  ['spread', '⬡', 'Spread', 'Standing troops spread out from the middle of their hex, one to a tile. With enemies near, they still push up to face them'],
 ];
 
-// F: the picked squads (or all) switch between the rectangle formation and spreading out. If any of
-// them isn't in a rectangle, they all form one.
+// F: the picked squads (or all) switch between ranks and spreading out. If any of them isn't in
+// ranks, they all form them.
 function toggleFormation() {
   const list = allSquads().filter((q) => S.allSquads || S.selSquads.has(q.id));
   if (!list.length) return;
   const next = list.some((q) => q.formation !== 'rect') ? 'rect' : 'spread';
   for (const q of list) sendMsg({ t: 'squad', op: 'formation', sq: q.id, formation: next });
-  toast(`${S.allSquads ? 'All squads' : squadsLabel()}: ${next === 'rect' ? 'rectangle formation' : 'spread out'}`, true);
+  toast(`${S.allSquads ? 'All squads' : squadsLabel()}: ${next === 'rect' ? 'in ranks' : 'spread out'}`, true);
 }
 
 const STATUS_ICON = { defend: '🛡', attack: '⚔', hold: '🚩' };
