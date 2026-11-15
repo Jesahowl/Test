@@ -13,6 +13,7 @@ import { iconURL, refreshTip } from './ui.js';
 import { updateDock } from './dock.js';
 import { allSquads } from './squads.js';
 import { updateWorkersPanel } from './workforce.js';
+import { updateTutorial } from './tutorial.js';
 
 S.hudTimer = 0;
 
@@ -84,6 +85,7 @@ function updateHud() {
   updateTowerAndArmy(gold);
   updateSelectionPanel(gold);
   updateTips();
+  updateTutorial();
   refreshTip();
 }
 

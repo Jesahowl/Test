@@ -527,3 +527,25 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 .overlay .card .pub-list { border-radius: 12px; }
 .menu-card #test-game { background: transparent; border-color: #a3712a; }
 .menu-card .foot { color: #8b949e; }
+
+/* ---------------------------------------------------------------- the tutorial's guide */
+#tutorial-game { width: 100%; margin-top: 10px; font-size: 14px; padding: 9px 12px; border: 1px solid #f2c14e66; }
+#tutorial-game b { color: var(--gold); }
+#tutorial { position: absolute; right: 12px; top: 84px; width: 330px; border-color: rgba(242, 193, 78, 0.55); z-index: 3; pointer-events: auto; }
+#tutorial.ticked { border-color: #2ea043; box-shadow: 0 0 0 2px rgba(46, 160, 67, 0.35), var(--shadow); }
+#tutorial .tut-head { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--gold); text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; }
+#tutorial .tut-head .x { margin-left: auto; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px; }
+#tutorial h4 { margin: 8px 0 4px; font-size: 15px; }
+#tutorial.ticked h4 { color: #7ee787; }
+#tutorial p { margin: 0 0 10px; line-height: 1.5; font-size: 13px; }
+#tutorial .tut-bar { height: 6px; border-radius: 3px; background: var(--raise-2); overflow: hidden; margin: -2px 0 10px; }
+#tutorial .tut-bar i { display: block; height: 100%; background: var(--gold); transition: width 0.3s; }
+#tutorial .tut-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#tutorial .dots { display: flex; gap: 4px; }
+#tutorial .dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--raise-2); }
+#tutorial .dots i.d { background: #2ea043; }
+#tutorial .dots i.c { background: var(--gold); }
+#tutorial .tut-btn { border: 1px solid var(--line); border-radius: 7px; background: var(--raise-2); color: var(--text); padding: 4px 10px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; }
+#tutorial .tut-btn.skip { color: var(--muted); }
+.tut-glow { box-shadow: 0 0 0 2px #f2c14e, 0 0 18px rgba(242, 193, 78, 0.6) !important; animation: tut-pulse 1.2s ease-in-out infinite; }
+@keyframes tut-pulse { 50% { box-shadow: 0 0 0 3px #f2c14e, 0 0 26px rgba(242, 193, 78, 0.85); } }

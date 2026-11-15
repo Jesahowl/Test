@@ -241,6 +241,24 @@ module.exports = {
     return best;
   },
 
+  // Has a human player attacked bot p (troops sent at its core or buildings, or onto its land)? Sticks once true.
+  botProvoked(p) {
+    if (p.bot.provoked) return true;
+    for (const u of this.units.values()) {
+      if (u.worker || u.trade) continue;
+      const q = this.players.get(u.owner);
+      if (!q || q.isBot) continue;
+      const a = u.attack;
+      const atIt = a && ((a.k === 'c' && a.id === p.id) || (a.k === 't' && (this.towers.get(a.id) || {}).owner === p.id));
+      const onIt = this.inBounds(Math.floor(u.x), Math.floor(u.y)) && this.terr[this.idx(Math.floor(u.x), Math.floor(u.y))] === p.id;
+      if (atIt || onIt) {
+        p.bot.provoked = true;
+        return true;
+      }
+    }
+    return false;
+  },
+
   // Put up a building of `kind` in one of p's own free hexes, the nearest the core first (a few
   // tries among the nearest, so they don't all bunch on one side). True if it was placed.
   botBuildNearCore(p, kind) {
@@ -354,6 +372,8 @@ module.exports = {
       }
       return;
     }
+    // (the tutorial's bot keeps to itself until the player attacks it, or for TUTORIAL_CALM)
+    if (this.rules.tutorial && this.time < C.TUTORIAL_CALM && !this.botProvoked(p)) return;
     // At home: attack once strong enough to win (or it has waited long enough at full strength).
     if (up < full * L.attackAt) {
       p.bot.readySince = 0;

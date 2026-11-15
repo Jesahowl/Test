@@ -35,7 +35,8 @@ function updateTips() {
   const mine = [...S.towers.values()].filter((t) => t.owner === S.myId);
   if (mine.some((t) => t.kind === 'tower')) tipDone('tower');
   if (mine.filter((t) => t.kind === 'barracks').length >= 2 || mine.some((t) => t.kind === 'barracks' && t.level > 1)) tipDone('barracks');
-  const tip = !S.tipsOff && TIPS.find((t) => !S.tipsDone.has(t.id));
+  // (the tutorial has its own guide)
+  const tip = !S.tipsOff && !(S.round && S.round.tutorial) && TIPS.find((t) => !S.tipsDone.has(t.id));
   if (!tip || S.buildKind) {
     el.classList.add('hidden');
     return;

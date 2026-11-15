@@ -253,6 +253,18 @@ function createServer({ port = 3000, botTarget, waits = {}, dev = false } = {}) 
           room.start(client);
           break;
         }
+        case 'tutorial': {
+          // the guided first game: a private room with one easy bot that keeps to itself at first
+          if (client.room) client.room.remove(client);
+          client.name = nameOf(msg);
+          const room = new Room({ code: newCode() });
+          Object.assign(room.rules, { tutorial: true, difficulty: 'easy', startGold: C.TUTORIAL_GOLD });
+          room.bots = 1;
+          rooms.set(room.code, room);
+          room.add(client);
+          room.start(client);
+          break;
+        }
         case 'rule':
           err = client.room ? client.room.setRule(client, String(msg.key), msg.value) : null;
           break;

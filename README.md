@@ -51,6 +51,10 @@ git fetch origin claude/determined-johnson-hion2w
 git reset --hard origin/claude/determined-johnson-hion2w
 ```
 
+## Tutorial
+
+New players can press **🎓 Play the tutorial** on the menu: a private game against one easy bot that keeps to itself for the first 12 minutes (unless you attack it first), with 400 gold to start. A guide in the top right walks you through the game a step at a time (look round, buy land, build a barracks, workers, pick and send your squad, build a tower, level up troops, raid a barbarian camp, attack, win): each step ticks off when you do it, the button or key to use glows, and an arrow on the map points at what to click. Skip any step, or close the guide and just play.
+
 ## Test mode (for development)
 
 The menu has a **🛠 Test game** button: it starts a private game straight away (with two bots) in

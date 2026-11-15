@@ -190,6 +190,8 @@
     ROUND_RESET_DELAY: 15, // seconds the scoreboard shows before the next round starts
 
     BOT_TARGET: 6, // bots fill the server up to this many players
+    TUTORIAL_CALM: 720, // the tutorial's bot doesn't attack for this long (unless attacked first)
+    TUTORIAL_GOLD: 400, // ...and you start with this much gold
     BOT_STRIKE_SHARE: 0.6, // share of its home troops a bot sends on each attack
     BOT_MAX_WALLS: 14, // bots wall at most this many segments (facing their nearest enemy)
     BOT_GATES: 2,

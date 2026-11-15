@@ -21,6 +21,7 @@ import { drawTowers } from './structures.js';
 import { drawTradeRoads } from './trade.js';
 import { drawUnits } from './troops.js';
 import { drawBox, drawWorkerIcons, drawWorkHover } from './workforce.js';
+import { drawTutorialArrow } from './tutorial.js';
 
 // ------------------------------------------------------------------ main loop
 let last = performance.now();
@@ -80,6 +81,7 @@ function frame(now) {
   drawFog();
   drawOverlay();
   drawWorkHover();
+  drawTutorialArrow();
   drawBox();
   if (S.myId || S.spectating) drawMinimap();
 

@@ -227,4 +227,4 @@ if (invited.length === 5) {
   $('join-code').classList.remove('secondary');
 }
 
-export { formError, leaveRoom, onLeft, onPublicList, onRoom };
+export { formError, leaveRoom, onLeft, onPublicList, onRoom, playerName };

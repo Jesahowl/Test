@@ -346,3 +346,23 @@ test('game rules: starting gold, peace time, sudden death and bot difficulty', (
   assert.ok(Math.abs(income('normal') - 1) < 0.05);
   assert.ok(Math.abs(income('hard') - C.BOT_LEVELS.hard.income) < 0.05, `hard ${income('hard')}`);
 });
+
+test('the tutorial: one easy bot that keeps to itself until you attack it', () => {
+  const g = new Game({ botTarget: 0, rand: seeded(81), rounds: true, rules: { ...C.DEFAULT_RULES, tutorial: true, difficulty: 'easy', startGold: C.TUTORIAL_GOLD } });
+  const me = g.addPlayer('Learner');
+  const bot = g.addPlayer('Tutor', true);
+  assert.strictEqual(me.gold, C.TUTORIAL_GOLD);
+  const atMe = () => [...g.units.values()].some((u) => u.owner === bot.id && u.attack && ((u.attack.k === 'c' && u.attack.id === me.id) || (u.attack.k === 't' && (g.towers.get(u.attack.id) || {}).owner === me.id)));
+  let attacked = false;
+  for (let i = 0; i < 20 * 60 * 9 && !attacked; i++) {
+    me.core.hp = me.core.maxHp;
+    g.update(0.05);
+    if (i % 20 === 0) attacked = atMe();
+  }
+  assert.ok(!attacked, 'no attack in the first 9 minutes');
+  assert.ok(!g.botProvoked(bot));
+  // send a troop at its core: now it's provoked
+  const [u] = [g.spawnTroop(me, 'soldier')];
+  u.attack = { k: 'c', id: bot.id };
+  assert.ok(g.botProvoked(bot), 'attacking it provokes it');
+});
