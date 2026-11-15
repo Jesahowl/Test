@@ -90,6 +90,11 @@ function handle(msg) {
     case 'list':
       onPublicList(msg);
       break;
+    case 'hello':
+      // a dev server: test mode is on offer
+      S.dev = !!msg.dev;
+      $('test-game').classList.toggle('hidden', !S.dev);
+      break;
     case 'watching':
       // watching a public game from the menu: a fresh map, seen whole
       S.effects = [];

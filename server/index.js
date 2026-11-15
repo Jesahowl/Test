@@ -26,7 +26,8 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O or 1/I mix-ups
 const ROOM_IDLE_MS = 60000; // an empty private room is closed after this long
 
 // waits: lobby countdowns in seconds (see Room), shortened by tests.
-function createServer({ port = 3000, botTarget, waits = {} } = {}) {
+// dev: a development server (npm run dev / DEV=1): offers test mode (infinite gold and wood).
+function createServer({ port = 3000, botTarget, waits = {}, dev = false } = {}) {
   const clients = new Set();
   const rooms = new Map(); // code -> Room (public and private)
   let lastPublic = null; // the public game that started most recently (tests and tools)
@@ -98,6 +99,7 @@ function createServer({ port = 3000, botTarget, waits = {} } = {}) {
   wss.on('connection', (ws) => {
     const client = { ws, room: null, pid: null, terrVersion: -1, name: null, queued: false, synced: false };
     clients.add(client);
+    if (dev) send(client, { t: 'hello', dev: true }); // (the menu shows the test game button)
 
     ws.on('message', (raw) => {
       let msg;
@@ -158,9 +160,24 @@ function createServer({ port = 3000, botTarget, waits = {} } = {}) {
             break;
           }
           client.name = nameOf(msg);
-          const room = new Room({ code: newCode() });
+          const room = new Room({ code: newCode(), dev });
           rooms.set(room.code, room);
           room.add(client);
+          break;
+        }
+        case 'test': {
+          // dev servers: a private room in test mode, started straight away (with a couple of bots)
+          if (!dev) {
+            err = 'Test mode is only on dev servers (npm run dev)';
+            break;
+          }
+          if (client.room) client.room.remove(client);
+          client.name = nameOf(msg);
+          const room = new Room({ code: newCode(), dev });
+          room.rules.testMode = true;
+          rooms.set(room.code, room);
+          room.add(client);
+          room.start(client);
           break;
         }
         case 'rule':
@@ -239,8 +256,9 @@ function createServer({ port = 3000, botTarget, waits = {} } = {}) {
 
 if (require.main === module) {
   const port = Number(process.env.PORT) || 3000;
-  const srv = createServer({ port });
-  console.log(`Territory Siege running at http://localhost:${port}`);
+  const dev = process.env.DEV === '1';
+  const srv = createServer({ port, dev });
+  console.log(`Territory Siege running at http://localhost:${port}${dev ? ' (dev server: test mode available)' : ''}`);
   // Hosts like Render send SIGTERM before restarting or redeploying: close cleanly.
   process.on('SIGTERM', () => {
     srv.close();

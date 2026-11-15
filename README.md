@@ -51,6 +51,14 @@ git fetch origin claude/determined-johnson-hion2w
 git reset --hard origin/claude/determined-johnson-hion2w
 ```
 
+## Test mode (for development)
+
+Start the server with **`npm run dev`** (or `DEV=1 node server/index.js`) and the menu gets a
+**🛠 Test game** button: it starts a private game straight away (with two bots) in **test mode**,
+where your gold and wood never run out (they show as ∞; bots play normally). On a dev server, test
+mode is also a setting in private rooms, so you can test with friends. A normal server (`npm start`)
+never offers it.
+
 ## Public lobbies
 
 **Play** puts you in the open **public lobby**, where players gather before a game (up to 8 people).

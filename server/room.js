@@ -70,7 +70,8 @@ function send(client, obj) {
 }
 
 class Room {
-  constructor({ code = null, isPublic = false, botTarget = C.BOT_TARGET, waits = {} } = {}) {
+  constructor({ code = null, isPublic = false, botTarget = C.BOT_TARGET, waits = {}, dev = false } = {}) {
+    this.dev = dev; // a dev server (npm run dev): test mode can be switched on
     this.code = code;
     this.isPublic = isPublic;
     this.botTarget = botTarget; // public: bots fill up to this many players
@@ -217,7 +218,7 @@ class Room {
         t: 'room', code: this.code, pub: this.isPublic, phase: this.phase, host: c === this.host, members,
         bots: this.isPublic ? Math.max(0, this.botTarget - people.length) : this.bots, maxBots: C.PRIVATE_MAX_BOTS,
         round: this.roundNo, lastWinner: this.lastWinner, me: people.indexOf(c),
-        startIn, max: C.LOBBY_MAX, ready: this.ready.has(c), rules: this.isPublic ? C.DEFAULT_RULES : this.rules,
+        startIn, max: C.LOBBY_MAX, ready: this.ready.has(c), rules: this.isPublic ? C.DEFAULT_RULES : this.rules, dev: this.dev,
       });
     }
   }
@@ -229,6 +230,7 @@ class Room {
     if (this.isPublic || client !== this.host || this.phase !== 'lobby') return 'Only the host can change that';
     const choices = C.RULE_CHOICES[key];
     if (!choices || !choices.includes(value)) return 'Invalid setting';
+    if (key === 'testMode' && value && !this.dev) return 'Test mode is only on dev servers (npm run dev)';
     this.rules[key] = value;
     this.sendRoom();
     return null;

@@ -390,6 +390,10 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 #lobby-rules .seg button.on { background: #2a2612; color: var(--gold); }
 #lobby-rules .seg button:disabled { cursor: default; opacity: 1; }
 #lobby-rules .seg button:disabled:not(.on) { opacity: 0.55; }
+.test-badge { display: inline-block; padding: 1px 7px; border-radius: 5px; background: #4a2a10; color: #ffb35c; font-size: 11px; font-weight: 800; letter-spacing: 0.5px; }
+#stats.test-mode .gold, #stats.test-mode .wood { color: #ffb35c; }
+#test-game { width: 100%; margin-top: 8px; font-size: 13.5px; padding: 8px 12px; border: 1px dashed #ffb35c66; }
+#test-game .muted { font-weight: 500; font-size: 12px; }
 .lobby-tag { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); font-weight: 700; }
 .room-code { font: 800 46px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 8px; color: var(--gold); margin: 6px 0 8px; user-select: all; }
 #lobby-last { margin: 10px 0 0; font-size: 13px; }

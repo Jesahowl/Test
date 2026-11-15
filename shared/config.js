@@ -177,7 +177,7 @@
     PLAYER_HUES: [0, 25, 48, 90, 130, 168, 195, 220, 255, 285, 315, 340],
     HUE_ORDER: [0, 6, 3, 9, 1, 7, 4, 10, 2, 8, 5, 11], // most spread-out first
     // A game's rules: these defaults, or what a private room's host picked (RULE_CHOICES).
-    DEFAULT_RULES: { difficulty: 'normal', startGold: 200, fortify: 480, suddenDeath: 1140, rivers: true, fog: true },
+    DEFAULT_RULES: { difficulty: 'normal', startGold: 200, fortify: 480, suddenDeath: 1140, rivers: true, fog: true, testMode: false },
     RULE_CHOICES: {
       difficulty: ['easy', 'normal', 'hard'],
       startGold: [100, 200, 400, 800],
@@ -185,7 +185,9 @@
       suddenDeath: [780, 1140, 1500], // sudden death at 13 / 19 / 25 minutes
       rivers: [true, false],
       fog: [true, false],
+      testMode: [false, true], // (dev servers only: npm run dev) people's gold and wood never run out
     },
+    TEST_FUNDS: 999999, // test mode: people's gold and wood are topped back up to this
     // How bots play at each difficulty: seconds between decisions, their income, seconds between
     // orders, how strong a strike force must be to attack (share of full) and when it falls back.
     BOT_LEVELS: {

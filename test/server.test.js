@@ -216,3 +216,65 @@ test('private rooms: create, join by code, host starts, back to the lobby after 
     srv.close();
   }
 });
+
+test('test mode: dev servers only; gold and wood never run out', async () => {
+  const C = require('../shared/config');
+  const open = async (port) => {
+    const ws = new WebSocket(`ws://localhost:${port}`);
+    ws.msgs = [];
+    ws.on('message', (d) => ws.msgs.push(JSON.parse(d)));
+    await new Promise((r) => ws.once('open', r));
+    return ws;
+  };
+  const waitFor = async (ws, pred, ms = 8000) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const m = ws.msgs.find(pred);
+      if (m) return m;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    throw new Error('timeout');
+  };
+  // a normal server: no test mode
+  const prod = createServer({ port: 0, botTarget: 0 });
+  await new Promise((r) => prod.server.once('listening', r));
+  try {
+    const ws = await open(prod.server.address().port);
+    ws.send(JSON.stringify({ t: 'test', name: 'Dev' }));
+    await waitFor(ws, (m) => m.t === 'err' && /dev servers/.test(m.m));
+    ws.send(JSON.stringify({ t: 'create', name: 'Dev' }));
+    const room = await waitFor(ws, (m) => m.t === 'room');
+    assert.ok(!room.dev);
+    ws.send(JSON.stringify({ t: 'rule', key: 'testMode', value: true }));
+    await waitFor(ws, (m) => m.t === 'err' && /dev servers/.test(m.m));
+    assert.ok(!ws.msgs.some((m) => m.t === 'hello'), 'no dev greeting');
+    ws.close();
+  } finally {
+    prod.close();
+  }
+  // a dev server: the test game starts at once, with gold and wood that never run out
+  const dev = createServer({ port: 0, botTarget: 0, dev: true });
+  await new Promise((r) => dev.server.once('listening', r));
+  try {
+    const ws = await open(dev.server.address().port);
+    await waitFor(ws, (m) => m.t === 'hello' && m.dev);
+    ws.send(JSON.stringify({ t: 'test', name: 'Dev' }));
+    const w = await waitFor(ws, (m) => m.t === 'welcome');
+    const st = await waitFor(ws, (m) => m.t === 's' && m.round && m.round.test);
+    assert.strictEqual(st.round.test, true);
+    const room = dev.rooms.get(w.room);
+    const p = room.game.players.get(w.id);
+    assert.strictEqual(p.gold, C.TEST_FUNDS);
+    assert.strictEqual(p.wood, C.TEST_FUNDS);
+    // spend: it's topped straight back up
+    const h = room.game.hex.hexes[room.game.hex.hexes[room.game.hexAt(p.core.x, p.core.y)].n[0]];
+    assert.strictEqual(room.game.build(p.id, h.centre % room.game.w, Math.floor(h.centre / room.game.w), 'tower'), null);
+    assert.ok(p.gold < C.TEST_FUNDS);
+    room.game.update(0.05);
+    assert.strictEqual(p.gold, C.TEST_FUNDS);
+    assert.strictEqual(p.wood, C.TEST_FUNDS);
+    ws.close();
+  } finally {
+    dev.close();
+  }
+});

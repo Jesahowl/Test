@@ -143,6 +143,11 @@ class Game {
 
     for (const p of this.players.values()) {
       if (p.alive) this.award(p, C.income(p.territory) * dt * (p.isBot ? this.botLevel.income : 1), 'income');
+      if (this.rules.testMode && !p.isBot && p.alive) {
+        // test mode (for development): people never run out of gold or wood (bots play normally)
+        p.gold = C.TEST_FUNDS;
+        p.wood = C.TEST_FUNDS;
+      }
     }
 
     this.updateDiplomacy();
@@ -215,6 +220,7 @@ class Game {
         sd: Math.ceil(this.rules.suddenDeath - this.time), // <= 0: sudden death is on
         fort: this.rules.fortify, // peace time (cores fortified until then)
         fog: this.rules.fog,
+        test: this.rules.testMode || undefined,
       };
     }
     this.fx = [];

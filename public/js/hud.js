@@ -105,8 +105,10 @@ function updateStats(p, gold, rank, n) {
   el.querySelector('.who .dot').style.background = colorOf(p.id, 55);
   el.querySelector('.who .name').textContent = p.name;
   el.querySelector('.who .rank').textContent = `#${rank} of ${n}`;
-  el.querySelector('.gold').textContent = gold.toLocaleString();
-  el.querySelector('.wood').textContent = (S.me.wood || 0).toLocaleString();
+  const test = !!(S.round && S.round.test); // test mode: gold and wood never run out
+  el.querySelector('.gold').textContent = test ? '∞' : gold.toLocaleString();
+  el.querySelector('.wood').textContent = test ? '∞' : (S.me.wood || 0).toLocaleString();
+  el.classList.toggle('test-mode', test);
   el.querySelector('.income').textContent = `+${C.income(p.territory).toFixed(1)}/s`;
   el.querySelector('.chip.land b').textContent = p.territory;
   el.querySelector('.chip.kills b').textContent = p.kills;
