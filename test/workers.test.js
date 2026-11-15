@@ -185,3 +185,21 @@ test('iron: workers mine ore deposits and carry it home; troop levels cost iron'
   g.damageUnit(v, 1e6, b.id);
   assert.strictEqual(b.iron, bi + 5);
 });
+
+test('sudden death: workers can\'t patch a crumbling core back up', () => {
+  const g = new Game({ botTarget: 0, rand: seeded(77), mapSeed: 77, rounds: true });
+  const a = g.addPlayer('A');
+  g.addPlayer('B');
+  a.gold = 1e5;
+  a.spawnTime = -1000;
+  only(a, 'repair');
+  a.nextWaveAt = g.time;
+  g.update(0.05);
+  a.nextWaveAt = Infinity;
+  g.time = g.rules.suddenDeath + 1;
+  a.core.hp = a.core.maxHp * 0.6;
+  const hp = a.core.hp;
+  run(g, 10);
+  assert.ok(a.core.hp < hp, `the core kept crumbling (${Math.round(hp)} -> ${Math.round(a.core.hp)})`);
+  assert.ok(workers(g, a).every((u) => !u.job || u.job.k !== 'c'), 'nobody repairing it');
+});

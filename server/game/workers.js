@@ -127,6 +127,7 @@ module.exports = {
     }
     if (k === 'c') {
       if (id !== p.id) return 'Workers only work on your own core';
+      if (this.suddenDeath()) return 'In sudden death cores crumble: they can\'t be repaired';
       return p.core.hp < p.core.maxHp ? { type: 'repair', k: 'c', id } : 'Your core needs no repair';
     }
     if (k === 'h') {
@@ -176,7 +177,7 @@ module.exports = {
     const at = this.jobPos(p, job);
     if (!at) return false;
     if (job.type === 'build') return !this.finished(at.obj);
-    if (job.type === 'repair') return this.finished(at.obj) && at.obj.hp < at.obj.maxHp && p.gold >= 1;
+    if (job.type === 'repair') return this.finished(at.obj) && at.obj.hp < at.obj.maxHp && p.gold >= 1 && !(job.k === 'c' && this.suddenDeath());
     if (job.type === 'gather') return this.canChop(p, job.id);
     if (job.type === 'mine') return this.canMine(p, job.id);
     if (job.type === 'farm') return this.canFarm(p, job.id);
@@ -205,7 +206,8 @@ module.exports = {
       if (p.gold < 1) return null;
       for (const t of this.towers.values()) if (t.owner === p.id && this.finished(t) && t.hp < t.maxHp) consider({ type, k: 't', id: t.id }, t.x + 0.5, t.y + 0.5, C.REPAIR_WORKERS);
       for (const w of this.walls.values()) if (w.owner === p.id && this.finished(w) && w.hp < w.maxHp) consider({ type, k: 'w', id: w.id }, w.x, w.y, 1);
-      if (p.core.hp < p.core.maxHp) consider({ type, k: 'c', id: p.id }, p.core.x + 0.5, p.core.y + 0.5, C.REPAIR_WORKERS);
+      // (in sudden death cores crumble, and can't be patched back up: every round ends)
+      if (p.core.hp < p.core.maxHp && !this.suddenDeath()) consider({ type, k: 'c', id: p.id }, p.core.x + 0.5, p.core.y + 0.5, C.REPAIR_WORKERS);
     } else if (type === 'gather') {
       for (const i of this.forest.keys()) {
         if (this.forest.get(i) < 3 || !this.canChop(p, i)) continue;
