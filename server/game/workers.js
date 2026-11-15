@@ -26,8 +26,8 @@ module.exports = {
     this.forest = new Map(); // hex index -> wood left
     // the map's layout (shared/terrain.js): rivers, mountains, forests, iron and gold veins
     this.layout = Terrain.mapTerrain(this.mapSeed, this.hex, this.w, this.h, { rivers: this.riversOn, mountains: !this.openGround });
-    this.mountains = this.layout.blocked; // impassable hexes: mountains and the sea (see walls.js initRivers)
-    this.ocean = this.layout.ocean;
+    this.mountains = this.layout.blocked; // impassable hexes: mountains, the sea and lakes (see walls.js initRivers)
+    this.water = new Set([...this.layout.ocean, ...this.layout.lakes]);
     for (const i of this.layout.forest) this.forest.set(i, C.FOREST_WOOD);
     this.veins = new Set(this.layout.veins); // gold vein hexes: farmed on your own land, they pay VEIN_GOLD a worker
     this.ore = new Map(); // hex index -> iron left in an ore deposit

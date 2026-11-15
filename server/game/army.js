@@ -194,7 +194,7 @@ module.exports = {
     if (k === 'p') {
       // Move to a spot on the map and hold it (id = tile index).
       if (!Number.isInteger(id) || id < 0 || id >= this.w * this.h) return 'Invalid spot';
-      if (this.ocean && this.ocean.has(this.hex.tileHex[id])) return 'Troops can\'t swim: pick a spot on land';
+      if (this.water && this.water.has(this.hex.tileHex[id])) return 'Troops can\'t swim: pick a spot on land';
       if (this.mountains.has(this.hex.tileHex[id])) return 'Troops can\'t climb the mountains: pick a spot round them';
       return { type: 'attack', target: { k: 'p', id } };
     }

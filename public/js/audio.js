@@ -155,10 +155,7 @@ const SFX = {
     noise(o, t, { d: big ? 0.9 : 0.45, peak: big ? 0.5 : 0.3, type: 'lowpass', f: big ? 1400 : 1800, f2: 120 });
     tone(o, t, { f: big ? 80 : 110, f2: 32, d: big ? 0.8 : 0.35, peak: big ? 0.5 : 0.3 });
   },
-  heal: (o, t) => {
-    tone(o, t, { f: 880, a: 0.04, d: 0.5, peak: 0.05 });
-    tone(o, t + 0.07, { f: 1320, a: 0.04, d: 0.5, peak: 0.04 });
-  },
+  // (healing makes no sound: the green pulse shows it)
   gold: (o, t) => {
     tone(o, t, { type: 'square', f: 1320, d: 0.07, peak: 0.04 });
     tone(o, t + 0.06, { type: 'square', f: 1976, d: 0.16, peak: 0.04 });
@@ -220,7 +217,7 @@ const SFX = {
 };
 
 // Fewest milliseconds between two sounds of a kind, and how many may play at once at most.
-const GAP = { ping: 150, click: 40, ok: 80, err: 120, place: 60, order: 120, arrow: 45, slash: 40, tshot: 60, hit: 90, boom: 70, heal: 350, gold: 120, raid: 200, built: 150, wave: 300, campSpawn: 500, buff: 300, trade: 150, capture: 300, coreDown: 300 };
+const GAP = { ping: 150, click: 40, ok: 80, err: 120, place: 60, order: 120, arrow: 45, slash: 40, tshot: 60, hit: 90, boom: 70, gold: 120, raid: 200, built: 150, wave: 300, campSpawn: 500, buff: 300, trade: 150, capture: 300, coreDown: 300 };
 const lastAt = new Map();
 let voices = 0;
 const MAX_VOICES = 18;

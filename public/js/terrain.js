@@ -99,7 +99,7 @@ function pine(x, y, s) {
 // A river that reaches the coast ends there: its banks stop at the shore (rivers are drawn kept off
 // the sea), and its water pours on down the cliff (or over the ledge) into the sea, with foam where
 // it lands (mouths: { x1, y1, x2, y2 }).
-function buildRivers(seed, sea) {
+function buildRivers(seed, sea, lakes = []) {
   const list = layoutOf(seed).rivers;
   const paths = [];
   const bridges = [];
@@ -110,6 +110,18 @@ function buildRivers(seed, sea) {
     const end = r.pts[r.pts.length - 1];
     const d = sea && sea.dropAt(end);
     if (d) mouths.push({ x1: end[0], y1: end[1], x2: end[0] + d[0] * 1.15, y2: end[1] + d[1] * 1.15 });
+    else {
+      // into a lake: on toward the lake hexes at this corner, over the shore into the water
+      const near = [];
+      for (const lk of lakes) for (const i of lk.cells) { const h = HEX.hexes[i]; if (Math.hypot(h.cx - end[0], h.cy - end[1]) < C.HEX_R + 0.05) near.push(h); }
+      if (near.length) {
+        const mx = near.reduce((s, h) => s + h.cx, 0) / near.length - end[0];
+        const my = near.reduce((s, h) => s + h.cy, 0) / near.length - end[1];
+        const len = Math.hypot(mx, my) || 1;
+        const lk = lakes.find((l) => l.cells.includes(near[0].i));
+        mouths.push({ x1: end[0], y1: end[1], x2: end[0] + (mx / len) * 1.1, y2: end[1] + (my / len) * 1.1, calm: lk.water });
+      }
+    }
     paths.push({ p, len: r.edges.length * C.HEX_R });
     for (const e of r.edges) if (e.bridge) bridges.push({ x: (e.x1 + e.x2) / 2, y: (e.y1 + e.y2) / 2, ang: Math.atan2(e.y2 - e.y1, e.x2 - e.x1) });
   }
@@ -158,6 +170,7 @@ function drawRivers(r, sea) {
   const land = new Path2D();
   land.rect(-10, -10, C.MAP_W + 20, C.MAP_H + 20);
   land.addPath(sea.all);
+  land.addPath(sea.lakeAll);
   ctx.clip(land, 'evenodd');
   for (const [col, w] of [[RIVER.bank, RIVER.bankW], [RIVER.deep, RIVER.deepW], [RIVER.mid, RIVER.midW]]) {
     ctx.strokeStyle = col;
@@ -170,13 +183,14 @@ function drawRivers(r, sea) {
   for (const m of r.mouths) {
     const g = ctx.createLinearGradient(m.x1, m.y1, m.x2, m.y2);
     g.addColorStop(0, RIVER.deep);
-    g.addColorStop(1, 'rgba(36, 80, 92, 0)');
+    g.addColorStop(1, m.calm || 'rgba(36, 80, 92, 0)'); // (into a lake: into its own water colour)
     ctx.strokeStyle = g;
     ctx.lineWidth = RIVER.deepW;
     ctx.beginPath();
     ctx.moveTo(m.x1, m.y1);
     ctx.lineTo(m.x2, m.y2);
     ctx.stroke();
+    if (m.calm) continue; // (a lake: calm water, no spray or foam)
     ctx.strokeStyle = 'rgba(200, 230, 240, 0.35)';
     ctx.lineWidth = RIVER.midW * 0.8;
     ctx.beginPath();
@@ -296,7 +310,7 @@ function buildGround(seed) {
     path.moveTo(cs[0][0], cs[0][1]);
     for (let k = 1; k < 6; k++) path.lineTo(cs[k][0], cs[k][1]);
     path.closePath();
-    if (forest || mountain || L.iron.has(h.i) || L.veins.has(h.i)) continue;
+    if (forest || mountain || L.lakes.has(h.i) || L.iron.has(h.i) || L.veins.has(h.i)) continue;
     // now and then a single small prop for the biome (most open hexes stay plain)
     const b = biomeOf(cl);
     if (hash(seed, h.i, 2100) > 0.25) continue;
@@ -511,10 +525,12 @@ function buildSea(seed) {
     const h = HEX.hexes[i];
     for (let k = 0; k < 2; k++) rocks.push({ x: h.cx + (hash(seed, i, 5200 + k) - 0.5) * 2.2, y: h.cy + (hash(seed, i, 5300 + k) - 0.5) * 1.6, s: 0.38 + hash(seed, i, 5400 + k) * 0.18 });
   }
-  // (all the sea, for keeping river banks on land)
+  // (all the sea, and all the lakes, for keeping river banks on land)
   const all = new Path2D();
   for (const b of bands) all.addPath(b);
-  return { bands, all, coast, cliffs, foot, strata, rocks, tint, dropAt: (c) => (corners.has(ckey(c)) ? drop(c) : null) };
+  const lakeAll = new Path2D();
+  for (const i of L.lakes) hexOutline(lakeAll, HEX.hexes[i]);
+  return { bands, all, lakeAll, coast, cliffs, foot, strata, rocks, tint, dropAt: (c) => (corners.has(ckey(c)) ? drop(c) : null) };
 }
 
 // The sea, under the land: water by depth, the shadow the land throws on it, rocks in the shallows,
@@ -559,10 +575,207 @@ function drawSea(sea) {
   ctx.lineCap = 'butt';
 }
 
+// ---- lakes: each painted once into a small picture (PX pixels a tile) with a soft, rounded shore,
+// in the style of the biome it lies in, plus a few props round it drawn as shapes.
+const LAKE_PX = 12;
+const LAKE_STYLE = {
+  // shore: [r, g, b, alpha, width in tiles]; water: shallow, deep, depth (tiles) to go from one to the other
+  meadow: { shore: [78, 96, 58, 0.9, 0.3], shallow: '#2f6f78', deep: '#1d4a5e', depth: 3, edge: 0.45, tint: [40, 92, 104] },
+  tarn: { shore: [88, 92, 96, 0.95, 0.4], shallow: '#2a4e60', deep: '#0f2235', depth: 1.4, edge: 0, ice: true, tint: [30, 60, 80] },
+  marsh: { shore: [58, 52, 38, 0.9, 0.6], shallow: '#2c4a46', deep: '#1c302f', depth: 2.5, edge: 0, weed: true, tint: [58, 84, 66] },
+  oasis: { shore: [196, 176, 120, 0.95, 0.7], shallow: '#4fb3a8', deep: '#227a83', depth: 2, edge: 0.5, green: true, tint: [70, 160, 150] },
+};
+// (cold or high: a tarn; warm and dry: an oasis, rare; the very wettest ground: a marsh pond; else a meadow lake)
+const lakeStyleOf = ({ temp, wet, high }) => (high > 0.45 || temp < 0.3 ? 'tarn' : temp > 0.5 && wet < 0.55 ? 'oasis' : wet > 0.97 ? 'marsh' : 'meadow');
+const rgbOf = (hx) => [1, 3, 5].map((k) => parseInt(hx.slice(k, k + 2), 16));
+function buildLakes(seed) {
+  const L = layoutOf(seed);
+  const out = [];
+  const seen = new Set();
+  for (const start of L.lakes) {
+    if (seen.has(start)) continue;
+    // one lake: its hexes
+    const cells = [];
+    const st = [start];
+    seen.add(start);
+    while (st.length) {
+      const i = st.pop();
+      cells.push(i);
+      for (const j of HEX.hexes[i].n) if (L.lakes.has(j) && !seen.has(j)) { seen.add(j); st.push(j); }
+    }
+    // (its style from the climate at its middle)
+    const mx = cells.reduce((s, i) => s + HEX.hexes[i].cx, 0) / cells.length;
+    const my = cells.reduce((s, i) => s + HEX.hexes[i].cy, 0) / cells.length;
+    const kind = lakeStyleOf(climate(seed, mx, my, C.MAP_W, C.MAP_H));
+    const sty = LAKE_STYLE[kind];
+    // its shore: the edges between its hexes and the land
+    const inLake = new Set(cells);
+    const shore = [];
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const i of cells) {
+      const h = HEX.hexes[i];
+      const cs = HEX.corners(h);
+      for (const [x, y] of cs) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+      for (let k = 0; k < 6; k++) if (!inLake.has(HEX.across(h, k))) shore.push([...cs[k], ...cs[(k + 1) % 6]]);
+    }
+    x0 -= 2; y0 -= 2; x1 += 2; y1 += 2;
+    const W = Math.ceil((x1 - x0) * LAKE_PX);
+    const H = Math.ceil((y1 - y0) * LAKE_PX);
+    // signed distance to the shore (tiles; positive in the water), blurred into a soft curve
+    let field = new Float32Array(W * H);
+    for (let py = 0; py < H; py++) {
+      for (let px = 0; px < W; px++) {
+        const x = x0 + (px + 0.5) / LAKE_PX;
+        const y = y0 + (py + 0.5) / LAKE_PX;
+        let d = Infinity;
+        for (const [ax, ay, bx, by] of shore) {
+          const dx = bx - ax;
+          const dy = by - ay;
+          const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)));
+          d = Math.min(d, Math.hypot(x - ax - dx * t, y - ay - dy * t));
+        }
+        field[py * W + px] = Math.max(-4, Math.min(6, inLake.has(HEX.at(x, y)) ? d : -d));
+      }
+    }
+    const r = Math.round(0.6 * LAKE_PX);
+    for (let pass = 0; pass < 2; pass++) {
+      const tmp = new Float32Array(W * H);
+      for (let py = 0; py < H; py++) for (let px = 0; px < W; px++) { let s = 0, n = 0; for (let k = -r; k <= r; k++) { const xx = px + k; if (xx >= 0 && xx < W) { s += field[py * W + xx]; n++; } } tmp[py * W + px] = s / n; }
+      const o = new Float32Array(W * H);
+      for (let py = 0; py < H; py++) for (let px = 0; px < W; px++) { let s = 0, n = 0; for (let k = -r; k <= r; k++) { const yy = py + k; if (yy >= 0 && yy < H) { s += tmp[yy * W + px]; n++; } } o[py * W + px] = s / n; }
+      field = o;
+    }
+    const noise = (x, y, s) => { const a = Math.floor(x), b = Math.floor(y), fx = x - a, fy = y - b; const v = (i, j) => hash(seed + s, a + i, b + j); const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy); return v(0, 0) + (v(1, 0) - v(0, 0)) * sx + (v(0, 1) - v(0, 0)) * sy + (v(0, 0) - v(1, 0) - v(0, 1) + v(1, 1)) * sx * sy; };
+    for (let py = 0; py < H; py++) for (let px = 0; px < W; px++) field[py * W + px] += (noise((x0 + px / LAKE_PX) / 1.8, (y0 + py / LAKE_PX) / 1.8, 4400) - 0.5) * 0.45;
+    // paint it
+    const cv = document.createElement('canvas');
+    cv.width = W;
+    cv.height = H;
+    const g = cv.getContext('2d');
+    const img = g.createImageData(W, H);
+    const [sr, sg, sb, sa, sw] = sty.shore;
+    const shallow = rgbOf(sty.shallow);
+    const deep = rgbOf(sty.deep);
+    for (let py = 0; py < H; py++) {
+      for (let px = 0; px < W; px++) {
+        const d = field[py * W + px];
+        const x = x0 + px / LAKE_PX;
+        const y = y0 + py / LAKE_PX;
+        let c = null;
+        let a = 1;
+        if (sty.green && d >= -sw - 0.7 && d < -sw) { c = [70, 90, 48]; a = 0.55 * (1 - (-d - sw) / 0.7); }
+        else if (d >= -sw && d < 0) { c = [sr, sg, sb]; a = sa; }
+        else if (d >= 0) {
+          const t = Math.min(1, d / sty.depth);
+          const k = t * t * (3 - 2 * t);
+          c = shallow.map((v, j) => v + (deep[j] - v) * k);
+          if (d < 0.22 && sty.edge) c = c.map((v) => v + (220 - v) * sty.edge);
+          if (sty.ice && d < 0.55 && noise(x / 2.2, y / 2.2, 4500) > 0.5) c = c.map((v, j) => v + ([205, 222, 230][j] - v) * 0.75 * (1 - d / 0.55));
+          if (sty.weed && noise(x, y, 4600) > 0.62) c = c.map((v, j) => v + ([72, 96, 54][j] - v) * 0.5);
+        }
+        if (!c) continue;
+        const o = (py * W + px) * 4;
+        img.data[o] = c[0];
+        img.data[o + 1] = c[1];
+        img.data[o + 2] = c[2];
+        img.data[o + 3] = Math.round(a * 255);
+      }
+    }
+    g.putImageData(img, 0, 0);
+    // props round it, placed by the field
+    const at = (x, y) => field[Math.min(H - 1, Math.max(0, Math.floor((y - y0) * LAKE_PX))) * W + Math.min(W - 1, Math.max(0, Math.floor((x - x0) * LAKE_PX)))];
+    const props = [];
+    for (let y = y0 + 0.2; y < y1; y += 0.4) {
+      for (let x = x0 + 0.2; x < x1; x += 0.4) {
+        const d = at(x, y);
+        const roll = hash(seed + 4700, Math.round(x * 10), Math.round(y * 10));
+        if (kind === 'meadow' && d > 0.5 && d < 1.4 && roll < 0.05) props.push({ kind: 'lily', x, y, flower: roll < 0.018 });
+        else if ((kind === 'meadow' && d > -0.7 && d < 0.1 && roll < 0.08) || (kind === 'marsh' && d > -0.9 && d < 0.6 && roll < 0.2)) props.push({ kind: 'reed', x, y });
+        else if (kind === 'tarn' && d > -0.8 && d < 0.1 && roll < 0.09) props.push({ kind: 'stone', x, y, s: 0.25 + roll * 2 });
+        else if (kind === 'oasis' && d > -1.4 && d < -0.5 && roll < 0.035) props.push({ kind: 'palm', x, y });
+      }
+    }
+    props.sort((a, b) => a.y - b.y);
+    out.push({ cells, kind, canvas: cv, x: x0, y: y0, w: W / LAKE_PX, h: H / LAKE_PX, props, tint: sty.tint, water: sty.shallow, inLake });
+  }
+  return out;
+}
+
+function drawLakeProp(p) {
+  const { x, y } = p;
+  switch (p.kind) {
+    case 'lily':
+      ctx.fillStyle = '#4f7a3e';
+      ctx.beginPath();
+      ctx.arc(x, y, 0.32, 0.5, Math.PI * 2 - 0.2);
+      ctx.lineTo(x, y);
+      ctx.fill();
+      if (p.flower) {
+        ctx.fillStyle = '#e7d3e4';
+        ctx.beginPath();
+        ctx.arc(x + 0.08, y - 0.08, 0.13, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    case 'reed':
+      ctx.strokeStyle = 'rgba(125, 150, 82, 0.9)';
+      ctx.lineWidth = 0.07;
+      ctx.beginPath();
+      for (const k of [-0.18, 0, 0.18]) {
+        ctx.moveTo(x + k, y + 0.12);
+        ctx.lineTo(x + k * 1.5, y - 0.6);
+      }
+      ctx.stroke();
+      ctx.fillStyle = '#6b4a2a';
+      ctx.fillRect(x - 0.05, y - 0.75, 0.1, 0.26);
+      break;
+    case 'stone':
+      ctx.fillStyle = TREE_SHADOW;
+      ctx.beginPath();
+      ctx.ellipse(x + 0.05, y + 0.12, p.s * 1.1, p.s * 0.35, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = PROP.rock;
+      ctx.beginPath();
+      ctx.moveTo(x - p.s, y + 0.12);
+      ctx.lineTo(x - p.s * 0.5, y - p.s * 0.6);
+      ctx.lineTo(x + p.s * 0.5, y - p.s * 0.7);
+      ctx.lineTo(x + p.s, y + 0.12);
+      ctx.fill();
+      ctx.fillStyle = PROP.rockLit;
+      ctx.beginPath();
+      ctx.moveTo(x - p.s, y + 0.12);
+      ctx.lineTo(x - p.s * 0.5, y - p.s * 0.6);
+      ctx.lineTo(x, y + 0.12);
+      ctx.fill();
+      break;
+    case 'palm':
+      ctx.fillStyle = TREE_SHADOW;
+      ctx.beginPath();
+      ctx.ellipse(x + 0.3, y + 0.1, 0.65, 0.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#7a5a36';
+      ctx.lineWidth = 0.16;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.quadraticCurveTo(x - 0.25, y - 0.7, x + 0.15, y - 1.35);
+      ctx.stroke();
+      ctx.fillStyle = '#4c7d3a';
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.ellipse(x + 0.15 + Math.cos(a) * 0.45, y - 1.35 + Math.sin(a) * 0.22, 0.55, 0.17, a, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    default:
+  }
+}
+
 function build(seed) {
   const L = layoutOf(seed);
   const sea = buildSea(seed);
-  const rivers = buildRivers(seed, sea);
+  const lakes = buildLakes(seed);
+  const rivers = buildRivers(seed, sea, lakes);
   // mountain peaks, two or three a hex, drawn back to front
   const peaks = [];
   for (const i of L.mountains) {
@@ -650,7 +863,8 @@ function build(seed) {
     forests.push({ i: h.i, x: h.cx, y: h.cy, trees });
   }
   for (const [i, c] of sea.tint) groundInfo.tint.set(i, c);
-  return { seed, fill, forests, rivers, oreFill, ores, veinFill, veins, peaks, hillOverlay, sea, ...groundInfo };
+  for (const lk of lakes) for (const i of lk.cells) groundInfo.tint.set(i, lk.tint);
+  return { seed, fill, forests, rivers, oreFill, ores, veinFill, veins, peaks, hillOverlay, sea, lakes, ...groundInfo };
 }
 
 // Draw the ground under the map rectangle at screen (ox, oy), s pixels per tile.
@@ -679,6 +893,11 @@ function drawTerrain(ox, oy, s) {
   ctx.fill(built.veinFill);
   ctx.fillStyle = 'rgba(58, 62, 67, 0.4)';
   ctx.fill(built.hillOverlay);
+  // lakes, with their reeds, lily pads, stones or palms
+  for (const lk of built.lakes) {
+    ctx.drawImage(lk.canvas, lk.x, lk.y, lk.w, lk.h);
+    if (s >= 4) for (const p of lk.props) drawLakeProp(p);
+  }
   // the dark lip of the land along the coast
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
   ctx.lineWidth = 0.26;

@@ -138,6 +138,41 @@
     return { ocean, sides };
   }
 
+  // ---- lakes: a few small lakes inland (one to four hexes each), impassable like the sea. Never
+  // near the coast, the map's edge or another lake. Returns a Set of hex indices.
+  function lakesOf(seed, hex, w, h, ocean) {
+    const lakes = new Set();
+    // hexes out from the sea (and the map's edge), to keep lakes inland
+    const far = new Map();
+    let front = [];
+    for (const hx of hex.hexes) if (ocean.has(hx.i) || hx.full === false || hx.n.length < 6) { far.set(hx.i, 0); front.push(hx.i); }
+    for (let d = 1; front.length; d++) {
+      const next = [];
+      for (const i of front) for (const j of hex.hexes[i].n) if (!far.has(j)) { far.set(j, d); next.push(j); }
+      front = next;
+    }
+    const want = 2 + Math.floor(hash(seed, 21, 21) * 3); // 2 to 4 lakes
+    // candidates: well inland, the wetter the likelier, in a shuffled order
+    const cands = hex.hexes.filter((hx) => (far.get(hx.i) || 0) >= 4)
+      .map((hx) => ({ hx, score: climate(seed, hx.cx, hx.cy, w, h).wet * 0.25 + hash(seed + 23, hx.q, hx.r) }))
+      .sort((a, b) => b.score - a.score);
+    const centres = [];
+    for (const { hx } of cands) {
+      if (centres.length >= want) break;
+      if (centres.some((c) => Math.hypot(c.cx - hx.cx, c.cy - hx.cy) < Math.min(w, h) * 0.35)) continue; // (spread out)
+      centres.push(hx);
+      const size = 1 + Math.floor(hash(seed + 24, hx.q, hx.r) * 4); // 1 to 4 hexes
+      const lake = [hx.i];
+      for (let k = 0; lake.length < size && k < 20; k++) {
+        const from = hex.hexes[lake[Math.floor(hash(seed + 25, k, hx.i) * lake.length)]];
+        const j = from.n[Math.floor(hash(seed + 26, k, hx.i) * from.n.length)];
+        if (!lake.includes(j) && (far.get(j) || 0) >= 3) lake.push(j);
+      }
+      for (const i of lake) lakes.add(i);
+    }
+    return lakes;
+  }
+
   // ---- rivers: they run along hex edges (between two hexes, like walls), from one side of the map
   // toward the opposite side, meandering. A river edge can't be crossed, except where a bridge is.
   // Returns [{ pts: [[x, y], ...] (the corners it runs along, for drawing), edges: [{ a, b, bridge, x1, y1, x2, y2 }] }].
@@ -145,7 +180,8 @@
   // With an ocean ({ ocean, sides } from oceanOf), rivers rise on the far side of the map and flow
   // into the sea, ending where they reach the coast.
   const RIVER_BRIDGE_EVERY = 11; // a bridge every this many edges along a river (at least two each)
-  function riversOf(seed, hex, w, h, sea = null) {
+  // A river that runs into a lake (lakes: a Set of hex indices) ends there too.
+  function riversOf(seed, hex, w, h, sea = null, lakes = new Set()) {
     const ocean = sea ? sea.ocean : new Set();
     const vkey = (p) => `${Math.round(p[0] * 100)},${Math.round(p[1] * 100)}`;
     const verts = new Map(); // key -> { p: [x, y], edges: [] }
@@ -172,6 +208,10 @@
         e.v1.edges.push(e);
         e.v2.edges.push(e);
         if (ocean.has(hx.i) || ocean.has(j)) e.v1.sea = e.v2.sea = true; // (a corner on the coast)
+        if (lakes.has(hx.i) || lakes.has(j)) {
+          if (lakes.has(hx.i) && lakes.has(j)) { e.v1.edges.pop(); e.v2.edges.pop(); continue; } // (inside a lake)
+          e.v1.lake = e.v2.lake = true; // (a corner on a lake's shore)
+        }
       }
     }
     const count = Math.max(1, Math.round((w * h) / 6000));
@@ -188,7 +228,7 @@
       let cur = null;
       let best = Infinity;
       for (const v of verts.values()) {
-        if (used.has(v.k) || v.edges.length > 2 || !v.edges.length || v.sea) continue; // (corners on the map's border have one or two edges)
+        if (used.has(v.k) || v.edges.length > 2 || !v.edges.length || v.sea || v.lake) continue; // (corners on the map's border have one or two edges)
         const d = Math.hypot(v.p[0] - start[0], v.p[1] - start[1]);
         if (d < best) {
           best = d;
@@ -227,12 +267,13 @@
         cur = nv;
         if (used.has(nv.k)) break; // ran into another river: it flows into it
         if (nv.sea) break; // reached the coast: it flows out into the sea
+        if (nv.lake) break; // ran into a lake: it flows into it
         const edgeDist = Math.min(nv.p[0], nv.p[1], w - nv.p[0], h - nv.p[1]);
         const travelled = Math.hypot(nv.p[0] - pts[0][0], nv.p[1] - pts[0][1]);
         if (nv.edges.length < 3 && edges.length > 4 && edgeDist < 0.8 && travelled > 20) break; // reached the far edge of the map
       }
       if (edges.length < 8) continue;
-      if (ocean.size && !cur.sea && !used.has(cur.k)) continue; // (with a sea, every river ends in it, or in a river that does)
+      if (ocean.size && !cur.sea && !cur.lake && !used.has(cur.k)) continue; // (with a sea, every river ends in it, a lake, or a river that does)
       for (const k of here) used.add(k);
       // bridges, evenly along it (not right at its ends)
       const every = Math.max(4, Math.min(RIVER_BRIDGE_EVERY, Math.floor((edges.length - 4) / 2)));
@@ -260,7 +301,9 @@
     if (cache.has(key)) return cache.get(key);
     const sea = withOcean ? oceanOf(seed, hex, w, h) : { ocean: new Set(), sides: [] };
     const ocean = sea.ocean;
-    const rivers = withRivers ? riversOf(seed, hex, w, h, sea) : [];
+    const lakes = withOcean ? lakesOf(seed, hex, w, h, ocean) : new Set(); // (lakes come with the sea: real maps only)
+    const rivers = withRivers ? riversOf(seed, hex, w, h, sea, lakes) : [];
+    const water = new Set([...ocean, ...lakes]); // (the sea and lakes: no mountains, forests or ore there)
     const riverEdge = new Set();
     const riverHex = new Set();
     const ekey = (a, b) => (a < b ? `${a}:${b}` : `${b}:${a}`);
@@ -274,7 +317,7 @@
     // mountains: ridges of a ridged noise, where a broader mask says there's high country
     const mountains = new Set();
     for (const hx of hex.hexes) {
-      if (!withMountains || hx.full === false || riverHex.has(hx.i) || ocean.has(hx.i)) continue;
+      if (!withMountains || hx.full === false || riverHex.has(hx.i) || water.has(hx.i)) continue;
       const ridge = 1 - Math.abs(fbm(seed + 60, hx.cx / 15, hx.cy / 15) * 2 - 1);
       const mask = fbm(seed + 61, hx.cx / 32, hx.cy / 32);
       if (ridge > 0.9 && mask > 0.55) mountains.add(hx.i);
@@ -290,7 +333,7 @@
     for (const hx of hex.hexes) {
       if (mountains.has(hx.i)) continue;
       const round = mNeighbours(hx.i).sort((a, b) => hash(seed + 63, a, 2) - hash(seed + 63, b, 2));
-      const wet = hex.hexes[hx.i].n.filter((j) => ocean.has(j)).length; // (on the coast the sea shelters it too)
+      const wet = hex.hexes[hx.i].n.filter((j) => water.has(j)).length; // (on the coast the sea shelters it too)
       while (round.length > 2 || (round.length && round.length + wet > 3)) mountains.delete(round.pop());
     }
     for (let guard = 0; guard < 50; guard++) {
@@ -320,7 +363,7 @@
       const comp = new Map();
       const sizes = [];
       for (const hx of hex.hexes) {
-        if (mountains.has(hx.i) || ocean.has(hx.i) || comp.has(hx.i)) continue;
+        if (mountains.has(hx.i) || water.has(hx.i) || comp.has(hx.i)) continue;
         const id = sizes.length;
         let n = 0;
         const stack = [hx.i];
@@ -329,7 +372,7 @@
           const i = stack.pop();
           n++;
           for (const j of hex.hexes[i].n) {
-            if (comp.has(j) || mountains.has(j) || ocean.has(j) || riverEdge.has(ekey(i, j))) continue;
+            if (comp.has(j) || mountains.has(j) || water.has(j) || riverEdge.has(ekey(i, j))) continue;
             comp.set(j, id);
             stack.push(j);
           }
@@ -348,16 +391,16 @@
       if (!opened) break; // (cut off by rivers alone: nothing mountains can do)
     }
     const foothills = new Set();
-    for (const i of mountains) for (const j of hex.hexes[i].n) if (!mountains.has(j) && !ocean.has(j)) foothills.add(j);
+    for (const i of mountains) for (const j of hex.hexes[i].n) if (!mountains.has(j) && !water.has(j)) foothills.add(j);
     const forest = new Set();
     const iron = new Set();
     const veins = new Set();
     for (const hx of hex.hexes) {
-      if (mountains.has(hx.i) || ocean.has(hx.i)) continue;
+      if (mountains.has(hx.i) || water.has(hx.i)) continue;
       if (isForest(seed, hx, w, h)) forest.add(hx.i);
     }
     for (const hx of hex.hexes) {
-      if (hx.full === false || mountains.has(hx.i) || ocean.has(hx.i) || forest.has(hx.i)) continue;
+      if (hx.full === false || mountains.has(hx.i) || water.has(hx.i) || forest.has(hx.i)) continue;
       const hill = foothills.has(hx.i);
       // iron: mostly in the foothills, a little out in the open
       const ore = hill ? hash(seed + 5, hx.q, hx.r) < 0.18 : fbm(seed + 77, hx.cx / 7, hx.cy / 7) > 0.7 && hash(seed + 5, hx.q, hx.r) < 0.12;
@@ -369,13 +412,13 @@
       if (hash(seed + 913, hx.q * 7 + 3, hx.r * 11 + 5) < (hill ? 0.04 : 0.001)) veins.add(hx.i);
     }
     // (blocked: everywhere troops can't go, mountains and sea)
-    const out = { rivers, mountains, ocean, oceanSides: sea.sides, blocked: new Set([...mountains, ...ocean]), forest, iron, veins, foothills };
+    const out = { rivers, mountains, ocean, oceanSides: sea.sides, lakes, blocked: new Set([...mountains, ...ocean, ...lakes]), forest, iron, veins, foothills };
     if (cache.size > 40) cache.clear();
     cache.set(key, out);
     return out;
   }
 
-  const api = { hash, climate, biomeOf, groundColor, isForest, mapTerrain, oceanOf, riversOf };
+  const api = { hash, climate, biomeOf, groundColor, isForest, mapTerrain, oceanOf, lakesOf, riversOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.TD_TERRAIN = api;
 })(typeof window !== 'undefined' ? window : globalThis);

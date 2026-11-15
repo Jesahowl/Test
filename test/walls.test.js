@@ -331,17 +331,20 @@ test('mountains stay thin and spread out (no fortresses), and never near a base\
   }
 });
 
-test('the sea: about a tenth of the map at most, rivers flow into it, and nobody builds, buys or walks there', () => {
+test('the sea and lakes: a tenth of the map at most, a few small lakes, rivers flow into them, and nobody builds, buys or walks there', () => {
   const Terrain = require('../shared/terrain');
   for (let seed = 1; seed <= 12; seed++) {
     const g = new Game({ botTarget: 0, rand: seeded(seed * 31), rounds: true });
     const L = g.layout;
     const tiles = [...L.ocean].reduce((n, i) => n + g.hex.hexes[i].tiles.length, 0) / (g.w * g.h);
     assert.ok(tiles > 0.05 && tiles <= 0.11, `seed ${seed}: the sea is ${(tiles * 100).toFixed(1)}% of the map`);
-    // every river ends at the coast, or in another river
+    // a few small lakes, inland
+    assert.ok(L.lakes.size >= 2 && L.lakes.size <= 16, `seed ${seed}: ${L.lakes.size} lake hexes`);
+    for (const i of L.lakes) assert.ok(!L.ocean.has(i) && !g.hex.hexes[i].n.some((j) => L.ocean.has(j)) && g.mountains.has(i), `seed ${seed}: a lake on the coast`);
+    // every river ends at the coast, in a lake, or in another river
     const k = (p) => `${Math.round(p[0] * 100)},${Math.round(p[1] * 100)}`;
     const coast = new Set();
-    for (const i of L.ocean) for (const c of g.hex.corners(g.hex.hexes[i])) coast.add(k(c));
+    for (const i of [...L.ocean, ...L.lakes]) for (const c of g.hex.corners(g.hex.hexes[i])) coast.add(k(c));
     for (const r of L.rivers) {
       const end = k(r.pts[r.pts.length - 1]);
       const into = L.rivers.some((o) => o !== r && o.pts.some((p) => k(p) === end));
@@ -354,6 +357,9 @@ test('the sea: about a tenth of the map at most, rivers flow into it, and nobody
     assert.ok(!g.canBuyHex(p.id, sea));
     const sh = g.hex.hexes[sea];
     assert.match(g.makeOrder(p.id, { k: 'p', id: sh.centre }), /swim/);
+    const lake = g.hex.hexes[[...L.lakes][0]];
+    assert.ok(!g.canBuyHex(p.id, lake.i));
+    assert.match(g.makeOrder(p.id, { k: 'p', id: lake.centre }), /swim/);
     assert.ok(!Terrain.mapTerrain(g.mapSeed, g.hex, g.w, g.h, { rivers: true }).forest.has(sea));
   }
 });
