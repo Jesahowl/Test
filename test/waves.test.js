@@ -897,3 +897,21 @@ test('a full rectangle squad sent to a rally point settles on its spots (rivers 
     assert.strictEqual(stacked, 0, 'nobody on top of anybody');
   }
 });
+
+test('pillage: several pillaging squads go for different camps', () => {
+  const { g, a } = duel(41);
+  setMix(g, a, 0, { soldier: 6 });
+  Object.assign(a.squads[1].mix, { soldier: 6 });
+  Object.assign(a.squads[2].mix, { soldier: 6 });
+  respawn(g, a);
+  a.explored.fill(1);
+  for (const q of a.squads.slice(0, 3)) assert.strictEqual(g.squadStance(a.id, q.id, 'pillage'), null);
+  run(g, 1.5);
+  const targets = a.squads.slice(0, 3).map((q) => (q.order.type === 'attack' && q.order.target.k === 'j' ? q.order.target.id : null));
+  assert.ok(targets.every((t) => t !== null), 'each set off for a camp');
+  assert.strictEqual(new Set(targets).size, 3, `three different camps (${targets})`);
+  // and they stay apart as they go
+  run(g, 10);
+  const later = a.squads.slice(0, 3).map((q) => q.order.target && q.order.target.id);
+  assert.strictEqual(new Set(later).size, 3, `still different (${later})`);
+});

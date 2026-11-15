@@ -337,14 +337,22 @@ module.exports = {
     p.pillageAt = this.time + 1;
     const seen = (c) => !!p.explored[this.idx(c.x, c.y)];
     const home = (c) => dist(p.core.x, p.core.y, c.x, c.y);
-    for (const q of p.squads) {
-      if (q.stance !== 'pillage') continue;
+    // Several squads pillaging spread out: each claims its camp (in squad order), and the others
+    // go for different ones while there are any; searching squads look in different places.
+    const claimed = new Set();
+    const searching = [];
+    const pillagers = p.squads.filter((q) => q.stance === 'pillage');
+    for (const q of pillagers) {
       const o = q.order;
       const cur = o.type === 'attack' && o.target.k === 'j' ? this.camps[o.target.id] : null;
-      if (cur && cur.alive && seen(cur)) {
+      if (cur && cur.alive && seen(cur) && !claimed.has(cur.id)) {
         const fighting = [...this.creeps.values()].some((m) => m.camp === cur.id && m.angry === p.id);
-        const back = !fighting && this.camps.find((c) => c !== cur && c.alive && seen(c) && (c.spawnedAt || 0) > (q.pillageSince || 0) && home(c) < home(cur));
-        if (!back) continue;
+        const back = !fighting && this.camps.find((c) => c !== cur && c.alive && seen(c) && !claimed.has(c.id) && (c.spawnedAt || 0) > (q.pillageSince || 0) && home(c) < home(cur));
+        if (!back) {
+          claimed.add(cur.id);
+          continue;
+        }
+        claimed.add(back.id);
         this.pillageTo(p, q, back);
         continue;
       }
@@ -355,7 +363,8 @@ module.exports = {
       let bestScore = Infinity;
       for (const c of this.camps) {
         if (!seen(c)) continue;
-        const score = dist(fx, fy, c.x + 0.5, c.y + 0.5) + (c.alive ? 0 : 1e4);
+        // (a camp another of my squads has: only if there's nothing else)
+        const score = dist(fx, fy, c.x + 0.5, c.y + 0.5) + (c.alive ? 0 : 1e4) + (claimed.has(c.id) ? 2e4 : 0);
         if (score < bestScore) {
           bestScore = score;
           best = c;
@@ -367,14 +376,16 @@ module.exports = {
         const spot = o.type === 'attack' && o.target.k === 'p' ? o.target.id : -1;
         const arrived = spot >= 0 && dist(fx, fy, (spot % this.w) + 0.5, Math.floor(spot / this.w) + 0.5) < 3;
         if (spot < 0 || arrived || this.time >= (q.searchUntil || 0)) {
-          const to = this.pickSearchSpot(fx, fy, p);
+          const to = this.pickSearchSpot(fx, fy, p, searching);
           const ord = { type: 'attack', target: { k: 'p', id: this.idx(Math.floor(to.x), Math.floor(to.y)) } };
           q.order = ord;
           q.searchUntil = this.time + C.PILLAGE_SEARCH_TIME;
           for (const u of mine) this.applyOrder(u, ord);
         }
+        if (q.order.type === 'attack' && q.order.target.k === 'p') searching.push({ x: (q.order.target.id % this.w) + 0.5, y: Math.floor(q.order.target.id / this.w) + 0.5 });
         continue;
       }
+      claimed.add(best.id);
       if (cur === best) continue;
       this.pillageTo(p, q, best);
     }
@@ -382,7 +393,8 @@ module.exports = {
 
   // Where a squad searching for camps looks next: the spot 10-30 tiles from it with the most ground
   // nobody of ours has seen around it, nearer ones preferred, clear of enemy guns.
-  pickSearchSpot(fx, fy, p) {
+  // (avoid: where my other squads are already searching: keep away from those)
+  pickSearchSpot(fx, fy, p, avoid = []) {
     let best = null;
     let bestScore = -Infinity;
     for (let i = 0; i < 28; i++) {
@@ -402,7 +414,8 @@ module.exports = {
           if (this.inBounds(tx, ty) && !p.explored[this.idx(tx, ty)]) unseen++;
         }
       }
-      const score = unseen * 10 - dist(fx, fy, x, y) * 0.5 + this.rand() * 5;
+      let score = unseen * 10 - dist(fx, fy, x, y) * 0.5 + this.rand() * 5;
+      for (const o of avoid) if (dist(x, y, o.x, o.y) < 18) score -= 200;
       if (score > bestScore) {
         bestScore = score;
         best = { x, y };
