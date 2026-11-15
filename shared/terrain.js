@@ -82,45 +82,59 @@
     if (hash(seed, 12, 12) < 0.4) sides.push((first + (hash(seed, 13, 13) < 0.5 ? 1 : 3)) % 4); // (round a corner)
     const fromSide = (sd, x, y) => [x, y, w - x, h - y][sd];
     const alongSide = (sd, x, y) => (sd % 2 ? x : y);
-    // (grown as wide as it can be while staying under OCEAN_MAX of the map's tiles)
-    let scale = 2;
-    let ocean = new Set();
     const tiles = (set) => [...set].reduce((n, i) => n + hex.hexes[i].tiles.length, 0) / (w * h);
-    for (let tries = 0; tries < 20; tries++) {
-      ocean = new Set();
+    // the sea grown to a given scale, tidied
+    const shape = (scale) => {
+      let ocean = new Set();
       for (const hx of hex.hexes) {
         for (const sd of sides) {
           const deep = (sd % 2 ? 9 : 12) * scale * (sd === first ? 1 : 0.5); // (a band along a long side is narrower; round a corner, a smaller arm)
-          // (a wandering coast: broad bays and headlands, with smaller coves on them)
+          // (a ragged coast, never a straight line: deep bays between headlands that run right out
+          // to the map's edge, and a rough 2-D wobble on top for coves, inlets and spits of land)
           const along = alongSide(sd, hx.cx, hx.cy);
-          const reach = deep * (0.15 + 1.25 * fbm(seed + 90 + sd, along / 22, sd * 7.3) + 0.6 * (vnoise(seed + 95 + sd, along / 7, sd) - 0.5) + 0.35);
+          const swell = clamp01((fbm(seed + 90 + sd, along / 15, sd * 7.3) - 0.36) / 0.3);
+          const reach = deep * (0.05 + 2.4 * Math.pow(swell, 1.3)) + (fbm(seed + 97, hx.cx / 7, hx.cy / 7) - 0.5) * 9;
           if (fromSide(sd, hx.cx, hx.cy) < reach) ocean.add(hx.i);
         }
       }
-      if (tiles(ocean) <= OCEAN_MAX) break;
-      scale *= 0.93;
-    }
-    // tidy the coast: no lone sea hexes poking into the land, no lone land hexes out at sea
-    const nIn = (i) => hex.hexes[i].n.filter((j) => ocean.has(j)).length;
-    for (const i of [...ocean]) if (nIn(i) <= 1 && hex.hexes[i].full !== false) ocean.delete(i);
-    for (const hx of hex.hexes) if (!ocean.has(hx.i) && nIn(hx.i) >= 5) ocean.add(hx.i);
-    // any land the sea cuts off from the mainland becomes sea
-    const seen = new Map();
-    const pieces = [];
-    for (const hx of hex.hexes) {
-      if (ocean.has(hx.i) || seen.has(hx.i)) continue;
-      const piece = [];
-      const stack = [hx.i];
-      seen.set(hx.i, pieces.length);
+      // only sea that reaches the map's edge (no lakes left inland by the wobble)
+      const keep = new Set();
+      const stack = [...ocean].filter((i) => hex.hexes[i].full === false || hex.hexes[i].n.length < 6);
+      for (const i of stack) keep.add(i);
       while (stack.length) {
         const i = stack.pop();
-        piece.push(i);
-        for (const j of hex.hexes[i].n) if (!ocean.has(j) && !seen.has(j)) { seen.set(j, pieces.length); stack.push(j); }
+        for (const j of hex.hexes[i].n) if (ocean.has(j) && !keep.has(j)) { keep.add(j); stack.push(j); }
       }
-      pieces.push(piece);
+      ocean = keep;
+      // tidy the coast: no lone sea hexes poking into the land, no lone land hexes out at sea
+      const nIn = (i) => hex.hexes[i].n.filter((j) => ocean.has(j)).length;
+      for (const i of [...ocean]) if (nIn(i) <= 1 && hex.hexes[i].full !== false) ocean.delete(i);
+      for (const hx of hex.hexes) if (!ocean.has(hx.i) && nIn(hx.i) >= 5) ocean.add(hx.i);
+      // any land the sea cuts off from the mainland becomes sea
+      const seen = new Set();
+      const pieces = [];
+      for (const hx of hex.hexes) {
+        if (ocean.has(hx.i) || seen.has(hx.i)) continue;
+        const piece = [];
+        const st = [hx.i];
+        seen.add(hx.i);
+        while (st.length) {
+          const i = st.pop();
+          piece.push(i);
+          for (const j of hex.hexes[i].n) if (!ocean.has(j) && !seen.has(j)) { seen.add(j); st.push(j); }
+        }
+        pieces.push(piece);
+      }
+      const main = pieces.reduce((x, y) => (y.length > x.length ? y : x), []);
+      for (const pc of pieces) if (pc !== main) for (const i of pc) ocean.add(i);
+      return ocean;
+    };
+    // (grown as wide as it can be while staying under OCEAN_MAX of the map's tiles)
+    let ocean = new Set();
+    for (let scale = 4, tries = 0; tries < 40; tries++, scale *= 0.94) {
+      ocean = shape(scale);
+      if (tiles(ocean) <= OCEAN_MAX) break;
     }
-    const main = pieces.reduce((a, b) => (b.length > a.length ? b : a), []);
-    for (const pc of pieces) if (pc !== main) for (const i of pc) ocean.add(i);
     return { ocean, sides };
   }
 
