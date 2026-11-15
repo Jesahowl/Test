@@ -70,7 +70,19 @@ early once no humans are left alive.
 
 On the menu, **Create private room** gives you a 5-letter room code and an invite link
 (`…/?room=K7QXM`). Friends join by typing the code or opening the link. In the lobby the host
-(👑) chooses how many bots to add (0–10) and presses **Start round**; anyone who arrives mid-round
+(👑) chooses how many bots to add (0–10) and the **game settings**, then presses **Start round**:
+
+| Setting | Choices | Default |
+|---|---|---|
+| Bot difficulty | Easy / Normal / Hard: easy bots think slower, earn 25% less and only attack with a full army; hard ones think faster, earn 30% more, give orders more often and attack sooner | Normal |
+| Starting gold | 100 / 200 / 400 / 800 | 200 |
+| Peace time | None / 4 / 8 / 12 min: cores take 80% less damage until then, and siege power starts building after it | 8 min |
+| Sudden death | 13 / 19 / 25 min: how long rounds last | 19 min |
+| Rivers | On / Off | On |
+| Fog of war | On / Off (off: everyone sees the whole map) | On |
+
+Everyone in the room sees the settings; only the host can change them. Public games use the defaults.
+ anyone who arrives mid-round
 watches and joins the next one. After each round's scoreboard everyone returns to the lobby. A round
 also ends early if no humans are left. If the host leaves, someone else becomes host; an empty room
 closes after a minute.

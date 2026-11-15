@@ -176,6 +176,23 @@
     // possible; past 12 players the hues come round again in a paler tone, then a deeper one.
     PLAYER_HUES: [0, 25, 48, 90, 130, 168, 195, 220, 255, 285, 315, 340],
     HUE_ORDER: [0, 6, 3, 9, 1, 7, 4, 10, 2, 8, 5, 11], // most spread-out first
+    // A game's rules: these defaults, or what a private room's host picked (RULE_CHOICES).
+    DEFAULT_RULES: { difficulty: 'normal', startGold: 200, fortify: 480, suddenDeath: 1140, rivers: true, fog: true },
+    RULE_CHOICES: {
+      difficulty: ['easy', 'normal', 'hard'],
+      startGold: [100, 200, 400, 800],
+      fortify: [0, 240, 480, 720], // peace time: cores fortified (and siege power flat) for this long
+      suddenDeath: [780, 1140, 1500], // sudden death at 13 / 19 / 25 minutes
+      rivers: [true, false],
+      fog: [true, false],
+    },
+    // How bots play at each difficulty: seconds between decisions, their income, seconds between
+    // orders, how strong a strike force must be to attack (share of full) and when it falls back.
+    BOT_LEVELS: {
+      easy: { think: [1.6, 0.8], income: 0.75, orders: [14, 8], attackAt: 0.95, retreatAt: 0.5 },
+      normal: { think: [0.8, 0.8], income: 1, orders: [8, 6], attackAt: 0.75, retreatAt: 0.35 },
+      hard: { think: [0.5, 0.4], income: 1.3, orders: [5, 4], attackAt: 0.6, retreatAt: 0.25 },
+    },
     // Public lobbies (see server/room.js): players gather, then the game starts on its own.
     LOBBY_MAX: 8, // people in a public game (bots fill the rest up to BOT_TARGET)
     LOBBY_WAIT_SOLO: 45, // seconds after the first player arrives

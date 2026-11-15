@@ -81,6 +81,7 @@ class Room {
     this.done = false; // public game over: its players move on to the open lobby
     this.startedAt = 0;
     this.bots = C.PRIVATE_DEFAULT_BOTS; // private room: how many bots join each round
+    this.rules = { ...C.DEFAULT_RULES }; // private room: the host's choices (public games use the defaults)
     this.clients = new Set();
     this.host = null;
     this.game = null;
@@ -216,12 +217,22 @@ class Room {
         t: 'room', code: this.code, pub: this.isPublic, phase: this.phase, host: c === this.host, members,
         bots: this.isPublic ? Math.max(0, this.botTarget - people.length) : this.bots, maxBots: C.PRIVATE_MAX_BOTS,
         round: this.roundNo, lastWinner: this.lastWinner, me: people.indexOf(c),
-        startIn, max: C.LOBBY_MAX, ready: this.ready.has(c),
+        startIn, max: C.LOBBY_MAX, ready: this.ready.has(c), rules: this.isPublic ? C.DEFAULT_RULES : this.rules,
       });
     }
   }
 
   // ---------------------------------------------------------------- host controls
+
+  // The host changes one of the rules (difficulty, starting gold...): only to one of RULE_CHOICES.
+  setRule(client, key, value) {
+    if (this.isPublic || client !== this.host || this.phase !== 'lobby') return 'Only the host can change that';
+    const choices = C.RULE_CHOICES[key];
+    if (!choices || !choices.includes(value)) return 'Invalid setting';
+    this.rules[key] = value;
+    this.sendRoom();
+    return null;
+  }
 
   setBots(client, n) {
     if (client !== this.host || this.phase !== 'lobby') return 'Only the host can change that';
@@ -253,7 +264,7 @@ class Room {
   newRound() {
     const humans = [...this.clients].filter((c) => c.name).length;
     this.roundNo++;
-    this.game = new Game({ botTarget: this.isPublic ? this.botTarget : humans + this.bots, rounds: true, round: this.roundNo });
+    this.game = new Game({ botTarget: this.isPublic ? this.botTarget : humans + this.bots, rounds: true, round: this.roundNo, rules: this.isPublic ? null : this.rules });
     this.game.onDeath = (p, info) => {
       for (const client of this.clients) {
         if (client.pid === p.id) {
@@ -412,7 +423,7 @@ class Room {
         client.expView = null;
       }
       const p = client.pid ? game.players.get(client.pid) : null;
-      const fog = p && p.alive && p.vis ? p : null;
+      const fog = p && p.alive && p.vis && game.rules.fog ? p : null; // (fog of war can be turned off in a private room)
       let expPart = '';
       // Where this player has explored (run lengths, starting with unexplored): the client draws its
       // fog from exactly this, so it always matches what the server sends them.

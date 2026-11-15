@@ -28,7 +28,11 @@ class Game {
     this.round = opts.round || 1;
     // Seeds the look of the map (where the forests grow); every client draws the same terrain from it.
     this.mapSeed = opts.mapSeed ?? Math.floor(Math.random() * 2147483647);
-    this.riversOn = opts.rivers !== false; // (tests can turn rivers off for open ground)
+    // The rules of this game (C.DEFAULT_RULES, or a private room's choices)
+    this.rules = { ...C.DEFAULT_RULES, ...(opts.rules || {}) };
+    if (opts.rivers === false) this.rules.rivers = false; // (tests: open ground)
+    this.riversOn = this.rules.rivers;
+    this.botLevel = C.BOT_LEVELS[this.rules.difficulty] || C.BOT_LEVELS.normal;
     this.instantBuild = !!opts.instantBuild; // (tests) buildings and walls go up at once, no workers needed
     this.phase = 'playing';
     this.winner = null;
@@ -138,7 +142,7 @@ class Game {
     }
 
     for (const p of this.players.values()) {
-      if (p.alive) this.award(p, C.income(p.territory) * dt, 'income');
+      if (p.alive) this.award(p, C.income(p.territory) * dt * (p.isBot ? this.botLevel.income : 1), 'income');
     }
 
     this.updateDiplomacy();
@@ -208,7 +212,9 @@ class Game {
       snap.round = {
         n: this.round, phase: this.phase, t: Math.floor(this.time), seed: this.mapSeed, rivers: this.riversOn,
         join: Math.max(0, Math.ceil(C.ROUND_JOIN_WINDOW - this.time)),
-        sd: Math.ceil(C.ROUND_SUDDEN_DEATH - this.time), // <= 0: sudden death is on
+        sd: Math.ceil(this.rules.suddenDeath - this.time), // <= 0: sudden death is on
+        fort: this.rules.fortify, // peace time (cores fortified until then)
+        fog: this.rules.fog,
       };
     }
     this.fx = [];

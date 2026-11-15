@@ -24,7 +24,8 @@ module.exports = {
 
     for (const p of this.players.values()) {
       if (!p.isBot || !p.alive || this.time < p.bot.next) continue;
-      p.bot.next = this.time + 0.8 + this.rand() * 0.8;
+      const [base, spread] = this.botLevel.think;
+      p.bot.next = this.time + base + this.rand() * spread;
       this.botThink(p);
     }
   },
@@ -170,7 +171,7 @@ module.exports = {
 
     // Orders.
     if (this.time < p.bot.nextOrder) return;
-    p.bot.nextOrder = this.time + 8 + this.rand() * 6;
+    p.bot.nextOrder = this.time + this.botLevel.orders[0] + this.rand() * this.botLevel.orders[1];
     const [strike, guard, jungle, second] = p.squads;
     const alive = (q) => troops.filter((u) => u.sq === q.id).length;
     const size = (q) => this.mixSlots(q.mix);
@@ -216,9 +217,9 @@ module.exports = {
     // The strike force attacks once it's mostly up to strength, and falls back to regroup when
     // it has been worn down.
     const enemy = this.nearestEnemy(p.core.x, p.core.y, p.id, true);
-    if (strike.order.type === 'attack' && alive(strike) < size(strike) * 0.35) {
+    if (strike.order.type === 'attack' && alive(strike) < size(strike) * this.botLevel.retreatAt) {
       this.order(p.id, null, { k: 'c', id: p.id }, [strike.id, second.id]);
-    } else if (enemy && strike.order.type === 'defend' && size(strike) && alive(strike) >= size(strike) * 0.75) {
+    } else if (enemy && strike.order.type === 'defend' && size(strike) && alive(strike) >= size(strike) * this.botLevel.attackAt) {
       let target = { k: 'c', id: enemy.id };
       let bestD = Infinity;
       for (const t of this.towers.values()) {

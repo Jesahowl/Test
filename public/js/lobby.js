@@ -38,6 +38,26 @@ function formError(text) {
 }
 
 // The server's view of my room: lobby (show this screen) or playing (the game takes over).
+// A private room's settings: [key, label, [[value, text], ...], what it does].
+const RULES = [
+  ['difficulty', 'Bot difficulty', [['easy', 'Easy'], ['normal', 'Normal'], ['hard', 'Hard']], 'Easy bots think slower, earn less and wait for a full army; hard ones are quick, earn 30% more and attack sooner'],
+  ['startGold', 'Starting gold', [[100, '100'], [200, '200'], [400, '400'], [800, '800']], 'Gold everyone starts with'],
+  ['fortify', 'Peace time', [[0, 'None'], [240, '4 min'], [480, '8 min'], [720, '12 min']], 'Cores take 80% less damage until then, and siege power starts building after it'],
+  ['suddenDeath', 'Sudden death', [[780, '13 min'], [1140, '19 min'], [1500, '25 min']], 'When cores start crumbling and troops hit buildings twice as hard: how long rounds last'],
+  ['rivers', 'Rivers', [[true, 'On'], [false, 'Off']], 'Rivers across the map, crossed only at bridges'],
+  ['fog', 'Fog of war', [[true, 'On'], [false, 'Off']], 'Off: everyone sees the whole map'],
+];
+
+function rulesHtml(rules, host) {
+  return RULES.map(([key, label, opts, what]) => `<div class="rule"><span class="rl" data-tip="${what}">${label}</span><span class="seg">${opts.map(([v, t]) => `<button class="${rules[key] === v ? 'on' : ''}" data-rule="${key}" data-v='${JSON.stringify(v)}'${host ? '' : ' disabled'}>${t}</button>`).join('')}</span></div>`).join('');
+}
+
+$('lobby-rules').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-rule]');
+  if (!b || b.disabled || b.classList.contains('on')) return;
+  sendMsg({ t: 'rule', key: b.dataset.rule, value: JSON.parse(b.dataset.v) });
+});
+
 const fmtClock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 // The public lobby's countdown, ticking locally between the server's updates.
@@ -95,6 +115,7 @@ function onRoom(msg) {
     $('bots-less').onclick = () => sendMsg({ t: 'bots', n: msg.bots - 1 });
     $('bots-more').onclick = () => sendMsg({ t: 'bots', n: msg.bots + 1 });
   }
+  $('lobby-rules').innerHTML = rulesHtml(msg.rules || {}, msg.host);
   const total = msg.members.length + msg.bots;
   $('lobby-start').classList.toggle('hidden', !msg.host);
   $('lobby-start').disabled = total < 2;

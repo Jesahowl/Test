@@ -37,7 +37,7 @@ module.exports = {
       isBot,
       alive: true,
       ...this.pickColour(),
-      gold: C.START_GOLD,
+      gold: this.rules.startGold,
       wood: C.START_WOOD,
       jobs: { ...C.START_JOBS }, // worker job priorities (see workers.js)
       core: { x: pos.x, y: pos.y, hp: C.CORE_HP, maxHp: C.CORE_HP, cd: 0 },
@@ -113,16 +113,16 @@ module.exports = {
   // Pacing (rounds only): cores are fortified early on, so nobody is knocked out in the first
   // minutes, and troops hit buildings gradually harder as the round goes on.
   coreArmor() {
-    return this.rounds && this.time < C.CORE_FORTIFY_TIME ? C.CORE_FORTIFY : 0;
+    return this.rounds && this.time < this.rules.fortify ? C.CORE_FORTIFY : 0;
   },
 
   siegeRamp() {
     if (!this.rounds) return 1;
-    return 1 + Math.max(0, this.time - C.SIEGE_RAMP_START) / 60 * C.SIEGE_RAMP_PER_MIN;
+    return 1 + Math.max(0, this.time - this.rules.fortify) / 60 * C.SIEGE_RAMP_PER_MIN; // (ramps up once peace time is over)
   },
 
   suddenDeath() {
-    return this.rounds && this.time >= C.ROUND_SUDDEN_DEATH;
+    return this.rounds && this.time >= this.rules.suddenDeath;
   },
 
   buffed(pid) {

@@ -163,6 +163,9 @@ function createServer({ port = 3000, botTarget, waits = {} } = {}) {
           room.add(client);
           break;
         }
+        case 'rule':
+          err = client.room ? client.room.setRule(client, String(msg.key), msg.value) : null;
+          break;
         case 'bots':
           err = client.room ? client.room.setBots(client, msg.n) : null;
           break;

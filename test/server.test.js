@@ -178,12 +178,24 @@ test('private rooms: create, join by code, host starts, back to the lobby after 
     await waitFor(friend, (m) => m.t === 'err' && /host/.test(m.m));
     host.send(JSON.stringify({ t: 'bots', n: 3 }));
     await waitFor(friend, (m) => m.t === 'room' && m.bots === 3);
+    // game settings: host only, valid choices only
+    assert.deepStrictEqual(lobby.rules, require('../shared/config').DEFAULT_RULES);
+    friend.send(JSON.stringify({ t: 'rule', key: 'difficulty', value: 'hard' }));
+    await waitFor(friend, (m) => m.t === 'err' && /host/.test(m.m));
+    host.send(JSON.stringify({ t: 'rule', key: 'startGold', value: 12345 }));
+    await waitFor(host, (m) => m.t === 'err' && /Invalid/.test(m.m));
+    for (const [key, value] of [['difficulty', 'hard'], ['startGold', 800], ['fog', false], ['suddenDeath', 780]]) host.send(JSON.stringify({ t: 'rule', key, value }));
+    await waitFor(friend, (m) => m.t === 'room' && m.rules.difficulty === 'hard' && m.rules.startGold === 800 && m.rules.fog === false && m.rules.suddenDeath === 780);
     host.send(JSON.stringify({ t: 'start' }));
     const w1 = await waitFor(host, (m) => m.t === 'welcome');
     const w2 = await waitFor(friend, (m) => m.t === 'welcome');
     assert.strictEqual(w1.room, lobby.code);
     const room = srv.rooms.get(lobby.code);
     assert.ok(room.game.players.has(w1.id) && room.game.players.has(w2.id));
+    assert.strictEqual(room.game.rules.difficulty, 'hard', 'the game plays by the room\'s settings');
+    assert.ok(room.game.players.get(w1.id).gold >= 800);
+    const sd = await waitFor(host, (m) => m.t === 's' && m.round && m.round.fog === false);
+    assert.ok(sd.round.sd <= 780);
     // state carries the room code
     const st = await waitFor(host, (m) => m.t === 's' && m.round);
     assert.strictEqual(st.round.code, lobby.code);

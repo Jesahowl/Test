@@ -381,6 +381,15 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 .pub-row .st.live { color: var(--gold); }
 .pub-row .when { color: var(--muted); font-variant-numeric: tabular-nums; }
 .pub-row button { padding: 4px 10px; font-size: 12px; }
+#lobby-rules { display: flex; flex-direction: column; gap: 5px; margin-bottom: 4px; }
+#lobby-rules .rule { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
+#lobby-rules .rl { color: var(--muted); cursor: help; }
+#lobby-rules .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+#lobby-rules .seg button { padding: 4px 9px; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: var(--raise); color: var(--muted); font-size: 12px; font-weight: 600; }
+#lobby-rules .seg button:first-child { border-left: 0; }
+#lobby-rules .seg button.on { background: #2a2612; color: var(--gold); }
+#lobby-rules .seg button:disabled { cursor: default; opacity: 1; }
+#lobby-rules .seg button:disabled:not(.on) { opacity: 0.55; }
 .lobby-tag { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); font-weight: 700; }
 .room-code { font: 800 46px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 8px; color: var(--gold); margin: 6px 0 8px; user-select: all; }
 #lobby-last { margin: 10px 0 0; font-size: 13px; }
