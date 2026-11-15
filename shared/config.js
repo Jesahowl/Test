@@ -6,8 +6,8 @@
   const CONFIG = {
     TICK_RATE: 20, // simulation steps per second
     SNAPSHOT_RATE: 10, // state updates sent to players per second (clients interpolate in between)
-    MAP_W: 110,
-    MAP_H: 110,
+    MAP_W: 200, // a wide landscape map, twice as wide as it is tall
+    MAP_H: 100,
 
     // Economy: land pays a trickle; most gold comes from fighting (troop kills, jungle camps,
     // taking towers and cores - see the *_BOUNTY settings and each monster's bounty).
@@ -306,7 +306,7 @@
     LAND_BUY_MAX: 120, // hexes one buy message may ask for (a drag, or a whole ring of border)
 
     // ---- Jungle: neutral camps that sit still, fight back when attacked, and pay out when cleared.
-    CAMP_COUNT: 12,
+    CAMP_COUNT: 18,
     CAMP_RESPAWN: 45,
     BUFF_CAMP_RESPAWN: 90, // the warlord's fort (which gives the jungle buff) takes longer to come back
     // A cleared camp comes back somewhere new (preferring unclaimed land).
@@ -316,7 +316,7 @@
     CAMP_MOVE_MIN: 15, // a camp moves at least this far when it can
     CAMP_LEASH: 4.5, // monsters chase attackers this far from their camp, then reset
     CAMP_AGGRO: 1.6, // anyone's units (not caravans) this close to a barbarian wake the whole camp: it attacks them
-    CAMP_MIX: { small: 5, medium: 4, large: 3 }, // how many of each camp size
+    CAMP_MIX: { small: 8, medium: 6, large: 4 }, // how many of each camp size
     CAMP_INFO: {
       small: { name: 'Raider Camp' },
       medium: { name: 'Barbarian Outpost' },

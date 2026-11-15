@@ -465,9 +465,10 @@ test('stances: aggressive squads fight on the way, hold marches past and never c
     g.squadStance(a.id, a.squads[0].id, stance);
     const mx = Math.round((a.core.x + b.core.x) / 2);
     const my = Math.round((a.core.y + b.core.y) / 2);
-    const squad = troops(g, a, 'soldier', 3, mx - 6, my);
+    const sx = Math.sign(b.core.x - a.core.x) || 1; // (which way b's core is: they march that way along the row)
+    const squad = troops(g, a, 'soldier', 3, mx - sx * 6, my);
     assert.ok(squad.every((u) => u.stance === stance), 'troops take their squad\'s stance');
-    const [foe] = troops(g, b, 'soldier', 1, mx - 2, my + 2.4); // beside the path, out of reach
+    const [foe] = troops(g, b, 'soldier', 1, mx - sx * 2, my + 2.4); // beside the path, out of reach
     foe.hp = foe.maxHp = 1e6;
     foe.attack = { k: 'p', id: g.idx(Math.floor(foe.x), Math.floor(foe.y)) };
     g.order(a.id, null, { k: 'c', id: b.id }, [a.squads[0].id]);
@@ -878,7 +879,7 @@ test('attacking a base: on that player\'s land, a squad fights their troops (not
 
 test('a full rectangle squad sent to a rally point settles on its spots (rivers on the map)', () => {
   for (const seed of [3, 33]) {
-    const { g, a } = duel(seed);
+    const { g, a } = duel(seed, { terrain: true });
     assert.ok(g.riverEdges > 0, 'this map has rivers');
     setMix(g, a, 0, { soldier: 20 });
     g.squadFormation(a.id, a.squads[0].id, 'rect');

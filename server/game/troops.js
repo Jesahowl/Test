@@ -593,19 +593,10 @@ module.exports = {
         if (h >= 0 && !mountains.has(h)) byHex[h].push([x, y]); // (no spots on a mountain)
       }
     }
-    // no spots on a river (troops would stand in the water)
-    const segs = [];
-    for (const r of this.rivers || []) for (const e of r.edges) if (!e.bridge) segs.push(e);
-    const nearRiver = ([x, y]) => segs.some((e) => {
-      const vx = e.x2 - e.x1;
-      const vy = e.y2 - e.y1;
-      const t = Math.max(0, Math.min(1, ((x - e.x1) * vx + (y - e.y1) * vy) / (vx * vx + vy * vy)));
-      return Math.hypot(x - e.x1 - vx * t, y - e.y1 - vy * t) < 0.65;
-    });
+    // no spots on a river or hard against a mountain (troops would stand in the water, or get
+    // caught on the rock's corners)
     for (const h of this.hex.hexes) {
-      if (segs.length && byHex[h.i].length) {
-        if (this.riverHexes.has(h.i)) byHex[h.i] = byHex[h.i].filter((p) => !nearRiver(p));
-      }
+      if (byHex[h.i].length && this.nearBarrierHex(h.i)) byHex[h.i] = byHex[h.i].filter(([x, y]) => !this.nearBarrier(x, y, 0.8));
       byHex[h.i].sort((p, q) => Math.hypot(p[0] - h.cx, p[1] - h.cy) - Math.hypot(q[0] - h.cx, q[1] - h.cy));
     }
     this.slotsByHex = byHex;
@@ -697,6 +688,41 @@ module.exports = {
     }
   },
 
+  // The permanent barrier edges (rivers without bridges, mountain sides) as segments, and the
+  // hexes that have one. Built once.
+  barrierSegs() {
+    if (this.barrierCache) return this.barrierCache;
+    const segs = [];
+    const hexes = new Set();
+    for (const w of this.wallAt.values()) {
+      if (!w.river) continue;
+      const e = this.edgeCorners(w.a, w.b);
+      if (!e) continue;
+      segs.push([e[0][0], e[0][1], e[1][0], e[1][1]]);
+      hexes.add(w.a);
+      hexes.add(w.b);
+    }
+    this.barrierCache = { segs, hexes };
+    return this.barrierCache;
+  },
+
+  nearBarrierHex(h) {
+    return this.barrierSegs().hexes.has(h);
+  },
+
+  // Is (x, y) within r of a river or mountain edge?
+  nearBarrier(x, y, r) {
+    for (const [x1, y1, x2, y2] of this.barrierSegs().segs) {
+      if (Math.abs(x - x1) > 4 && Math.abs(x - x2) > 4) continue;
+      if (Math.abs(y - y1) > 4 && Math.abs(y - y2) > 4) continue;
+      const vx = x2 - x1;
+      const vy = y2 - y1;
+      const t = Math.max(0, Math.min(1, ((x - x1) * vx + (y - y1) * vy) / (vx * vx + vy * vy)));
+      if (Math.hypot(x - x1 - vx * t, y - y1 - vy * t) < r) return true;
+    }
+    return false;
+  },
+
   // The hexes within `depth` steps of hex h that can be reached without crossing a river.
   sameSideHexes(h, depth) {
     const seen = new Set([h]);
@@ -757,6 +783,7 @@ module.exports = {
     const side = this.sameSideHexes(h, 4);
     const ok = (x, y) => x > 0.4 && y > 0.4 && x < this.w - 0.4 && y < this.h - 0.4
       && side.has(this.hex.tileHex[this.idx(Math.floor(x), Math.floor(y))]) // (not across a river)
+      && !this.nearBarrier(x, y, 0.8) // (nor hard against a river or mountain)
       && (!home || this.terr[this.idx(Math.floor(x), Math.floor(y))] === owner)
       && solid.every(([sx, sy, r]) => Math.hypot(x - sx, y - sy) > r + 0.45) && !clash(x, y);
     // rows centred on the hex (front = +), then extra rows behind and in front, in turn

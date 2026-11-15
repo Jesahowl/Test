@@ -316,7 +316,7 @@ test('selling a damaged building (or knocking down a damaged wall) gets back les
 test('game rules: starting gold, peace time, sudden death and bot difficulty', () => {
   const C = require('../shared/config');
   const make = (rules) => {
-    const g = new Game({ botTarget: 0, rand: seeded(3), rounds: true, rules });
+    const g = new Game({ botTarget: 0, rand: seeded(3), mapSeed: 3, rounds: true, rules });
     const human = g.addPlayer('H');
     const bot = g.addPlayer('B', true);
     return { g, human, bot };
@@ -332,12 +332,14 @@ test('game rules: starting gold, peace time, sudden death and bot difficulty', (
   g.time = 780;
   assert.ok(g.suddenDeath(), 'sudden death at 13 minutes');
   // bots earn by difficulty (the same land, a human earns the base rate)
+  // (what each earns for its own land, against the base rate for that much land)
   const income = (difficulty) => {
     const { g: gg, human: h, bot: b } = make({ difficulty });
-    b.territory = h.territory;
+    gg.update(0.05);
     const [h0, b0] = [h.earned.income || 0, b.earned.income || 0];
     for (let i = 0; i < 20; i++) gg.update(0.05);
-    return ((b.earned.income || 0) - b0) / ((h.earned.income || 0) - h0);
+    const rate = (p, e0) => ((p.earned.income || 0) - e0) / C.income(p.territory);
+    return rate(b, b0) / rate(h, h0);
   };
   assert.ok(Math.abs(income('easy') - C.BOT_LEVELS.easy.income) < 0.05, `easy ${income('easy')}`);
   assert.ok(Math.abs(income('normal') - 1) < 0.05);

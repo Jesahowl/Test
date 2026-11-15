@@ -13,8 +13,10 @@ function seeded(seed) {
 
 // A game with two players far apart: rich, past spawn protection, and no automatic waves
 // (tests spawn troops themselves). Buildings go up at once (no workers needed).
+// (open ground by default, no rivers or mountains: pass { terrain: true } for the real thing)
 function duel(seed = 1, opts = {}) {
-  const g = new Game({ botTarget: 0, rand: seeded(seed), instantBuild: true, mapSeed: seed, ...opts });
+  const { terrain, ...rest } = opts;
+  const g = new Game({ botTarget: 0, rand: seeded(seed), instantBuild: true, mapSeed: seed, ...(terrain ? {} : { rivers: false }), ...rest });
   const a = g.addPlayer('A');
   const b = g.addPlayer('B');
   for (const p of [a, b]) {
@@ -66,7 +68,7 @@ function outpost(g, p, dx = 1, dy = 0, far = 12) {
     const ty = Math.round(p.core.y + dy * d);
     if (!g.inBounds(tx, ty)) continue;
     const h = g.hex.hexes[g.hexAt(tx, ty)];
-    if (h.centre < 0 || !h.full) continue;
+    if (h.centre < 0 || !h.full || g.mountains.has(h.i)) continue; // (not on a mountain)
     claimTowards(g, p, tx, ty);
     const err = g.build(p.id, tx, ty, 'tower');
     if (err) throw new Error(err);

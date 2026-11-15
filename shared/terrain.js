@@ -28,7 +28,7 @@
   // way round on each map), moisture comes in patches and highlands rise in places. Each hex's
   // biome (and ground colour) comes from the climate at its centre.
   const clamp01 = (v) => Math.max(0, Math.min(1, v));
-  function climate(seed, x, y, w = 110, h = 110) {
+  function climate(seed, x, y, w = 200, h = 100) {
     const ang = hash(seed, 3, 3) * Math.PI * 2; // which way is warm
     const across = ((x - w / 2) * Math.cos(ang) + (y - h / 2) * Math.sin(ang)) / Math.max(w, h) + 0.5;
     const temp = clamp01(across * 1.15 - 0.08 + (fbm(seed + 51, x / 27, y / 27) - 0.5) * 0.6);
@@ -69,7 +69,7 @@
 
   // Is hex h (with cx, cy in tiles) forest on the map grown from `seed`? Only whole hexes: the cut-off
   // ones along the map's edge are never forest; nor are deserts.
-  const isForest = (seed, h) => h.full !== false && fbm(seed, h.cx / 10, h.cy / 10) > FOREST_AT && biomeOf(climate(seed, h.cx, h.cy)) !== 'desert';
+  const isForest = (seed, h, w, hh) => h.full !== false && fbm(seed, h.cx / 10, h.cy / 10) > FOREST_AT && biomeOf(climate(seed, h.cx, h.cy, w, hh)) !== 'desert';
 
   // ---- rivers: they run along hex edges (between two hexes, like walls), from one side of the map
   // toward the opposite side, meandering. A river edge can't be crossed, except where a bridge is.
@@ -239,7 +239,7 @@
     const veins = new Set();
     for (const hx of hex.hexes) {
       if (mountains.has(hx.i)) continue;
-      if (isForest(seed, hx)) forest.add(hx.i);
+      if (isForest(seed, hx, w, h)) forest.add(hx.i);
     }
     for (const hx of hex.hexes) {
       if (hx.full === false || mountains.has(hx.i) || forest.has(hx.i)) continue;

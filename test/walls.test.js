@@ -221,7 +221,7 @@ test('troops and workers find their way round walls to a gate, however far, and 
 });
 
 test('rivers: troops only cross at bridges; no walls on them; no base starts beside one', () => {
-  const { g, a, b } = duel(5);
+  const { g, a, b } = duel(5, { terrain: true });
   assert.ok(g.rivers.length > 0 && g.riverEdges > 0, 'the map has rivers');
   for (const p of [a, b]) {
     const core = g.hex.hexes[g.hexAt(p.core.x, p.core.y)];
@@ -259,7 +259,7 @@ test('mountains: impassable ridges; every map stays connected; iron and gold sit
   const Terrain = require('../shared/terrain');
   // connected on every map: all open hexes reach each other (round mountains, over bridges)
   for (let seed = 1; seed <= 30; seed++) {
-    const { g } = duel(seed);
+    const { g } = duel(seed, { terrain: true });
     const open = g.hex.hexes.filter((h) => !g.mountains.has(h.i));
     const seen = new Set([open[0].i]);
     const stack = [open[0].i];
@@ -273,7 +273,7 @@ test('mountains: impassable ridges; every map stays connected; iron and gold sit
     }
     assert.strictEqual(seen.size, open.length, `seed ${seed}: no land cut off (${open.length - seen.size} hexes)`);
   }
-  const { g, a } = duel(8);
+  const { g, a } = duel(8, { terrain: true });
   assert.ok(g.mountains.size > 15, `the map has mountains (${g.mountains.size})`);
   const layout = Terrain.mapTerrain(g.mapSeed, g.hex, g.w, g.h);
   const inHills = [...g.ore.keys()].filter((i) => layout.foothills.has(i)).length;

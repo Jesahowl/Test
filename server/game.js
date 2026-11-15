@@ -27,7 +27,8 @@ class Game {
     this.rounds = !!opts.rounds;
     this.round = opts.round || 1;
     // Seeds the look of the map (where the forests grow); every client draws the same terrain from it.
-    this.mapSeed = opts.mapSeed ?? Math.floor(Math.random() * 2147483647);
+    // (from the game's own random numbers when it has its own, so a seeded game is the same map every time)
+    this.mapSeed = opts.mapSeed ?? Math.floor((opts.rand || Math.random)() * 2147483647);
     // The rules of this game (C.DEFAULT_RULES, or a private room's choices)
     this.rules = { ...C.DEFAULT_RULES, ...(opts.rules || {}) };
     if (opts.rivers === false) this.rules.rivers = false; // (tests: open ground)
