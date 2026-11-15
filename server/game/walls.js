@@ -297,6 +297,62 @@ module.exports = {
   // riversOnly: just the rivers (when no player has walls, everyone shares the same fields).
   wallCostFn(owner, breakable = true, solid = false, riversOnly = false) {
     if (!this.wallAt.size) return null;
+    // Building a flow field asks for the cost of every step on the map (some 160,000 of them), so
+    // the answers are worked out once into a table (cost, or -1: blocked) and reused until the
+    // walls or the alliances change. (fn.table: the table, by tile * 8 + direction, see
+    // Path.DIRS; pathfinding reads it directly.)
+    const key = `${riversOnly ? 0 : owner}:${breakable}:${solid}:${riversOnly}`;
+    const sig = riversOnly ? 'rivers' : this.wallSignature();
+    if (!this.edgeTables) this.edgeTables = new Map();
+    const cached = this.edgeTables.get(key);
+    if (cached && cached.sig === sig) return cached.fn;
+    const fn = this.wallCostFnRaw(owner, breakable, solid, riversOnly);
+    if (riversOnly) fn.table = Path.edgeTable(this.w, this.h, fn);
+    else {
+      // (rivers never change: start from their table, and only work out again the steps near walls)
+      const base = this.wallCostFn(0, true, false, true).table;
+      const t = base.slice();
+      const near = new Set();
+      for (const w of this.walls.values()) {
+        for (const hx of [w.a, w.b]) {
+          for (const k of this.hex.hexes[hx].tiles) {
+            const x = k % this.w;
+            const y = (k - x) / this.w;
+            for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (this.inBounds(x + dx, y + dy)) near.add(k + dy * this.w + dx);
+          }
+        }
+      }
+      const D = Path.DIRS;
+      for (const u of near) {
+        const x = u % this.w;
+        const y = (u - x) / this.w;
+        for (let k = 0; k < 8; k++) {
+          const nx = x + D[k][0];
+          const ny = y + D[k][1];
+          if (nx >= 0 && ny >= 0 && nx < this.w && ny < this.h) t[u * 8 + k] = fn(u, ny * this.w + nx);
+        }
+      }
+      fn.table = t;
+    }
+    if (this.edgeTables.size >= 40) this.edgeTables.delete(this.edgeTables.keys().next().value); // (oldest out)
+    this.edgeTables.delete(key);
+    this.edgeTables.set(key, { sig, fn });
+    return fn;
+  },
+
+  // A summary of everything the walls' step costs depend on (each wall's owner, gate and whether
+  // it's finished, and who's allied with whom); worked out once a tick.
+  wallSignature() {
+    if (this.wallSigAt === this.time && this.wallSig) return this.wallSig;
+    let s = `${this.walls.size}|`;
+    for (const w of this.walls.values()) s += `${w.id}.${w.owner}.${w.gate ? 1 : 0}.${w.progress < 1 ? 0 : 1},`;
+    s += `|${[...(this.alliances || [])].sort().join(',')}`;
+    this.wallSig = s;
+    this.wallSigAt = this.time;
+    return s;
+  },
+
+  wallCostFnRaw(owner, breakable, solid, riversOnly) {
     const th = this.hex.tileHex;
     const W = this.w;
     const step = (u, v) => {

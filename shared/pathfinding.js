@@ -84,10 +84,28 @@
     }
   }
 
+  // Every step's edge cost worked out once: an Int16Array by (from tile) * 8 + direction (DIRS).
+  function edgeTable(w, h, edgeCost) {
+    const t = new Int16Array(w * h * 8);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const u = y * w + x;
+        for (let k = 0; k < 8; k++) {
+          const nx = x + DIRS[k][0];
+          const ny = y + DIRS[k][1];
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          t[u * 8 + k] = edgeCost(u, ny * w + nx);
+        }
+      }
+    }
+    return t;
+  }
+
   // extra: Int32Array of extra entry cost per tile (0 = open ground). Returns Int32Array of costs.
   // edgeCost (optional): (from tile, to tile) => extra cost of that step, or -1 if it's blocked
   // (walls between hexes).
   function computeField(w, h, extra, goal, edgeCost) {
+    const table = edgeCost && edgeCost.table;
     const dist = new Int32Array(w * h).fill(INF);
     const heap = new Heap();
     dist[goal] = 0;
@@ -107,7 +125,11 @@
         if (!canMove(extra, w, ux, uy, DIRS[k][0], DIRS[k][1])) continue;
         const u = uy * w + ux;
         let nd = d + DIRS[k][2] + enter;
-        if (edgeCost) {
+        if (table) {
+          const c = table[u * 8 + k];
+          if (c < 0) continue;
+          nd += c;
+        } else if (edgeCost) {
           const c = edgeCost(u, v);
           if (c < 0) continue;
           nd += c;
@@ -136,7 +158,7 @@
       const n = ny * w + nx;
       let c = dist[n] + DIRS[k][2] + (n === goal ? 0 : extra[n]);
       if (edgeCost) {
-        const e = edgeCost(i, n);
+        const e = edgeCost.table ? edgeCost.table[i * 8 + k] : edgeCost(i, n);
         if (e < 0) continue;
         c += e;
       }
@@ -161,7 +183,7 @@
     return path;
   }
 
-  const api = { computeField, nextStep, tracePath, structureCost, INF, STEP };
+  const api = { computeField, edgeTable, nextStep, tracePath, structureCost, INF, STEP, DIRS };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

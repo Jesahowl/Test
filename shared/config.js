@@ -166,7 +166,7 @@
     PATH_STRUCT_BASE: 4,
     PATH_STRUCT_PER_HP: 0.02,
     PATH_RECOMPUTE_INTERVAL: 0.5, // seconds between flow-field rebuilds for the same goal
-    PATH_FIELDS_PER_TICK: 3, // new flow fields built per tick at most (keeps ticks smooth)
+    PATH_FIELDS_PER_TICK: 2, // new flow fields built per tick at most (keeps ticks smooth: each is ~3.5 ms on the full map)
     PATH_DIRECT_RANGE: 3, // troops this close to their goal walk straight there
 
     // ---- Rounds: last core standing wins, then a scoreboard and a fresh map.
