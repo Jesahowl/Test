@@ -575,7 +575,7 @@ function drawSea(sea) {
   ctx.lineCap = 'butt';
 }
 
-// ---- lakes: each painted once into a small picture (PX pixels a tile) with a soft, rounded shore,
+// ---- lakes: each painted once into a small picture (PX pixels a tile) with a shore along its hex edges,
 // in the style of the biome it lies in, plus a few props round it drawn as shapes.
 const LAKE_PX = 12;
 const LAKE_STYLE = {
@@ -637,8 +637,9 @@ function buildLakes(seed) {
         field[py * W + px] = Math.max(-4, Math.min(6, inLake.has(HEX.at(x, y)) ? d : -d));
       }
     }
-    const r = Math.round(0.6 * LAKE_PX);
-    for (let pass = 0; pass < 2; pass++) {
+    // (barely blurred: the shore follows the hex edges, like the sea's, with just its corners eased)
+    const r = Math.round(0.15 * LAKE_PX);
+    for (let pass = 0; pass < 1; pass++) {
       const tmp = new Float32Array(W * H);
       for (let py = 0; py < H; py++) for (let px = 0; px < W; px++) { let s = 0, n = 0; for (let k = -r; k <= r; k++) { const xx = px + k; if (xx >= 0 && xx < W) { s += field[py * W + xx]; n++; } } tmp[py * W + px] = s / n; }
       const o = new Float32Array(W * H);
@@ -646,7 +647,7 @@ function buildLakes(seed) {
       field = o;
     }
     const noise = (x, y, s) => { const a = Math.floor(x), b = Math.floor(y), fx = x - a, fy = y - b; const v = (i, j) => hash(seed + s, a + i, b + j); const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy); return v(0, 0) + (v(1, 0) - v(0, 0)) * sx + (v(0, 1) - v(0, 0)) * sy + (v(0, 0) - v(1, 0) - v(0, 1) + v(1, 1)) * sx * sy; };
-    for (let py = 0; py < H; py++) for (let px = 0; px < W; px++) field[py * W + px] += (noise((x0 + px / LAKE_PX) / 1.8, (y0 + py / LAKE_PX) / 1.8, 4400) - 0.5) * 0.45;
+    for (let py = 0; py < H; py++) for (let px = 0; px < W; px++) field[py * W + px] += (noise((x0 + px / LAKE_PX) / 1.8, (y0 + py / LAKE_PX) / 1.8, 4400) - 0.5) * 0.08;
     // paint it
     const cv = document.createElement('canvas');
     cv.width = W;
