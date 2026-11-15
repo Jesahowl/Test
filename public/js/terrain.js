@@ -96,29 +96,24 @@ function pine(x, y, s) {
 
 // The rivers of map `seed`: one path each (along the hex corners they follow), and their bridges
 // ({ x, y, ang }: the middle of the bridged edge and the edge's direction).
-function buildRivers(seed) {
+// A river that reaches the coast ends there: its banks stop at the shore (rivers are drawn kept off
+// the sea), and its water pours on down the cliff (or over the ledge) into the sea, with foam where
+// it lands (mouths: { x1, y1, x2, y2 }).
+function buildRivers(seed, sea) {
   const list = layoutOf(seed).rivers;
   const paths = [];
   const bridges = [];
-  const L = layoutOf(seed);
+  const mouths = [];
   for (const r of list) {
     const p = new Path2D();
     r.pts.forEach(([x, y], k) => (k ? p.lineTo(x, y) : p.moveTo(x, y)));
-    // a river that reaches the coast pours on over the cliff into the sea
-    const [ex, ey] = r.pts[r.pts.length - 1];
-    let sea = null;
-    for (const i of L.ocean) {
-      const h = HEX.hexes[i];
-      if (Math.hypot(h.cx - ex, h.cy - ey) < C.HEX_R + 0.05 && (!sea || Math.hypot(h.cx - ex, h.cy - ey) < Math.hypot(sea.cx - ex, sea.cy - ey))) sea = h;
-    }
-    if (sea) {
-      const d = Math.hypot(sea.cx - ex, sea.cy - ey) || 1;
-      p.lineTo(ex + ((sea.cx - ex) / d) * 1.3, ey + ((sea.cy - ey) / d) * 1.3);
-    }
+    const end = r.pts[r.pts.length - 1];
+    const d = sea && sea.dropAt(end);
+    if (d) mouths.push({ x1: end[0], y1: end[1], x2: end[0] + d[0] * 1.15, y2: end[1] + d[1] * 1.15 });
     paths.push({ p, len: r.edges.length * C.HEX_R });
     for (const e of r.edges) if (e.bridge) bridges.push({ x: (e.x1 + e.x2) / 2, y: (e.y1 + e.y2) / 2, ang: Math.atan2(e.y2 - e.y1, e.x2 - e.x1) });
   }
-  return { list, paths, bridges };
+  return { list, paths, bridges, mouths };
 }
 
 // A stone bridge across a river edge: its deck runs across the water (at right angles to the edge).
@@ -154,15 +149,47 @@ function drawBridge(b) {
 
 // Rivers and bridges (in tile units: the caller has scaled the context). The lighter dashes drift
 // along to show the water flowing.
-function drawRivers(r) {
+function drawRivers(r, sea) {
   if (!r.paths.length) return;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+  ctx.save();
+  // (kept to the land: at the coast the river's banks simply stop)
+  const land = new Path2D();
+  land.rect(-10, -10, C.MAP_W + 20, C.MAP_H + 20);
+  land.addPath(sea.all);
+  ctx.clip(land, 'evenodd');
   for (const [col, w] of [[RIVER.bank, RIVER.bankW], [RIVER.deep, RIVER.deepW], [RIVER.mid, RIVER.midW]]) {
     ctx.strokeStyle = col;
     ctx.lineWidth = w;
     for (const p of r.paths) ctx.stroke(p.p);
   }
+  ctx.restore();
+  // the mouths: the water spills over the edge into the sea (no banks), foaming where it lands
+  ctx.lineCap = 'butt';
+  for (const m of r.mouths) {
+    const g = ctx.createLinearGradient(m.x1, m.y1, m.x2, m.y2);
+    g.addColorStop(0, RIVER.deep);
+    g.addColorStop(1, 'rgba(36, 80, 92, 0)');
+    ctx.strokeStyle = g;
+    ctx.lineWidth = RIVER.deepW;
+    ctx.beginPath();
+    ctx.moveTo(m.x1, m.y1);
+    ctx.lineTo(m.x2, m.y2);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(200, 230, 240, 0.35)';
+    ctx.lineWidth = RIVER.midW * 0.8;
+    ctx.beginPath();
+    ctx.moveTo(m.x1, m.y1);
+    ctx.lineTo(m.x1 + (m.x2 - m.x1) * 0.85, m.y1 + (m.y2 - m.y1) * 0.85);
+    ctx.stroke();
+    const t = performance.now() / 1000;
+    ctx.fillStyle = `rgba(235, 245, 245, ${0.35 + 0.12 * Math.sin(t * 2.2 + m.x1)})`;
+    ctx.beginPath();
+    ctx.ellipse(m.x2, m.y2, 0.7, 0.32, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.lineCap = 'round';
   ctx.strokeStyle = RIVER.flow;
   ctx.lineWidth = 0.08;
   ctx.setLineDash([0.35, 1.6]);
@@ -388,6 +415,10 @@ function buildSea(seed) {
   const cliffs = new Path2D(); // the rock below the land: a cliff face where the sea lies south of it (we see it from the
   //                              south), a narrow rocky ledge along the water elsewhere
   const foot = new Path2D(); // the foot of the cliffs and ledges, where the surf breaks
+  const strata = new Path2D();
+  const edges = [];
+  const corners = new Map(); // coast corner -> the drops of the edges meeting there
+  const ckey = (c) => `${Math.round(c[0] * 100)},${Math.round(c[1] * 100)}`;
   for (const h of HEX.hexes) {
     if (L.ocean.has(h.i)) continue;
     const cs = HEX.corners(h);
@@ -400,15 +431,34 @@ function buildSea(seed) {
       const sh = HEX.hexes[j];
       const len = Math.hypot(sh.cx - h.cx, sh.cy - h.cy) || 1;
       const [nx, ny] = [(sh.cx - h.cx) / len, (sh.cy - h.cy) / len]; // out to sea
-      const [dx, dy] = ny > 0.2 ? [0, SEA.cliffH] : [nx * SEA.ledge, ny * SEA.ledge];
-      cliffs.moveTo(a[0], a[1]);
-      cliffs.lineTo(b[0], b[1]);
-      cliffs.lineTo(b[0] + dx, b[1] + dy);
-      cliffs.lineTo(a[0] + dx, a[1] + dy);
-      cliffs.closePath();
-      foot.moveTo(a[0] + dx, a[1] + dy);
-      foot.lineTo(b[0] + dx, b[1] + dy);
+      const d = ny > 0.2 ? [0, SEA.cliffH] : [nx * SEA.ledge, ny * SEA.ledge];
+      edges.push([a, b]);
+      for (const c of [a, b]) {
+        const v = corners.get(ckey(c)) || corners.set(ckey(c), { sx: 0, sy: 0, n: 0 }).get(ckey(c));
+        v.sx += d[0];
+        v.sy += d[1];
+        v.n++;
+      }
     }
+  }
+  // each coast corner drops by the average of its edges' drops, so neighbouring stretches of cliff
+  // and ledge share their corners exactly: one unbroken face, no overlaps or gaps
+  const drop = (c) => {
+    const v = corners.get(ckey(c));
+    return [v.sx / v.n, v.sy / v.n];
+  };
+  for (const [a, b] of edges) {
+    const [da, db] = [drop(a), drop(b)];
+    cliffs.moveTo(a[0], a[1]);
+    cliffs.lineTo(b[0], b[1]);
+    cliffs.lineTo(b[0] + db[0], b[1] + db[1]);
+    cliffs.lineTo(a[0] + da[0], a[1] + da[1]);
+    cliffs.closePath();
+    foot.moveTo(a[0] + da[0], a[1] + da[1]);
+    foot.lineTo(b[0] + db[0], b[1] + db[1]);
+    // a band of strata half way down the face
+    strata.moveTo(a[0] + da[0] * 0.5, a[1] + da[1] * 0.5);
+    strata.lineTo(b[0] + db[0] * 0.5, b[1] + db[1] * 0.5);
   }
   const rocks = [];
   for (const i of L.ocean) {
@@ -416,7 +466,10 @@ function buildSea(seed) {
     const h = HEX.hexes[i];
     for (let k = 0; k < 2; k++) rocks.push({ x: h.cx + (hash(seed, i, 5200 + k) - 0.5) * 2.2, y: h.cy + (hash(seed, i, 5300 + k) - 0.5) * 1.6, s: 0.38 + hash(seed, i, 5400 + k) * 0.18 });
   }
-  return { bands, coast, cliffs, foot, rocks, tint };
+  // (all the sea, for keeping river banks on land)
+  const all = new Path2D();
+  for (const b of bands) all.addPath(b);
+  return { bands, all, coast, cliffs, foot, strata, rocks, tint, dropAt: (c) => (corners.has(ckey(c)) ? drop(c) : null) };
 }
 
 // The sea, under the land: water by depth, the shadow the land throws on it, rocks in the shallows,
@@ -452,6 +505,9 @@ function drawSea(sea) {
   }
   ctx.fillStyle = SEA.cliff;
   ctx.fill(sea.cliffs);
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+  ctx.lineWidth = 0.07;
+  ctx.stroke(sea.strata);
   ctx.strokeStyle = `rgba(${SEA.surf}, ${0.38 + 0.12 * Math.sin(t * 0.9)})`; // (the surf rises and falls)
   ctx.lineWidth = 0.18;
   ctx.stroke(sea.foot);
@@ -460,7 +516,8 @@ function drawSea(sea) {
 
 function build(seed) {
   const L = layoutOf(seed);
-  const rivers = buildRivers(seed);
+  const sea = buildSea(seed);
+  const rivers = buildRivers(seed, sea);
   // mountain peaks, two or three a hex, drawn back to front
   const peaks = [];
   for (const i of L.mountains) {
@@ -547,7 +604,6 @@ function build(seed) {
     trees.sort((a, b) => a.y - b.y);
     forests.push({ i: h.i, x: h.cx, y: h.cy, trees });
   }
-  const sea = buildSea(seed);
   for (const [i, c] of sea.tint) groundInfo.tint.set(i, c);
   return { seed, fill, forests, rivers, oreFill, ores, veinFill, veins, peaks, hillOverlay, sea, ...groundInfo };
 }
@@ -582,7 +638,7 @@ function drawTerrain(ox, oy, s) {
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
   ctx.lineWidth = 0.26;
   ctx.stroke(built.sea.coast);
-  drawRivers(built.rivers);
+  drawRivers(built.rivers, built.sea);
   // mountain peaks (at every zoom: they matter for where troops can go)
   {
     const px0 = -ox / s - 4;
