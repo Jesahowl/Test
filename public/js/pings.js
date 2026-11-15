@@ -6,6 +6,7 @@
 import { S, C, colorOf, ctx, feed, mctx, mouse, toScreen } from './state.js';
 import { sendMsg } from './net.js';
 import { play } from './audio.js';
+import { toast } from './screens.js';
 
 const PINGS = {
   attack: { ic: '⚔', label: 'Attack here', col: '#ff6b5e' },
@@ -18,10 +19,12 @@ const WHEEL = [['attack', 0, -62], ['defend', 62, 0], ['danger', 0, 62], ['look'
 
 S.pings = [];
 S.pingWheel = null; // { wx, wy } while the wheel is open
+S.pingMode = false; // after the Ping button: the next click on the map opens the wheel there
 
 function onPing(msg) {
   const p = PINGS[msg.kind];
   if (!p) return;
+  if (msg.from === S.myId) S.pingSentAt = 0;
   S.pings.push({ ...msg, born: performance.now() });
   play('ping', null, 0, { kind: msg.kind });
   feed.push({ text: `${msg.from === S.myId ? 'You' : msg.name}: ${p.ic} ${p.label}`, born: performance.now() });
@@ -30,7 +33,16 @@ function onPing(msg) {
 
 function openPingWheel(wx, wy) {
   if (!S.myId) return;
+  setPingMode(false);
   S.pingWheel = { wx, wy };
+}
+
+// The Ping button: click it, then click the map (no keys needed).
+function setPingMode(on) {
+  S.pingMode = !!on && !!S.myId;
+  const b = document.getElementById('ping-btn');
+  if (b) b.classList.toggle('on', S.pingMode);
+  document.body.style.cursor = S.pingMode ? 'crosshair' : '';
 }
 
 function closePingWheel() {
@@ -49,7 +61,10 @@ function wheelOption(sx, sy) {
 function pingWheelClick(sx, sy) {
   if (!S.pingWheel) return false;
   const kind = wheelOption(sx, sy);
-  if (kind) sendMsg({ t: 'ping', kind, x: S.pingWheel.wx, y: S.pingWheel.wy });
+  if (kind) {
+    sendMsg({ t: 'ping', kind, x: S.pingWheel.wx, y: S.pingWheel.wy });
+    S.pingSentAt = performance.now();
+  }
   closePingWheel();
   return true;
 }
@@ -76,6 +91,11 @@ function bubble(x, y, r, ping, alpha = 1) {
 // the screen for pings out of view.
 function drawPings() {
   const now = performance.now();
+  if (S.pingSentAt && now - S.pingSentAt > 2000) {
+    // sent, but it never came back: the server is probably out of date (restart it)
+    S.pingSentAt = 0;
+    toast('Your ping wasn\'t sent back by the server: restart the game server to update it');
+  }
   S.pings = S.pings.filter((p) => now - p.born < C.PING_LIFE * 1000);
   const W = ctx.canvas.width;
   const H = ctx.canvas.height;
@@ -158,8 +178,23 @@ function drawMiniPings(sx, sy) {
   }
 }
 
-// The wheel: four symbols round the spot, the one under the cursor lit up.
+// The wheel: four symbols round the spot, the one under the cursor lit up. (In ping mode: a hint
+// by the cursor instead.)
 function drawPingWheel() {
+  if (S.pingMode && !S.pingWheel) {
+    ctx.font = '700 12px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    const t = '📍 Click the map to ping there · Esc cancels';
+    const w = ctx.measureText(t).width + 14;
+    ctx.fillStyle = 'rgba(13, 17, 23, 0.88)';
+    ctx.beginPath();
+    ctx.roundRect(mouse.sx + 16, mouse.sy + 12, w, 22, 6);
+    ctx.fill();
+    ctx.fillStyle = '#f2c14e';
+    ctx.fillText(t, mouse.sx + 23, mouse.sy + 23);
+    return;
+  }
   if (!S.pingWheel) return;
   const [cx, cy] = toScreen(S.pingWheel.wx, S.pingWheel.wy);
   const over = wheelOption(mouse.sx, mouse.sy);
@@ -194,4 +229,14 @@ function drawPingWheel() {
   }
 }
 
-export { closePingWheel, drawMiniPings, drawPings, drawPingWheel, onPing, openPingWheel, pingWheelClick, PINGS };
+document.getElementById('ping-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!S.myId) {
+    toast('Join a game to ping');
+    return;
+  }
+  closePingWheel();
+  setPingMode(!S.pingMode);
+});
+
+export { closePingWheel, drawMiniPings, drawPings, drawPingWheel, onPing, openPingWheel, pingWheelClick, PINGS, setPingMode };
