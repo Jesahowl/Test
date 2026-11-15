@@ -192,4 +192,4 @@ const colorOf = (pid, l = 55, a = 1) => {
   return p ? hslOf(p.hue, p.tone, l, a) : pid ? hslOf(0, 0, l, a) : `rgba(140, 120, 90, ${a})`;
 };
 
-export { hslOf, baseLift, hexSpot, towerInHex, HEX, FOG_PAD, FOG_RES, fogSoft, fogSoftCtx, $, C, CAMP_KEYS, CREEP_KEYS, KIND_KEYS, NTILES, TPX, UNIT_KEYS, ALL_UNIT_KEYS, Vision, cam, canvas, colorOf, ctx, explored, feed, fogCanvas, fogCtx, fogImg, grid, keys, mctx, mini, mouse, players, scale, selUnits, tctx, terr, terrCanvas, toScreen, toWorld, vis, withContext };
+export { BASE_SCALE, hslOf, baseLift, hexSpot, towerInHex, HEX, FOG_PAD, FOG_RES, fogSoft, fogSoftCtx, $, C, CAMP_KEYS, CREEP_KEYS, KIND_KEYS, NTILES, TPX, UNIT_KEYS, ALL_UNIT_KEYS, Vision, cam, canvas, colorOf, ctx, explored, feed, fogCanvas, fogCtx, fogImg, grid, keys, mctx, mini, mouse, players, scale, selUnits, tctx, terr, terrCanvas, toScreen, toWorld, vis, withContext };

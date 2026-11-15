@@ -484,3 +484,17 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 .job .lv button:hover { border-color: var(--accent); color: var(--text); }
 .job .lv button.on { border-color: var(--gold); color: var(--gold); background: #2a2612; }
 .small-note { font-size: 11px; }
+
+/* ---------------------------------------------------------------- the menu: a glass card over the map */
+#menu { background: radial-gradient(ellipse at center, rgba(5, 8, 12, 0.12), rgba(5, 8, 12, 0.7)); backdrop-filter: none; }
+.menu-card { background: rgba(13, 17, 23, 0.58); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 20px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55); }
+.menu-card .tag { color: #c9d1d9; }
+.menu-card input { background: rgba(13, 17, 23, 0.6); border-color: rgba(255, 255, 255, 0.14); }
+.menu-card button.secondary { background: rgba(33, 40, 58, 0.85); }
+.menu-card button.secondary:hover { background: rgba(48, 58, 80, 0.95); }
+.menu-card .pub-list { background: rgba(0, 0, 0, 0.25); border-color: rgba(255, 255, 255, 0.08); border-radius: 12px; }
+.menu-card .pub-row { border-top-color: rgba(255, 255, 255, 0.07); }
+.menu-card .how-grid div { background: rgba(0, 0, 0, 0.22); border-color: rgba(255, 255, 255, 0.08); }
+.menu-card #test-game { background: transparent; border-color: #a3712a; }
+.menu-card .foot { color: #8b949e; }

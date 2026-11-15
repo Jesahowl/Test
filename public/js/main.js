@@ -16,7 +16,7 @@ import './lobby.js'; // private rooms: menu buttons, lobby screen, invite links
 import { drawMinimap, drawOverlay } from './overlay.js';
 import { drawBackground, resize } from './render.js';
 import { specNext } from './screens.js';
-import { S, $, C, cam, keys, mouse, players } from './state.js';
+import { S, $, C, BASE_SCALE, cam, canvas, keys, mouse, players, scale } from './state.js';
 import { drawTowers } from './structures.js';
 import { drawTradeRoads } from './trade.js';
 import { drawUnits } from './troops.js';
@@ -30,6 +30,10 @@ function frame(now) {
 
   const pan = (18 / cam.zoom) * dt;
   if (S.myId || S.spectating) {
+    if (S.menuCam) {
+      S.menuCam = false;
+      cam.zoom = 1; // (back to the normal zoom after the menu's wide view)
+    }
     const before = cam.x + cam.y;
     if (keys.has('w') || keys.has('arrowup')) cam.y -= pan;
     if (keys.has('s') || keys.has('arrowdown')) cam.y += pan;
@@ -46,9 +50,17 @@ function frame(now) {
       }
     }
   } else {
-    // Slow drift across the live map behind the menu.
-    cam.x = C.MAP_W / 2 + Math.cos(now / 20000) * C.MAP_W * 0.25;
-    cam.y = C.MAP_H / 2 + Math.sin(now / 20000) * C.MAP_H * 0.25;
+    // Slow drift across the map behind the menu: zoomed out, and always far enough in that the
+    // screen is all map (no edge in sight).
+    S.menuCam = true;
+    const W = canvas.width;
+    const H = canvas.height;
+    cam.zoom = Math.max(0.42, (1.02 * Math.max(W / C.MAP_W, H / C.MAP_H)) / BASE_SCALE);
+    const s = scale();
+    const rx = Math.max(0, C.MAP_W / 2 - W / 2 / s);
+    const ry = Math.max(0, C.MAP_H / 2 - H / 2 / s);
+    cam.x = C.MAP_W / 2 + Math.cos(now / 40000) * rx * 0.95;
+    cam.y = C.MAP_H / 2 + Math.sin(now / 40000) * ry * 0.95;
   }
   cam.x = Math.max(0, Math.min(C.MAP_W, cam.x));
   cam.y = Math.max(0, Math.min(C.MAP_H, cam.y));

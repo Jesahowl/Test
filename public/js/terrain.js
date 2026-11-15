@@ -41,6 +41,9 @@ function oreRock(x, y, s) {
 
 const { hash, climate, biomeOf, groundColor, mapTerrain } = window.TD_TERRAIN;
 // the map's layout (rivers, mountains, forests, iron, gold veins), exactly as the server has it
+// The map on show: this round's, or (on the menu, before any round) a random one for the backdrop.
+S.menuSeed = Math.floor(Math.random() * 1e9);
+const mapSeed = () => (S.round && S.round.seed != null ? S.round.seed : S.menuSeed);
 const layoutOf = (seed) => mapTerrain(seed, HEX, C.MAP_W, C.MAP_H, { rivers: !(S.round && S.round.rivers === false) });
 // mountains: grey rock hexes with snow-capped peaks; the hexes round them (foothills) lean grey too
 const ROCK_RGB = [58, 62, 67];
@@ -157,7 +160,7 @@ function drawRivers(r) {
 
 // The current map's rivers (for the minimap too).
 function riverView() {
-  const seed = S.round && S.round.seed;
+  const seed = mapSeed();
   if (seed === undefined || seed === null) return null;
   if (!built || built.seed !== seed) built = build(seed);
   return built.rivers;
@@ -166,7 +169,7 @@ function riverView() {
 // A small picture of the current map's biomes (one pixel per tile), for the minimap's background.
 let groundPic = null;
 function groundCanvas() {
-  const seed = S.round && S.round.seed;
+  const seed = mapSeed();
   if (seed === undefined || seed === null) return null;
   if (!built || built.seed !== seed) built = build(seed);
   if (groundPic && groundPic.seed === seed) return groundPic.canvas;
@@ -189,7 +192,7 @@ function groundCanvas() {
 
 // The current map's gold veins (for the minimap).
 function veinsView() {
-  const seed = S.round && S.round.seed;
+  const seed = mapSeed();
   if (seed === undefined || seed === null) return [];
   if (!built || built.seed !== seed) built = build(seed);
   return built.veins;
@@ -438,7 +441,7 @@ function build(seed) {
 function drawTerrain(ox, oy, s) {
   ctx.fillStyle = PLAINS;
   ctx.fillRect(ox, oy, C.MAP_W * s, C.MAP_H * s);
-  const seed = S.round && S.round.seed;
+  const seed = mapSeed();
   if (seed === undefined || seed === null) return;
   if (!built || built.seed !== seed) built = build(seed);
   ctx.save();
