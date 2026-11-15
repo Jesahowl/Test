@@ -28,6 +28,7 @@ class Game {
     this.round = opts.round || 1;
     // Seeds the look of the map (where the forests grow); every client draws the same terrain from it.
     this.mapSeed = opts.mapSeed ?? Math.floor(Math.random() * 2147483647);
+    this.riversOn = opts.rivers !== false; // (tests can turn rivers off for open ground)
     this.instantBuild = !!opts.instantBuild; // (tests) buildings and walls go up at once, no workers needed
     this.phase = 'playing';
     this.winner = null;
@@ -49,6 +50,7 @@ class Game {
     this.hex = Hex.build(this.w, this.h, C.HEX_R);
     this.hexOwner = new Int32Array(this.hex.hexes.length);
     this.initForest(); // where the forests are, and the wood in them (see game/workers.js)
+    this.initRivers(); // where the rivers run, and their bridges (see game/walls.js)
     this.terrDirty = true;
     this.terrVersion = 0;
 
@@ -204,7 +206,7 @@ class Game {
     const snap = { players, towers, walls, units, creeps, camps, forest: this.forestRows(), fx: this.fx, feed: this.feed };
     if (this.rounds) {
       snap.round = {
-        n: this.round, phase: this.phase, t: Math.floor(this.time), seed: this.mapSeed,
+        n: this.round, phase: this.phase, t: Math.floor(this.time), seed: this.mapSeed, rivers: this.riversOn,
         join: Math.max(0, Math.ceil(C.ROUND_JOIN_WINDOW - this.time)),
         sd: Math.ceil(C.ROUND_SUDDEN_DEATH - this.time), // <= 0: sudden death is on
       };

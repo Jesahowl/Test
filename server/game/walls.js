@@ -12,6 +12,7 @@
 // These methods are mixed into Game (see ../game.js), so `this` is the game.
 
 const { C, Path, round2 } = require('./common');
+const Terrain = require('../../shared/terrain');
 
 module.exports = {
   initWalls() {
@@ -21,18 +22,48 @@ module.exports = {
     this.wallBroken = new Map(); // edge key -> when a wall there was knocked down by enemies
   },
 
+  // Rivers (see shared/terrain.js) run along hex edges: each river edge without a bridge is a
+  // permanent barrier in wallAt that nobody can pass or break ({ river: true }, not in this.walls).
+  // this.riverHexes: the hexes a river runs along (no one starts their base there).
+  initRivers() {
+    this.rivers = this.riversOn ? Terrain.riversOf(this.mapSeed, this.hex, this.w, this.h) : [];
+    this.riverEdges = 0;
+    this.riverHexes = new Set();
+    for (const r of this.rivers) {
+      for (const e of r.edges) {
+        this.riverHexes.add(e.a);
+        this.riverHexes.add(e.b);
+        if (e.bridge) continue;
+        this.wallAt.set(this.edgeKey(e.a, e.b), { river: true, id: 0, owner: 0, a: e.a, b: e.b, gate: false, progress: 1, hp: Infinity, maxHp: Infinity });
+        this.riverEdges++;
+      }
+    }
+  },
+
+  // Is anything (walls or rivers) blocking edges between hexes?
+  hasBarriers() {
+    return this.wallAt.size > 0;
+  },
+
+  // Is the edge between hexes a and b a river (with no bridge)?
+  riverBetween(a, b) {
+    const w = this.wallAt.get(this.edgeKey(a, b));
+    return !!w && !!w.river;
+  },
+
   edgeKey(a, b) {
     const n = this.hex.hexes.length;
     return a < b ? a * n + b : b * n + a;
   },
 
   wallBetween(a, b) {
-    if (a === b || !this.walls.size) return null;
+    if (a === b || !this.wallAt.size) return null;
     return this.wallAt.get(this.edgeKey(a, b)) || null;
   },
 
   // Can a troop (or caravan) of `owner` pass wall w? Through gates of its own side only.
   wallOpenFor(w, owner) {
+    if (w.river) return false;
     if (w.progress < 1) return true; // still being built: no wall yet
     return w.gate && !this.hostile(owner, w.owner);
   },
@@ -40,6 +71,7 @@ module.exports = {
   // Can unit u pass wall w? Through its side's gates; caravans (trade carts) also through every wall
   // of their own side and their allies'. Only enemy walls stop a caravan.
   wallPassable(w, u) {
+    if (w.river) return false;
     return this.wallOpenFor(w, u.owner) || (!!u.trade && !this.hostile(u.owner, w.owner));
   },
 
@@ -251,8 +283,9 @@ module.exports = {
   // Only steps between two hexes can cross a wall. Hostile walls cost by their strength (troops
   // break through the weakest point); own and allied walls are solid unless they're gates.
   // breakable = false (caravans): hostile walls are solid too.
-  wallCostFn(owner, breakable = true, solid = false) {
-    if (!this.walls.size) return null;
+  // riversOnly: just the rivers (when no player has walls, everyone shares the same fields).
+  wallCostFn(owner, breakable = true, solid = false, riversOnly = false) {
+    if (!this.wallAt.size) return null;
     const th = this.hex.tileHex;
     const W = this.w;
     const step = (u, v) => {
@@ -261,6 +294,8 @@ module.exports = {
       if (ha === hb) return 0;
       const w = this.wallAt.get(this.edgeKey(ha, hb));
       if (!w) return 0;
+      if (w.river) return -1; // no crossing a river but by its bridges
+      if (riversOnly) return 0;
       if (this.wallOpenFor(w, owner)) return 0;
       if (solid) return -1; // (workers: only their side's gates)
       if (!breakable) return this.hostile(owner, w.owner) ? -1 : 0; // caravans: friendly walls are open
@@ -290,7 +325,7 @@ module.exports = {
   // Each tick, after everyone has moved: nothing passes through a wall it can't. A troop that tried
   // to step through a hostile wall stays put and remembers it, so it can hack at it.
   enforceWalls() {
-    if (!this.walls.size) return;
+    if (!this.wallAt.size) return;
     const th = this.hex.tileHex;
     for (const u of this.units.values()) {
       if (u.px === undefined) continue;
@@ -301,7 +336,7 @@ module.exports = {
       if (!w || this.wallPassable(w, u)) continue;
       u.x = u.px;
       u.y = u.py;
-      if (this.hostile(u.owner, w.owner)) {
+      if (!w.river && this.hostile(u.owner, w.owner)) {
         u.wallHit = w.id;
         u.wallHitAt = this.time;
       }
@@ -310,7 +345,7 @@ module.exports = {
 
   // Is a wall (that `owner` can't pass) between points (x1, y1) and (x2, y2) in neighbouring hexes?
   wallBlocks(owner, x1, y1, x2, y2) {
-    if (!this.walls.size) return false;
+    if (!this.wallAt.size) return false;
     const th = this.hex.tileHex;
     const a = th[this.idx(Math.floor(x1), Math.floor(y1))];
     const b = th[this.idx(Math.floor(x2), Math.floor(y2))];

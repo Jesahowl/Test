@@ -6,6 +6,7 @@ import { escapeHtml, toast } from './screens.js';
 import { sendMsg } from './net.js';
 import { S, $, C, colorOf, ctx, explored, HEX, mouse, players, scale, terr, toScreen } from './state.js';
 import { iconURL } from './ui.js';
+import { riverView } from './terrain.js';
 
 
 S.walls = new Map();
@@ -57,11 +58,26 @@ function edgeNear(wx, wy, reach = 0.8) {
   return best;
 }
 
+// The river edges (without bridges) of the current map, by keyOf.
+let riverKeys = null;
+let riverKeysFor = null;
+function riverEdges() {
+  const rv = riverView();
+  if (!rv) return new Set();
+  if (riverKeysFor !== rv) {
+    riverKeysFor = rv;
+    riverKeys = new Set();
+    for (const r of rv.list) for (const e of r.edges) if (!e.bridge) riverKeys.add(keyOf(e.a, e.b));
+  }
+  return riverKeys;
+}
+
 // Can I wall the edge a-b: exactly one side mine, no wall there yet (mirrors the server).
 function canWall(a, b, pending) {
   if (a < 0 || b < 0) return false;
   if ((ownerOfHex(a) === S.myId) === (ownerOfHex(b) === S.myId)) return false;
   if (pending && pending.has(keyOf(a, b))) return false;
+  if (riverEdges().has(keyOf(a, b))) return false; // (rivers can't be walled)
   return !wallAtEdge(a, b);
 }
 

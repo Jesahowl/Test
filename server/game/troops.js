@@ -24,7 +24,7 @@ module.exports = {
   // Flow field toward a goal tile. Rebuilt lazily, at most every PATH_RECOMPUTE_INTERVAL.
   // Flow field to a goal tile. At most PATH_FIELDS_PER_TICK new fields are built per tick (each
   // costs ~2 ms); past that, a stale field is reused, or null is returned and the troop walks
-  // straight for now (the map has no walls, so that's always safe).
+  // straight for now (walls and rivers stop it at the edge until a field is ready).
   // mode 'troop': hostile walls can be broken through (at a cost); 'solid' (workers): no wall can,
   // only gates of their own side let them through.
   getFieldTo(goal, owner = 0, mode = 'troop') {
@@ -34,7 +34,7 @@ module.exports = {
     const stale = !f || (f.version !== this.structVersion && this.time - f.at >= C.PATH_RECOMPUTE_INTERVAL);
     if (stale && this.fieldBudget > 0) {
       this.fieldBudget--;
-      const edge = this.walls.size && owner ? this.wallCostFn(owner, true, mode === 'solid') : null;
+      const edge = this.walls.size && owner ? this.wallCostFn(owner, true, mode === 'solid') : this.riverEdges ? this.wallCostFn(0, true, false, true) : null;
       f = { dist: Path.computeField(this.w, this.h, this.getExtra(), goal, edge), goal, edge, version: this.structVersion, at: this.time };
       this.fields.set(key, f);
     } else {
@@ -234,6 +234,14 @@ module.exports = {
   planUnit(u, gx, gy) {
     const w = this.w;
     const ok = (n) => this.walkable(n, u.owner);
+    // (no stepping across a river edge, or a wall it can't pass, between two hexes)
+    const th = this.hex.tileHex;
+    const bar = this.hasBarriers();
+    const cross = (a, b) => {
+      if (!bar || th[a] === th[b]) return true;
+      const wl = this.wallBetween(th[a], th[b]);
+      return !wl || this.wallPassable(wl, u);
+    };
     const gen = ++this.bfsGen;
     const stamp = this.bfsStamp;
     const parent = this.bfsParent;
@@ -257,8 +265,12 @@ module.exports = {
         const ny = y + dy;
         if (!this.inBounds(nx, ny)) continue;
         const n = this.idx(nx, ny);
-        if (stamp[n] === gen || !ok(n)) continue;
-        if (dx && dy && (!ok(this.idx(x + dx, y)) || !ok(this.idx(x, y + dy)))) continue;
+        if (stamp[n] === gen || !ok(n) || !cross(k, n)) continue;
+        if (dx && dy) {
+          const a = this.idx(x + dx, y);
+          const b = this.idx(x, y + dy);
+          if (!ok(a) || !ok(b) || !cross(k, a) || !cross(a, n) || !cross(k, b) || !cross(b, n)) continue;
+        }
         stamp[n] = gen;
         parent[n] = k;
         queue[tail++] = n;
@@ -335,7 +347,7 @@ module.exports = {
   // A wall too long for a short detour: follow the flow field instead, which finds the way round
   // (an opening or a gate of its side) however far it is.
   stepToward(u, x, y, stop, speed, dt) {
-    if (this.walls.size && dist(u.x, u.y, x, y) > stop && this.lineBlocked(u.owner, u.x, u.y, x, y, u)) {
+    if (this.hasBarriers() && dist(u.x, u.y, x, y) > stop && this.lineBlocked(u.owner, u.x, u.y, x, y, u)) {
       if (this.detourStep(u, x, y, speed, dt)) return;
       if (this.fieldStep(u, x, y, speed, dt)) return;
     }
@@ -475,8 +487,9 @@ module.exports = {
     // the goal is past the goal, and following the goal's field would pull it back and forth)
     const ox = (goal % this.w) + 0.5;
     const oy = Math.floor(goal / this.w) + 0.5;
-    const past = !this.walls.size && dist(u.x, u.y, ox, oy) <= dist(gx, gy, ox, oy) + 1;
-    const f = past || d < (this.walls.size ? 1.5 : C.PATH_DIRECT_RANGE) ? null : this.getFieldTo(goal, u.owner);
+    const bar = this.hasBarriers();
+    const past = !bar && dist(u.x, u.y, ox, oy) <= dist(gx, gy, ox, oy) + 1;
+    const f = past || d < (bar ? 1.5 : C.PATH_DIRECT_RANGE) ? null : this.getFieldTo(goal, u.owner);
     if (!f) {
       this.stepToward(u, gx, gy, stop, speed, dt);
       return false;
@@ -579,7 +592,21 @@ module.exports = {
         if (h >= 0) byHex[h].push([x, y]);
       }
     }
-    for (const h of this.hex.hexes) byHex[h.i].sort((p, q) => Math.hypot(p[0] - h.cx, p[1] - h.cy) - Math.hypot(q[0] - h.cx, q[1] - h.cy));
+    // no spots on a river (troops would stand in the water)
+    const segs = [];
+    for (const r of this.rivers || []) for (const e of r.edges) if (!e.bridge) segs.push(e);
+    const nearRiver = ([x, y]) => segs.some((e) => {
+      const vx = e.x2 - e.x1;
+      const vy = e.y2 - e.y1;
+      const t = Math.max(0, Math.min(1, ((x - e.x1) * vx + (y - e.y1) * vy) / (vx * vx + vy * vy)));
+      return Math.hypot(x - e.x1 - vx * t, y - e.y1 - vy * t) < 0.65;
+    });
+    for (const h of this.hex.hexes) {
+      if (segs.length && byHex[h.i].length) {
+        if (this.riverHexes.has(h.i)) byHex[h.i] = byHex[h.i].filter((p) => !nearRiver(p));
+      }
+      byHex[h.i].sort((p, q) => Math.hypot(p[0] - h.cx, p[1] - h.cy) - Math.hypot(q[0] - h.cx, q[1] - h.cy));
+    }
     this.slotsByHex = byHex;
     return byHex;
   },

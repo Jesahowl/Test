@@ -160,7 +160,7 @@ module.exports = {
     const next = u.path.length
       ? { x: (u.path[0] % this.w) + 0.5, y: Math.floor(u.path[0] / this.w) + 0.5 }
       : u.dest;
-    if (next && this.walls.size && this.lineBlocked(u.owner, u.x, u.y, next.x, next.y, u)) {
+    if (next && this.hasBarriers() && this.lineBlocked(u.owner, u.x, u.y, next.x, next.y, u)) {
       if (!this.detourStep(u, next.x, next.y, def.speed, dt)) this.planCaravan(u);
     } else {
       this.moveUnit(u, dt, def.speed);

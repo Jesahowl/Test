@@ -219,3 +219,38 @@ test('troops and workers find their way round walls to a gate, however far, and 
     assert.ok(run(g, 60, () => w.working), `seed ${seed}: the worker got there too`);
   }
 });
+
+test('rivers: troops only cross at bridges; no walls on them; no base starts beside one', () => {
+  const { g, a, b } = duel(5);
+  assert.ok(g.rivers.length > 0 && g.riverEdges > 0, 'the map has rivers');
+  for (const p of [a, b]) {
+    const core = g.hex.hexes[g.hexAt(p.core.x, p.core.y)];
+    assert.ok(![core.i, ...core.n].some((j) => g.riverHexes.has(j)), 'no river through a starting base');
+  }
+  // a river edge in the middle of the map (not a bridge), and the hexes on each side of it
+  const edges = g.rivers.flatMap((r) => r.edges);
+  const e = edges.filter((x) => !x.bridge && g.hex.hexes[x.a].full && g.hex.hexes[x.b].full)
+    .sort((p, q) => Math.hypot((p.x1 + p.x2) / 2 - g.w / 2, (p.y1 + p.y2) / 2 - g.h / 2) - Math.hypot((q.x1 + q.x2) / 2 - g.w / 2, (q.y1 + q.y2) / 2 - g.h / 2))[0];
+  assert.ok(g.riverBetween(e.a, e.b), 'a river edge blocks');
+  const bridge = edges.find((x) => x.bridge);
+  assert.ok(!g.riverBetween(bridge.a, bridge.b), 'a bridge does not');
+  // no wall on a river, even for someone who owns one side
+  g.setHex(e.a, a.id);
+  assert.ok(!g.canWallEdge(a.id, e.a, e.b), 'no wall on a river edge');
+  g.setHex(e.a, 0);
+  // a troop just across the river from where it's sent gets there, by a bridge, never through the water
+  const [ha, hb] = [g.hex.hexes[e.a], g.hex.hexes[e.b]];
+  const [u] = troops(g, a, 'soldier', 1, ha.cx, ha.cy);
+  u.hp = u.maxHp = 1e6;
+  g.order(a.id, [u.id], { k: 'p', id: g.idx(Math.floor(hb.cx), Math.floor(hb.cy)) });
+  let crossed = 0;
+  let last = g.hexAt(Math.floor(u.x), Math.floor(u.y));
+  const arrived = run(g, 90, () => {
+    const h = g.hexAt(Math.floor(u.x), Math.floor(u.y));
+    if (h !== last && g.riverBetween(h, last)) crossed++;
+    last = h;
+    return Math.hypot(u.x - hb.cx, u.y - hb.cy) < 2.5;
+  });
+  assert.strictEqual(crossed, 0, 'never stepped across the river');
+  assert.ok(arrived, 'got across by a bridge');
+});

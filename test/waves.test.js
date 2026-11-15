@@ -457,7 +457,7 @@ test('cleared fog stays clear: explored areas keep showing live activity', () =>
 });
 
 test('stances: aggressive squads fight on the way, hold marches past and never chases, defensive ones turn aggressive when sent out', () => {
-  const { g, a, b } = duel(26);
+  const { g, a, b } = duel(26, { rivers: false }); // (open ground between them)
   assert.strictEqual(a.squads[0].stance, 'defensive');
   assert.match(g.squadStance(a.id, a.squads[0].id, 'berserk'), /Invalid/);
   const trial = (stance) => {

@@ -8,6 +8,7 @@ import { drawShape, label } from './render.js';
 import { S, C, HEX, canvas, colorOf, ctx, FOG_PAD, fogSoft, grid, mctx, mini, mouse, players, scale, selUnits, terr, terrCanvas, toScreen, toWorld } from './state.js';
 import { campVerb, isMineTarget, orderTargetAt, targetName, targetPos } from './targets.js';
 import { drawLandMode, hexPath } from './land.js';
+import { riverView } from './terrain.js';
 
 // ---- building preview. Buildings stand at the centre of one of my hexes, one per hex.
 // The hex under (x, y), and why a building can't go there (null if it can).
@@ -337,6 +338,18 @@ function drawMinimap() {
   const sy = H / C.MAP_H;
   mctx.clearRect(0, 0, W, H);
   mctx.drawImage(terrCanvas, 0, 0, W, H);
+  const rv = riverView();
+  if (rv && rv.paths.length) {
+    mctx.save();
+    mctx.scale(sx, sy);
+    mctx.strokeStyle = 'rgba(70, 130, 155, 0.85)';
+    mctx.lineWidth = 1.3;
+    mctx.lineJoin = 'round';
+    for (const p of rv.paths) mctx.stroke(p.p);
+    mctx.fillStyle = '#9aa0a6';
+    for (const b of rv.bridges) mctx.fillRect(b.x - 0.9, b.y - 0.9, 1.8, 1.8);
+    mctx.restore();
+  }
   if (S.fogOn) mctx.drawImage(fogSoft, -FOG_PAD * sx, -FOG_PAD * sy, (C.MAP_W + FOG_PAD * 2) * sx, (C.MAP_H + FOG_PAD * 2) * sy);
   const now = performance.now();
   // camps: a little tent (the Warlord's Fort in orange, with a glow); upcoming ones as an outline

@@ -1,4 +1,5 @@
-// The ground: muted plains with patches of forest (little pine trees), drawn under everyone's land.
+// The ground: muted plains with patches of forest (little pine trees) and rivers running along hex
+// edges (crossed only by their stone bridges), drawn under everyone's land.
 // Forests don't slow or hide troops; workers chop them for wood (each hex thins to stumps as it's
 // chopped, then grows back). Where forests grow comes from the round's map seed.
 
@@ -11,7 +12,11 @@ const TREE_LIGHT = '#346343';
 const TREE_SHADOW = 'rgba(0,0,0,0.35)';
 const STUMP = '#4a3826';
 
-const { hash, isForest } = window.TD_TERRAIN; // shared with the server (shared/terrain.js)
+const { hash, isForest, riversOf } = window.TD_TERRAIN; // shared with the server (shared/terrain.js)
+
+// rivers: bank, deep water, the lighter middle (widths in tiles) and the stone of their bridges
+const RIVER = { bank: '#2b3326', deep: '#1a3440', mid: '#22495a', flow: 'rgba(200, 230, 240, 0.16)', bankW: 1.6, deepW: 1.2, midW: 0.55 };
+const STONE = { base: '#6f7378', block: '#7f848a', rail: '#9aa0a6', post: '#b4bac0', shadow: 'rgba(0,0,0,0.4)' };
 
 // ---- the forest, built once per map (in tile units)
 let built = null;
@@ -34,7 +39,83 @@ function pine(x, y, s) {
   return t;
 }
 
+// The rivers of map `seed`: one path each (along the hex corners they follow), and their bridges
+// ({ x, y, ang }: the middle of the bridged edge and the edge's direction).
+function buildRivers(seed) {
+  const list = S.round && S.round.rivers === false ? [] : riversOf(seed, HEX, C.MAP_W, C.MAP_H);
+  const paths = [];
+  const bridges = [];
+  for (const r of list) {
+    const p = new Path2D();
+    r.pts.forEach(([x, y], k) => (k ? p.lineTo(x, y) : p.moveTo(x, y)));
+    paths.push({ p, len: r.edges.length * C.HEX_R });
+    for (const e of r.edges) if (e.bridge) bridges.push({ x: (e.x1 + e.x2) / 2, y: (e.y1 + e.y2) / 2, ang: Math.atan2(e.y2 - e.y1, e.x2 - e.x1) });
+  }
+  return { list, paths, bridges };
+}
+
+// A stone bridge across a river edge: its deck runs across the water (at right angles to the edge).
+function drawBridge(b) {
+  const L = 2.3; // deck length, across the water
+  const Wd = 1.15; // deck width
+  ctx.save();
+  ctx.translate(b.x, b.y);
+  ctx.rotate(b.ang);
+  ctx.fillStyle = STONE.shadow;
+  ctx.fillRect(-Wd / 2 + 0.12, -L / 2 + 0.15, Wd, L);
+  ctx.fillStyle = STONE.base;
+  ctx.beginPath();
+  ctx.roundRect(-Wd / 2, -L / 2, Wd, L, 0.15);
+  ctx.fill();
+  ctx.fillStyle = STONE.block;
+  for (let i = 0; i < 8; i++) {
+    for (let j = 0; j < 3; j++) ctx.fillRect(-Wd / 2 + 0.2 + j * 0.27 + (i % 2 ? 0.1 : 0), -L / 2 + 0.12 + i * 0.27, 0.2, 0.2);
+  }
+  ctx.fillStyle = STONE.rail;
+  ctx.fillRect(-Wd / 2 - 0.04, -L / 2, 0.16, L);
+  ctx.fillRect(Wd / 2 - 0.12, -L / 2, 0.16, L);
+  ctx.fillStyle = STONE.post;
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(sx * (Wd / 2 + 0.04), sy * (L / 2 - 0.08), 0.14, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+// Rivers and bridges (in tile units: the caller has scaled the context). The lighter dashes drift
+// along to show the water flowing.
+function drawRivers(r) {
+  if (!r.paths.length) return;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (const [col, w] of [[RIVER.bank, RIVER.bankW], [RIVER.deep, RIVER.deepW], [RIVER.mid, RIVER.midW]]) {
+    ctx.strokeStyle = col;
+    ctx.lineWidth = w;
+    for (const p of r.paths) ctx.stroke(p.p);
+  }
+  ctx.strokeStyle = RIVER.flow;
+  ctx.lineWidth = 0.08;
+  ctx.setLineDash([0.35, 1.6]);
+  ctx.lineDashOffset = -(performance.now() / 1000) * 0.6;
+  for (const p of r.paths) ctx.stroke(p.p);
+  ctx.setLineDash([]);
+  ctx.lineCap = 'butt';
+  for (const b of r.bridges) drawBridge(b);
+}
+
+// The current map's rivers (for the minimap too).
+function riverView() {
+  const seed = S.round && S.round.seed;
+  if (seed === undefined || seed === null) return null;
+  if (!built || built.seed !== seed) built = build(seed);
+  return built.rivers;
+}
+
 function build(seed) {
+  const rivers = buildRivers(seed);
   const fill = new Path2D();
   const forests = [];
   for (const h of HEX.hexes) {
@@ -55,7 +136,7 @@ function build(seed) {
     trees.sort((a, b) => a.y - b.y);
     forests.push({ i: h.i, x: h.cx, y: h.cy, trees });
   }
-  return { seed, fill, forests };
+  return { seed, fill, forests, rivers };
 }
 
 // Draw the ground under the map rectangle at screen (ox, oy), s pixels per tile.
@@ -74,6 +155,7 @@ function drawTerrain(ox, oy, s) {
   ctx.scale(s, s);
   ctx.fillStyle = FOREST;
   ctx.fill(built.fill);
+  drawRivers(built.rivers);
   if (s >= 5) {
     // trees on the forest hexes in view, except where a building, core or camp stands
     const taken = new Set();
@@ -109,4 +191,4 @@ function drawTerrain(ox, oy, s) {
   ctx.restore();
 }
 
-export { drawTerrain };
+export { drawTerrain, riverView };
