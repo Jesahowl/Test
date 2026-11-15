@@ -16,7 +16,7 @@ function layoutHud() {
 
   // the tips sit just above the minimap
   const tips = $('tips');
-  tips.style.bottom = `${H - mm.top + GAP}px`;
+  tips.style.bottom = `${H - mm.top + GAP + 30}px`; // (clear of the Ping button on the minimap)
 
   // the selection panel: bottom right, unless the dock/drawer reaches under it
   const sel = $('selection');

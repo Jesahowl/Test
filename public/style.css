@@ -240,7 +240,7 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 #selection button:disabled { opacity: 0.4; cursor: default; }
 #selection button.primary { background: #1f3a1f; border-color: #2c5e2c; color: #7ee787; }
 
-#tips { bottom: 258px; left: 12px; width: 268px; border-color: rgba(88, 166, 255, 0.45); }
+#tips { bottom: 226px; left: 12px; width: 268px; border-color: rgba(88, 166, 255, 0.45); }
 #tips .t-head { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--accent); text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; }
 #tips .t-head .x { margin-left: auto; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px; }
 #tips p { margin: 6px 0 8px; line-height: 1.5; }
