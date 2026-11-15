@@ -98,7 +98,7 @@ function handle(msg) {
           if (e.target.closest('.test-fog')) sendMsg({ t: 'fog', on: !!(S.me && S.me.noFog) });
         });
       }
-      // a dev server: test mode is on offer
+      // test mode is on offer on this server
       S.dev = !!msg.dev;
       $('test-game').classList.toggle('hidden', !S.dev);
       break;

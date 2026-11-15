@@ -46,7 +46,7 @@ const RULES = [
   ['suddenDeath', 'Sudden death', [[780, '13 min'], [1140, '19 min'], [1500, '25 min']], 'When cores start crumbling and troops hit buildings twice as hard: how long rounds last'],
   ['rivers', 'Rivers', [[true, 'On'], [false, 'Off']], 'Rivers across the map, crossed only at bridges'],
   ['fog', 'Fog of war', [[true, 'On'], [false, 'Off']], 'Off: everyone sees the whole map'],
-  ['testMode', '🛠 Test mode', [[false, 'Off'], [true, 'On']], 'Dev server only: your gold and wood never run out (bots play normally)', 'dev'],
+  ['testMode', '🛠 Test mode', [[false, 'Off'], [true, 'On']], 'Your gold and wood never run out (bots play normally)', 'dev'],
 ];
 
 function rulesHtml(rules, host, dev) {
@@ -190,7 +190,7 @@ function leaveRoom() {
 
 // ---- menu buttons
 $('create').onclick = () => sendMsg({ t: 'create', name: playerName() });
-$('test-game').onclick = () => sendMsg({ t: 'test', name: playerName() }); // (dev servers only)
+$('test-game').onclick = () => sendMsg({ t: 'test', name: playerName() }); // (unless the server turned test mode off)
 const joinByCode = () => {
   const code = cleanCode($('code').value);
   if (code.length !== 5) {

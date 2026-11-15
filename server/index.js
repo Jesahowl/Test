@@ -26,7 +26,7 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O or 1/I mix-ups
 const ROOM_IDLE_MS = 60000; // an empty private room is closed after this long
 
 // waits: lobby countdowns in seconds (see Room), shortened by tests.
-// dev: a development server (npm run dev / DEV=1): offers test mode (infinite gold and wood).
+// dev: test mode is on offer (the menu's Test game: infinite gold and wood in your own private room).
 function createServer({ port = 3000, botTarget, waits = {}, dev = false } = {}) {
   const clients = new Set();
   const rooms = new Map(); // code -> Room (public and private)
@@ -166,9 +166,9 @@ function createServer({ port = 3000, botTarget, waits = {}, dev = false } = {}) 
           break;
         }
         case 'test': {
-          // dev servers: a private room in test mode, started straight away (with a couple of bots)
+          // a private room in test mode, started straight away (with a couple of bots)
           if (!dev) {
-            err = 'Test mode is only on dev servers (npm run dev)';
+            err = 'Test mode is turned off on this server (TEST_MODE=0)';
             break;
           }
           if (client.room) client.room.remove(client);
@@ -256,9 +256,11 @@ function createServer({ port = 3000, botTarget, waits = {}, dev = false } = {}) 
 
 if (require.main === module) {
   const port = Number(process.env.PORT) || 3000;
-  const dev = process.env.DEV === '1';
+  // Test mode (the menu's Test game button) is on unless TEST_MODE=0. It only ever affects the
+  // private test rooms people make for themselves, never public games.
+  const dev = process.env.TEST_MODE !== '0';
   const srv = createServer({ port, dev });
-  console.log(`Territory Siege running at http://localhost:${port}${dev ? ' (dev server: test mode available)' : ''}`);
+  console.log(`Territory Siege running at http://localhost:${port}${dev ? ' (test mode available)' : ''}`);
   // Hosts like Render send SIGTERM before restarting or redeploying: close cleanly.
   process.on('SIGTERM', () => {
     srv.close();

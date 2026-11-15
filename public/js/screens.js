@@ -77,7 +77,12 @@ function updateRound() {
   else if (S.round.sd <= 120) sub = `<div class="sd">Sudden death in ${fmtTime(S.round.sd)}</div>`;
   const fogChip = S.round.test && S.round.fog !== false && S.myId
     ? `<button class="test-fog${S.me && S.me.noFog ? '' : ' on'}" data-tip="Test mode: show or hide the fog of war (for you only)">🌫 Fog ${S.me && S.me.noFog ? 'off' : 'on'}</button> ` : '';
-  el.innerHTML = `${S.round.test ? '<span class="test-badge" data-tip="Test mode (dev server): your gold and wood never run out">🛠 TEST</span> ' : ''}${fogChip}${S.round.code ? `🔒 Room <b>${S.round.code}</b> · ` : S.round.pub ? '🌐 Public game · ' : ''}Round <b>${S.round.n}</b> · <b>${players.size}</b> core${players.size === 1 ? '' : 's'} left · ${fmtTime(S.round.t)}${sub}`;
+  const html = `${S.round.test ? '<span class="test-badge" data-tip="Test mode: your gold and wood never run out">🛠 TEST</span> ' : ''}${fogChip}${S.round.code ? `🔒 Room <b>${S.round.code}</b> · ` : S.round.pub ? '🌐 Public game · ' : ''}Round <b>${S.round.n}</b> · <b>${players.size}</b> core${players.size === 1 ? '' : 's'} left · ${fmtTime(S.round.t)}${sub}`;
+  if (el.dataset.html !== html) {
+    // (only when it changes: rebuilding it every frame would make its buttons and tooltips flicker)
+    el.innerHTML = html;
+    el.dataset.html = html;
+  }
 }
 
 let roundTimer = null;

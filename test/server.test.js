@@ -217,7 +217,7 @@ test('private rooms: create, join by code, host starts, back to the lobby after 
   }
 });
 
-test('test mode: dev servers only; gold and wood never run out', async () => {
+test('test mode: refused when the server turns it off; gold and wood never run out', async () => {
   const C = require('../shared/config');
   const open = async (port) => {
     const ws = new WebSocket(`ws://localhost:${port}`);
@@ -241,18 +241,18 @@ test('test mode: dev servers only; gold and wood never run out', async () => {
   try {
     const ws = await open(prod.server.address().port);
     ws.send(JSON.stringify({ t: 'test', name: 'Dev' }));
-    await waitFor(ws, (m) => m.t === 'err' && /dev servers/.test(m.m));
+    await waitFor(ws, (m) => m.t === 'err' && /turned off/.test(m.m));
     ws.send(JSON.stringify({ t: 'create', name: 'Dev' }));
     const room = await waitFor(ws, (m) => m.t === 'room');
     assert.ok(!room.dev);
     ws.send(JSON.stringify({ t: 'rule', key: 'testMode', value: true }));
-    await waitFor(ws, (m) => m.t === 'err' && /dev servers/.test(m.m));
+    await waitFor(ws, (m) => m.t === 'err' && /turned off/.test(m.m));
     assert.ok(!ws.msgs.some((m) => m.t === 'hello'), 'no dev greeting');
     ws.close();
   } finally {
     prod.close();
   }
-  // a dev server: the test game starts at once, with gold and wood that never run out
+  // test mode on: the test game starts at once, with gold and wood that never run out
   const dev = createServer({ port: 0, botTarget: 0, dev: true });
   await new Promise((r) => dev.server.once('listening', r));
   try {
