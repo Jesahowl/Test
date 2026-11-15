@@ -1,13 +1,14 @@
-// The ground: muted plains with patches of forest (little pine trees), iron ore deposits (rust-red
-// rocks) and rivers running along hex edges (crossed only by their stone bridges), drawn under
-// everyone's land.
+// The ground, drawn under everyone's land: biomes (each hex's ground colour and props come from a
+// seeded climate: tundra, taiga, meadow, woods, steppe, desert, swamp, highlands, shading from one
+// to the next hex by hex), patches of forest (pines, snowy in the cold, with autumn trees in warm
+// woods), iron ore deposits (rust-red rocks), gold veins, and rivers running along hex edges
+// (crossed only by their stone bridges).
 // Forests don't slow or hide troops; workers chop them for wood (each hex thins to stumps as it's
 // chopped, then grows back). Where forests grow comes from the round's map seed.
 
 import { S, C, HEX, ctx, players } from './state.js';
 
 const PLAINS = '#18211d';
-const FOREST = '#13281b';
 const TREE_DARK = '#22422b';
 const TREE_LIGHT = '#346343';
 const TREE_SHADOW = 'rgba(0,0,0,0.35)';
@@ -38,7 +39,13 @@ function oreRock(x, y, s) {
   return r;
 }
 
-const { hash, isForest, isIron, isGoldVein, riversOf } = window.TD_TERRAIN; // shared with the server (shared/terrain.js)
+const { hash, climate, biomeOf, groundColor, isForest, isIron, isGoldVein, riversOf } = window.TD_TERRAIN;
+const FOREST_RGB = [19, 40, 27];
+const mixRgb = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+const SNOW_PINE = { dark: '#2d4a40', light: '#cfd9dc' };
+const AUTUMN = ['#7a5a2a', '#8a4a26', '#6b6a2a', '#5f7a2e'];
+// biome props on open hexes (tile units)
+const PROP = { meadow: '#4f6e3a', steppe: '#8a7a45', snow: 'rgba(220, 232, 236, 0.2)', pool: 'rgba(30, 70, 72, 0.7)', reed: '#5c7d48', dune: 'rgba(255, 230, 180, 0.15)', cactus: '#4f6b3a', rock: '#5a5f66', rockLit: '#70767e' }; // shared with the server (shared/terrain.js)
 
 // rivers: bank, deep water, the lighter middle (widths in tiles) and the stone of their bridges
 const RIVER = { bank: '#2b3326', deep: '#1a3440', mid: '#22495a', flow: 'rgba(200, 230, 240, 0.16)', bankW: 1.6, deepW: 1.2, midW: 0.55 };
@@ -48,6 +55,16 @@ const STONE = { base: '#6f7378', block: '#7f848a', rail: '#9aa0a6', post: '#b4ba
 let built = null;
 
 // One small pine at (x, y), size s, as three paths (shadow, dark side, lit side).
+// A round (broadleaf) tree: an autumn colour canopy on a short trunk.
+function roundTree(x, y, s, colour) {
+  const t = { x, y, s, round: true, colour, shadow: new Path2D(), trunk: new Path2D(), canopy: new Path2D(), shine: new Path2D() };
+  t.shadow.ellipse(x, y + 0.04, s * 0.65, s * 0.2, 0, 0, Math.PI * 2);
+  t.trunk.rect(x - s * 0.08, y - s * 0.45, s * 0.16, s * 0.45);
+  t.canopy.arc(x, y - s * 0.8, s * 0.55, 0, Math.PI * 2);
+  t.shine.arc(x - s * 0.18, y - s * 0.95, s * 0.22, 0, Math.PI * 2);
+  return t;
+}
+
 function pine(x, y, s) {
   const t = { x, y, s, shadow: new Path2D(), dark: new Path2D(), light: new Path2D() };
   t.shadow.ellipse(x, y + 0.04, s * 0.7, s * 0.22, 0, 0, Math.PI * 2);
@@ -140,6 +157,30 @@ function riverView() {
   return built.rivers;
 }
 
+// A small picture of the current map's biomes (one pixel per tile), for the minimap's background.
+let groundPic = null;
+function groundCanvas() {
+  const seed = S.round && S.round.seed;
+  if (seed === undefined || seed === null) return null;
+  if (!built || built.seed !== seed) built = build(seed);
+  if (groundPic && groundPic.seed === seed) return groundPic.canvas;
+  const cv = document.createElement('canvas');
+  cv.width = C.MAP_W;
+  cv.height = C.MAP_H;
+  const g = cv.getContext('2d');
+  const img = g.createImageData(C.MAP_W, C.MAP_H);
+  for (let k = 0; k < C.MAP_W * C.MAP_H; k++) {
+    const c = built.tint.get(HEX.tileHex[k]) || [24, 33, 29];
+    img.data[k * 4] = c[0];
+    img.data[k * 4 + 1] = c[1];
+    img.data[k * 4 + 2] = c[2];
+    img.data[k * 4 + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  groundPic = { seed, canvas: cv };
+  return cv;
+}
+
 // The current map's gold veins (for the minimap).
 function veinsView() {
   const seed = S.round && S.round.seed;
@@ -148,8 +189,127 @@ function veinsView() {
   return built.veins;
 }
 
+// The ground colour of every hex (stepped: one colour per hex, from the climate at its centre),
+// gathered into one path per colour so a frame fills each colour once; and each open hex's props.
+function buildGround(seed) {
+  const byColour = new Map();
+  const props = [];
+  const tint = new Map(); // hex -> [r, g, b] (the minimap uses these too)
+  for (const h of HEX.hexes) {
+    const cl = climate(seed, h.cx, h.cy, C.MAP_W, C.MAP_H);
+    const jitter = 0.96 + hash(seed, h.i, 1717) * 0.08;
+    let c = groundColor(cl).map((v) => v * jitter);
+    const forest = isForest(seed, h);
+    if (forest) c = mixRgb(c, FOREST_RGB, 0.45);
+    c = c.map((v) => Math.round(v / 2) * 2);
+    tint.set(h.i, c);
+    const key = `rgb(${c[0]},${c[1]},${c[2]})`;
+    if (!byColour.has(key)) byColour.set(key, new Path2D());
+    const path = byColour.get(key);
+    const cs = HEX.corners(h);
+    path.moveTo(cs[0][0], cs[0][1]);
+    for (let k = 1; k < 6; k++) path.lineTo(cs[k][0], cs[k][1]);
+    path.closePath();
+    if (forest || isIron(seed, h) || isGoldVein(seed, h)) continue;
+    // a few props for the biome, in their own slices of the hex
+    const b = biomeOf(cl);
+    const spots = [[0, 0.3], [-1.05, -0.6], [1.05, -0.5], [-0.85, 0.95], [0.95, 1.0]];
+    const n = b === 'meadow' ? 2 : b === 'taiga' || b === 'swamp' || b === 'high' ? 4 : 3;
+    const list = [];
+    for (let k = 0; k < n; k++) {
+      if (hash(seed, h.i * 9 + k, 2222) < 0.45) continue;
+      const [dx, dy] = spots[k];
+      const x = h.cx + dx + (hash(seed, h.i, 2300 + k) - 0.5) * 0.6;
+      const y = h.cy + dy + (hash(seed, h.i, 2400 + k) - 0.5) * 0.4;
+      const kind = b === 'meadow' || b === 'woods' ? 'tuft' : b === 'steppe' ? 'dry' : b === 'tundra' ? (k === 0 ? 'rock' : 'snow')
+        : b === 'taiga' ? 'snow' : b === 'desert' ? (k === 0 && hash(seed, h.i, 2500) < 0.5 ? 'cactus' : 'dune') : b === 'swamp' ? 'reed' : 'rock';
+      list.push({ kind, x, y });
+    }
+    if (list.length) props.push({ i: h.i, x: h.cx, y: h.cy, list });
+  }
+  return { ground: [...byColour], props, tint };
+}
+
+function drawProp(p) {
+  const { x, y } = p;
+  switch (p.kind) {
+    case 'tuft':
+    case 'dry':
+      ctx.strokeStyle = p.kind === 'tuft' ? PROP.meadow : PROP.steppe;
+      ctx.lineWidth = 0.08;
+      ctx.beginPath();
+      for (const k of [-1, 0, 1]) {
+        ctx.moveTo(x + k * 0.12, y);
+        ctx.lineTo(x + k * 0.2, y - 0.42);
+      }
+      ctx.stroke();
+      break;
+    case 'snow':
+      ctx.fillStyle = PROP.snow;
+      ctx.beginPath();
+      ctx.ellipse(x, y, 0.7, 0.3, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    case 'dune':
+      ctx.strokeStyle = PROP.dune;
+      ctx.lineWidth = 0.1;
+      ctx.beginPath();
+      ctx.moveTo(x - 0.8, y);
+      ctx.quadraticCurveTo(x, y - 0.42, x + 0.8, y);
+      ctx.stroke();
+      break;
+    case 'cactus':
+      ctx.fillStyle = TREE_SHADOW;
+      ctx.beginPath();
+      ctx.ellipse(x, y + 0.05, 0.4, 0.13, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = PROP.cactus;
+      ctx.beginPath();
+      ctx.roundRect(x - 0.13, y - 0.85, 0.26, 0.85, 0.13);
+      ctx.roundRect(x - 0.42, y - 0.62, 0.18, 0.34, 0.09);
+      ctx.roundRect(x + 0.24, y - 0.72, 0.18, 0.32, 0.09);
+      ctx.fill();
+      break;
+    case 'reed':
+      ctx.fillStyle = PROP.pool;
+      ctx.beginPath();
+      ctx.ellipse(x, y, 0.6, 0.26, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = PROP.reed;
+      ctx.lineWidth = 0.07;
+      ctx.beginPath();
+      for (const k of [-1, 0, 1]) {
+        ctx.moveTo(x + 0.4 + k * 0.1, y - 0.05);
+        ctx.lineTo(x + 0.45 + k * 0.17, y - 0.5);
+      }
+      ctx.stroke();
+      break;
+    case 'rock':
+      ctx.fillStyle = TREE_SHADOW;
+      ctx.beginPath();
+      ctx.ellipse(x + 0.04, y + 0.14, 0.42, 0.13, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = PROP.rock;
+      ctx.beginPath();
+      ctx.moveTo(x - 0.4, y + 0.12);
+      ctx.lineTo(x - 0.2, y - 0.2);
+      ctx.lineTo(x + 0.16, y - 0.24);
+      ctx.lineTo(x + 0.4, y + 0.12);
+      ctx.fill();
+      ctx.fillStyle = PROP.rockLit;
+      ctx.beginPath();
+      ctx.moveTo(x - 0.4, y + 0.12);
+      ctx.lineTo(x - 0.2, y - 0.2);
+      ctx.lineTo(x, y + 0.12);
+      ctx.fill();
+      break;
+    default:
+  }
+}
+
 function build(seed) {
   const rivers = buildRivers(seed);
+  const groundInfo = buildGround(seed);
   const fill = new Path2D();
   const forests = [];
   const oreFill = new Path2D();
@@ -194,8 +354,16 @@ function build(seed) {
     fill.closePath();
     // five small trees, each in its own slice of the hex, nudged a little at random; `cut` is the
     // order they fall in as the hex is chopped
+    const cl = climate(seed, h.cx, h.cy, C.MAP_W, C.MAP_H);
+    const snowy = cl.temp < 0.3;
+    const autumn = !snowy && cl.temp > 0.45 && biomeOf(cl) !== 'taiga';
     const trees = [[0, 0], [-1.05, -0.65], [1.05, -0.6], [-0.95, 0.8], [1.0, 0.85]].map(([dx, dy], k) => {
-      const t = pine(h.cx + dx + (hash(seed, h.i * 7 + k, 11) - 0.5) * 0.6, h.cy + dy + (hash(seed, h.i, 91 + k) - 0.5) * 0.5 + 0.2, 0.38 + hash(seed, k, h.i) * 0.14);
+      const tx = h.cx + dx + (hash(seed, h.i * 7 + k, 11) - 0.5) * 0.6;
+      const ty = h.cy + dy + (hash(seed, h.i, 91 + k) - 0.5) * 0.5 + 0.2;
+      const ts = 0.38 + hash(seed, k, h.i) * 0.14;
+      // (warm woods mix in round autumn trees; the cold has snowy pines)
+      const t = autumn && hash(seed, h.i, 1900 + k) < 0.55 ? roundTree(tx, ty, ts * 1.15, AUTUMN[Math.floor(hash(seed, h.i, 1950 + k) * AUTUMN.length)]) : pine(tx, ty, ts);
+      t.snowy = snowy;
       t.cut = hash(seed, h.i, 400 + k);
       return t;
     });
@@ -204,7 +372,7 @@ function build(seed) {
     trees.sort((a, b) => a.y - b.y);
     forests.push({ i: h.i, x: h.cx, y: h.cy, trees });
   }
-  return { seed, fill, forests, rivers, oreFill, ores, veinFill, veins };
+  return { seed, fill, forests, rivers, oreFill, ores, veinFill, veins, ...groundInfo };
 }
 
 // Draw the ground under the map rectangle at screen (ox, oy), s pixels per tile.
@@ -221,8 +389,11 @@ function drawTerrain(ox, oy, s) {
   ctx.clip();
   ctx.translate(ox, oy);
   ctx.scale(s, s);
-  ctx.fillStyle = FOREST;
-  ctx.fill(built.fill);
+  // each hex's biome ground (forest hexes a darker shade of theirs)
+  for (const [colour, path] of built.ground) {
+    ctx.fillStyle = colour;
+    ctx.fill(path);
+  }
   ctx.fillStyle = ORE.ground;
   ctx.fill(built.oreFill);
   ctx.fillStyle = VEIN.ground;
@@ -239,6 +410,11 @@ function drawTerrain(ox, oy, s) {
     const y0 = -oy / s - 3;
     const x1 = x0 + ctx.canvas.width / s + 6;
     const y1 = y0 + ctx.canvas.height / s + 6;
+    // biome props on open hexes
+    for (const pr of built.props) {
+      if (pr.x < x0 || pr.x > x1 || pr.y < y0 || pr.y > y1 || taken.has(pr.i)) continue;
+      for (const p of pr.list) drawProp(p);
+    }
     // gold veins: glowing rocks with gold flecks round a mine mouth
     const glint = 0.75 + 0.25 * Math.sin(performance.now() / 600);
     for (const v of built.veins) {
@@ -335,9 +511,18 @@ function drawTerrain(ox, oy, s) {
         }
         ctx.fillStyle = TREE_SHADOW;
         ctx.fill(t.shadow);
-        ctx.fillStyle = TREE_DARK;
+        if (t.round) {
+          ctx.fillStyle = STUMP;
+          ctx.fill(t.trunk);
+          ctx.fillStyle = t.colour;
+          ctx.fill(t.canopy);
+          ctx.fillStyle = 'rgba(255,255,255,0.12)';
+          ctx.fill(t.shine);
+          continue;
+        }
+        ctx.fillStyle = t.snowy ? SNOW_PINE.dark : TREE_DARK;
         ctx.fill(t.dark);
-        ctx.fillStyle = TREE_LIGHT;
+        ctx.fillStyle = t.snowy ? SNOW_PINE.light : TREE_LIGHT;
         ctx.fill(t.light);
       }
     }
@@ -345,4 +530,4 @@ function drawTerrain(ox, oy, s) {
   ctx.restore();
 }
 
-export { drawTerrain, riverView, veinsView };
+export { drawTerrain, groundCanvas, riverView, veinsView };

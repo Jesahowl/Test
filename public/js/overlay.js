@@ -8,7 +8,7 @@ import { drawShape, label } from './render.js';
 import { S, C, HEX, canvas, colorOf, ctx, explored, FOG_PAD, fogSoft, grid, mctx, mini, mouse, players, scale, selUnits, terr, terrCanvas, toScreen, toWorld } from './state.js';
 import { campVerb, isMineTarget, orderTargetAt, targetName, targetPos } from './targets.js';
 import { drawLandMode, hexPath } from './land.js';
-import { riverView, veinsView } from './terrain.js';
+import { groundCanvas, riverView, veinsView } from './terrain.js';
 
 // ---- building preview. Buildings stand at the centre of one of my hexes, one per hex.
 // The hex under (x, y), and why a building can't go there (null if it can).
@@ -338,6 +338,13 @@ function drawMinimap() {
   const sx = W / C.MAP_W;
   const sy = H / C.MAP_H;
   mctx.clearRect(0, 0, W, H);
+  const gc = groundCanvas(); // the biomes underneath
+  if (gc) {
+    mctx.imageSmoothingEnabled = false;
+    mctx.globalAlpha = 0.85;
+    mctx.drawImage(gc, 0, 0, W, H);
+    mctx.globalAlpha = 1;
+  }
   mctx.drawImage(terrCanvas, 0, 0, W, H);
   const rv = riverView();
   if (rv && rv.paths.length) {
