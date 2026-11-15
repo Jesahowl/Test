@@ -487,9 +487,10 @@ module.exports = {
     // the goal is past the goal, and following the goal's field would pull it back and forth)
     const ox = (goal % this.w) + 0.5;
     const oy = Math.floor(goal / this.w) + 0.5;
-    const bar = this.hasBarriers();
-    const past = !bar && dist(u.x, u.y, ox, oy) <= dist(gx, gy, ox, oy) + 1;
-    const f = past || d < (bar ? 1.5 : C.PATH_DIRECT_RANGE) ? null : this.getFieldTo(goal, u.owner);
+    // (only where the straight line there is clear of walls and rivers)
+    const clear = () => !this.hasBarriers() || !this.lineBlocked(u.owner, u.x, u.y, gx, gy, u);
+    const past = dist(u.x, u.y, ox, oy) <= dist(gx, gy, ox, oy) + 1 && clear();
+    const f = past || (d < C.PATH_DIRECT_RANGE && clear()) ? null : this.getFieldTo(goal, u.owner);
     if (!f) {
       this.stepToward(u, gx, gy, stop, speed, dt);
       return false;
@@ -497,13 +498,12 @@ module.exports = {
     const tx = Math.max(0, Math.min(this.w - 1, Math.floor(u.x)));
     const ty = Math.max(0, Math.min(this.h - 1, Math.floor(u.y)));
     const next = Path.nextStep(f.dist, this.w, this.h, this.extra, this.idx(tx, ty), goal, f.edge);
-    let nx = gx;
-    let ny = gy;
-    if (next >= 0 && next !== goal) {
-      nx = (next % this.w) + 0.5;
-      ny = Math.floor(next / this.w) + 0.5;
+    if (next < 0 || next === goal) {
+      // at the goal: the last bit to the exact spot (round a wall or river if one's in the way)
+      this.stepToward(u, gx, gy, stop, speed, dt);
+      return false;
     }
-    this.stepRaw(u, nx, ny, 0, speed, dt);
+    this.stepRaw(u, (next % this.w) + 0.5, Math.floor(next / this.w) + 0.5, 0, speed, dt);
     return false;
   },
 
@@ -688,12 +688,30 @@ module.exports = {
           }
         }
         const next = [];
-        for (const j of ring) for (const n of this.hex.hexes[j].n) if (!seen.has(n) && mine(n)) { seen.add(n); next.push(n); }
+        for (const j of ring) for (const n of this.hex.hexes[j].n) if (!seen.has(n) && mine(n) && !this.riverBetween(j, n)) { seen.add(n); next.push(n); } // (never across a river)
         ring = next;
       }
       // no spot left nearby: stand where it is rather than shove into the crowd
       for (; k < list.length; k++) list[k].slotPos = { x: list[k].x, y: list[k].y, loose: true };
     }
+  },
+
+  // The hexes within `depth` steps of hex h that can be reached without crossing a river.
+  sameSideHexes(h, depth) {
+    const seen = new Set([h]);
+    let ring = [h];
+    for (let d = 0; d < depth && ring.length; d++) {
+      const next = [];
+      for (const j of ring) {
+        for (const n of this.hex.hexes[j].n) {
+          if (seen.has(n) || this.riverBetween(j, n)) continue;
+          seen.add(n);
+          next.push(n);
+        }
+      }
+      ring = next;
+    }
+    return seen;
   },
 
   // A rectangle formation for the troops of grp (one or more 'rect' squads sharing a post): rows of
@@ -735,7 +753,9 @@ module.exports = {
       }
       return false;
     };
+    const side = this.sameSideHexes(h, 4);
     const ok = (x, y) => x > 0.4 && y > 0.4 && x < this.w - 0.4 && y < this.h - 0.4
+      && side.has(this.hex.tileHex[this.idx(Math.floor(x), Math.floor(y))]) // (not across a river)
       && (!home || this.terr[this.idx(Math.floor(x), Math.floor(y))] === owner)
       && solid.every(([sx, sy, r]) => Math.hypot(x - sx, y - sy) > r + 0.45) && !clash(x, y);
     // rows centred on the hex (front = +), then extra rows behind and in front, in turn

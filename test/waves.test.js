@@ -875,3 +875,24 @@ test('attacking a base: on that player\'s land, a squad fights their troops (not
   run(g, 4);
   assert.ok(hits > 0, 'it fought the defender on their land');
 });
+
+test('a full rectangle squad sent to a rally point settles on its spots (rivers on the map)', () => {
+  for (const seed of [3, 33]) {
+    const { g, a } = duel(seed);
+    assert.ok(g.riverEdges > 0, 'this map has rivers');
+    setMix(g, a, 0, { soldier: 20 });
+    g.squadFormation(a.id, a.squads[0].id, 'rect');
+    respawn(g, a);
+    run(g, 10);
+    const tx = Math.min(g.w - 5, a.core.x + 9);
+    g.order(a.id, null, { k: 'p', id: g.idx(tx, a.core.y) }, [a.squads[0].id]);
+    run(g, 45);
+    const sq = mine(g, a).filter((u) => u.sq === a.squads[0].id);
+    assert.strictEqual(sq.length, 20);
+    const off = sq.filter((u) => Math.hypot(u.x - u.slotPos.x, u.y - u.slotPos.y) > 0.3);
+    assert.strictEqual(off.length, 0, `seed ${seed}: every soldier on its spot (${off.length} not)`);
+    let stacked = 0;
+    for (const u of sq) for (const v of sq) if (u.id < v.id && Math.hypot(u.x - v.x, u.y - v.y) < 0.8) stacked++;
+    assert.strictEqual(stacked, 0, 'nobody on top of anybody');
+  }
+});
