@@ -43,9 +43,10 @@ const { hash, climate, biomeOf, groundColor, isForest, isIron, isGoldVein, river
 const FOREST_RGB = [19, 40, 27];
 const mixRgb = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
 const SNOW_PINE = { dark: '#2d4a40', light: '#cfd9dc' };
-const AUTUMN = ['#7a5a2a', '#8a4a26', '#6b6a2a', '#5f7a2e'];
+const AUTUMN = ['#5e5030', '#64452c', '#545a30']; // (muted)
 // biome props on open hexes (tile units)
-const PROP = { meadow: '#4f6e3a', steppe: '#8a7a45', snow: 'rgba(220, 232, 236, 0.2)', pool: 'rgba(30, 70, 72, 0.7)', reed: '#5c7d48', dune: 'rgba(255, 230, 180, 0.15)', cactus: '#4f6b3a', rock: '#5a5f66', rockLit: '#70767e' }; // shared with the server (shared/terrain.js)
+const PROP = { meadow: 'rgba(79, 110, 58, 0.55)', steppe: 'rgba(138, 122, 69, 0.5)', snow: 'rgba(220, 232, 236, 0.1)', pool: 'rgba(30, 70, 72, 0.45)', reed: 'rgba(92, 125, 72, 0.6)', dune: 'rgba(255, 230, 180, 0.08)', cactus: '#465e36', rock: '#50555b', rockLit: '#60656c' };
+const PLAINS_RGB = [24, 33, 29]; // (the old plains colour, which the ground leans toward a little)
 
 // rivers: bank, deep water, the lighter middle (widths in tiles) and the stone of their bridges
 const RIVER = { bank: '#2b3326', deep: '#1a3440', mid: '#22495a', flow: 'rgba(200, 230, 240, 0.16)', bankW: 1.6, deepW: 1.2, midW: 0.55 };
@@ -197,11 +198,12 @@ function buildGround(seed) {
   const tint = new Map(); // hex -> [r, g, b] (the minimap uses these too)
   for (const h of HEX.hexes) {
     const cl = climate(seed, h.cx, h.cy, C.MAP_W, C.MAP_H);
-    const jitter = 0.96 + hash(seed, h.i, 1717) * 0.08;
-    let c = groundColor(cl).map((v) => v * jitter);
+    // (a calm ground: the biome colour, drawn a little toward the old plains, barely varying hex to hex)
+    const jitter = 0.985 + hash(seed, h.i, 1717) * 0.03;
+    let c = mixRgb(groundColor(cl), PLAINS_RGB, 0.18).map((v) => v * jitter);
     const forest = isForest(seed, h);
     if (forest) c = mixRgb(c, FOREST_RGB, 0.45);
-    c = c.map((v) => Math.round(v / 2) * 2);
+    c = c.map((v) => Math.round(v / 3) * 3);
     tint.set(h.i, c);
     const key = `rgb(${c[0]},${c[1]},${c[2]})`;
     if (!byColour.has(key)) byColour.set(key, new Path2D());
@@ -211,13 +213,13 @@ function buildGround(seed) {
     for (let k = 1; k < 6; k++) path.lineTo(cs[k][0], cs[k][1]);
     path.closePath();
     if (forest || isIron(seed, h) || isGoldVein(seed, h)) continue;
-    // a few props for the biome, in their own slices of the hex
+    // now and then a single small prop for the biome (most open hexes stay plain)
     const b = biomeOf(cl);
+    if (hash(seed, h.i, 2100) > 0.25) continue;
     const spots = [[0, 0.3], [-1.05, -0.6], [1.05, -0.5], [-0.85, 0.95], [0.95, 1.0]];
-    const n = b === 'meadow' ? 2 : b === 'taiga' || b === 'swamp' || b === 'high' ? 4 : 3;
+    const n = 1;
     const list = [];
     for (let k = 0; k < n; k++) {
-      if (hash(seed, h.i * 9 + k, 2222) < 0.45) continue;
       const [dx, dy] = spots[k];
       const x = h.cx + dx + (hash(seed, h.i, 2300 + k) - 0.5) * 0.6;
       const y = h.cy + dy + (hash(seed, h.i, 2400 + k) - 0.5) * 0.4;
@@ -247,15 +249,15 @@ function drawProp(p) {
     case 'snow':
       ctx.fillStyle = PROP.snow;
       ctx.beginPath();
-      ctx.ellipse(x, y, 0.7, 0.3, 0.2, 0, Math.PI * 2);
+      ctx.ellipse(x, y, 0.5, 0.2, 0.2, 0, Math.PI * 2);
       ctx.fill();
       break;
     case 'dune':
       ctx.strokeStyle = PROP.dune;
       ctx.lineWidth = 0.1;
       ctx.beginPath();
-      ctx.moveTo(x - 0.8, y);
-      ctx.quadraticCurveTo(x, y - 0.42, x + 0.8, y);
+      ctx.moveTo(x - 0.6, y);
+      ctx.quadraticCurveTo(x, y - 0.3, x + 0.6, y);
       ctx.stroke();
       break;
     case 'cactus':
@@ -273,7 +275,7 @@ function drawProp(p) {
     case 'reed':
       ctx.fillStyle = PROP.pool;
       ctx.beginPath();
-      ctx.ellipse(x, y, 0.6, 0.26, 0, 0, Math.PI * 2);
+      ctx.ellipse(x, y, 0.45, 0.2, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = PROP.reed;
       ctx.lineWidth = 0.07;
@@ -362,7 +364,7 @@ function build(seed) {
       const ty = h.cy + dy + (hash(seed, h.i, 91 + k) - 0.5) * 0.5 + 0.2;
       const ts = 0.38 + hash(seed, k, h.i) * 0.14;
       // (warm woods mix in round autumn trees; the cold has snowy pines)
-      const t = autumn && hash(seed, h.i, 1900 + k) < 0.55 ? roundTree(tx, ty, ts * 1.15, AUTUMN[Math.floor(hash(seed, h.i, 1950 + k) * AUTUMN.length)]) : pine(tx, ty, ts);
+      const t = autumn && hash(seed, h.i, 1900 + k) < 0.25 ? roundTree(tx, ty, ts * 1.15, AUTUMN[Math.floor(hash(seed, h.i, 1950 + k) * AUTUMN.length)]) : pine(tx, ty, ts);
       t.snowy = snowy;
       t.cut = hash(seed, h.i, 400 + k);
       return t;
