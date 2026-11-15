@@ -397,7 +397,8 @@ window.addEventListener('keydown', (e) => {
 
 $('play').onclick = join;
 
-$('again').onclick = () => sendMsg(S.room ? { t: 'leave' } : { t: 'join', name: S.lastName });
+// (a private room: leave it; a public game: on to the next lobby)
+$('again').onclick = () => sendMsg(S.room && !S.room.pub ? { t: 'leave' } : { t: 'join', name: S.lastName });
 
 $('spectate').onclick = startSpectating;
 

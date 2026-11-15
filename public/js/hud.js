@@ -21,14 +21,17 @@ function updateHud() {
     const t = players.get(S.specTarget);
     const bar = $('spec-bar');
     const humans = [...players.values()].some((q) => !q.isBot);
-    const btn = S.room ? 'Leave room' : S.queued ? '✓ Joining next round' : humans ? 'Join next round' : 'New round';
+    const priv = S.room && !S.room.pub;
+    const pub = S.watchingGame || (S.room && S.room.pub);
+    const btn = priv ? 'Leave room' : pub ? 'Find a game' : S.queued ? '✓ Joining next round' : humans ? 'Join next round' : 'New round';
     const key = `${t ? t.name : ''}:${S.specFollow}:${btn}`;
     if (bar.dataset.key !== key) {
       bar.dataset.key = key;
       bar.innerHTML = `<span>👁 Spectating${t ? ` <b>${escapeHtml(t.name)}</b>` : ''}${t && !S.specFollow ? ' <span class="muted">(free camera)</span>' : ''}</span>
         <span class="muted">Tab: next player · Space: follow · WASD: move</span>
-        <button id="spec-new"${S.queued && !S.room ? ' disabled' : ''}>${btn}</button>`;
-      $('spec-new').onclick = () => sendMsg(S.room ? { t: 'leave' } : { t: 'join', name: S.lastName });
+        <button id="spec-new"${S.queued && !S.room && !pub ? ' disabled' : ''}>${btn}</button>`;
+      // (a private room: leave it; a public game: on to the open lobby)
+      $('spec-new').onclick = () => sendMsg(priv ? { t: 'leave' } : { t: 'join', name: S.lastName || 'Player' });
     }
     updateRound();
     return;

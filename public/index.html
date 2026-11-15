@@ -147,7 +147,11 @@
       <div id="invite" class="invite hidden"></div>
       <div class="join">
         <input id="name" maxlength="16" placeholder="Your name" autocomplete="off">
-        <button id="play" data-tip="Join the public game (bots fill it up)">Play</button>
+        <button id="play" data-tip="Join the public lobby: the game starts once players have gathered (bots fill the empty seats)">Play</button>
+      </div>
+      <div class="pub-list">
+        <div class="pub-head"><b>🌐 Public games</b><span id="pub-online" class="muted"></span></div>
+        <div id="pub-rows"><div class="muted pub-empty">Looking for games…</div></div>
       </div>
       <div class="private-row">
         <button id="create" class="secondary" data-tip="Make a room only people with the code can join. You choose the bots and start when ready.">🔒 Create private room</button>
@@ -169,18 +173,26 @@
 
   <div id="lobby" class="overlay hidden">
     <div class="card lobby-card">
-      <div class="lobby-tag">🔒 Private room</div>
-      <div id="lobby-code" class="room-code" data-tip="Friends type this code on the menu to join"></div>
-      <button id="copy-link" class="secondary small">🔗 Copy invite link</button>
+      <div class="lobby-tag" id="lobby-tag">🔒 Private room</div>
+      <div class="priv-only">
+        <div id="lobby-code" class="room-code" data-tip="Friends type this code on the menu to join"></div>
+        <button id="copy-link" class="secondary small">🔗 Copy invite link</button>
+      </div>
+      <div class="pub-only">
+        <h2 class="lobby-title">Gathering players</h2>
+        <div id="lobby-timer" class="lobby-timer"></div>
+        <div id="lobby-bar" class="lobby-bar"><i></i></div>
+      </div>
       <p id="lobby-last" class="muted"></p>
       <h3>Players <span id="lobby-count"></span></h3>
       <div id="lobby-members"></div>
-      <h3>Bots</h3>
-      <div id="lobby-bots"></div>
+      <h3 class="priv-only">Bots</h3>
+      <div id="lobby-bots" class="priv-only"></div>
       <p id="lobby-hint" class="muted"></p>
       <div class="choices">
         <button id="lobby-leave" class="secondary">Leave room</button>
-        <button id="lobby-start">▶ Start round</button>
+        <button id="lobby-start" class="priv-only">▶ Start round</button>
+        <button id="lobby-ready" class="pub-only">✓ Ready</button>
       </div>
       <div id="lobby-err" class="form-err"></div>
     </div>

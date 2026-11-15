@@ -51,6 +51,21 @@ git fetch origin claude/determined-johnson-hion2w
 git reset --hard origin/claude/determined-johnson-hion2w
 ```
 
+## Public lobbies
+
+**Play** puts you in the open **public lobby**, where players gather before a game (up to 8 people).
+It shows who's there, who's ready, and a countdown: the game starts **45s** after the first player
+arrives, **30s** once a second one does, **5s** once **everyone has pressed Ready**, and **3s** when
+the lobby is full; someone who just arrived always gets at least 10s. **Bots fill the empty seats**,
+so a lone player still gets a game. Once a lobby starts, the next **Play** opens a fresh one, so
+several public games can run at once.
+
+The menu lists the **public games**: lobbies gathering (with their player count and countdown) to
+**Join**, and games in progress to **👁 Watch** (you see the whole map; **Find a game** takes you to
+the open lobby). If your core falls you can watch the rest of the round or press **Find next game**.
+After the scoreboard, everyone still in the game moves on to the open lobby together. A round ends
+early once no humans are left alive.
+
 ## Private rooms
 
 On the menu, **Create private room** gives you a 5-letter room code and an invite link
@@ -58,7 +73,7 @@ On the menu, **Create private room** gives you a 5-letter room code and an invit
 (👑) chooses how many bots to add (0–10) and presses **Start round**; anyone who arrives mid-round
 watches and joins the next one. After each round's scoreboard everyone returns to the lobby. A round
 also ends early if no humans are left. If the host leaves, someone else becomes host; an empty room
-closes after a minute. **Play** still drops you into the always-running public game.
+closes after a minute.
 
 ## How to play
 
@@ -157,7 +172,7 @@ shared/terrain.js       which hexes are forest, and where rivers and bridges run
 server/game/workers.js  workers and wood: building sites, repairs, chopping, farming, job priorities
 shared/hex.js           the hex grid: which hex each tile is in, neighbours, corners (land, buildings, borders)
 server/index.js         HTTP static server + WebSocket, routes players to rooms, 20 Hz tick
-server/room.js          a room: its game, rounds/lobby, and the 10 Hz per-player state broadcast
+server/room.js          a room: its lobby (public countdown + Ready, or private host), its game, and the 10 Hz per-player state broadcast
 server/game.js          the Game class core: state, spatial grid, tick, snapshots
 server/game/*.js        Game methods by topic, mixed into Game.prototype:
                           players (joining, rounds, pacing, gold) · territory · structures (build,

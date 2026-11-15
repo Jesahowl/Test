@@ -6,7 +6,7 @@ const WebSocket = require('ws');
 const { createServer } = require('../server/index');
 
 test('client can load the page, join and receive state', async () => {
-  const srv = createServer({ port: 0, botTarget: 2 });
+  const srv = createServer({ port: 0, botTarget: 2, waits: { solo: 0.2, late: 0 } }); // (the lobby starts at once)
   await new Promise((r) => srv.server.once('listening', r));
   const { port } = srv.server.address();
   try {
@@ -53,9 +53,9 @@ test('client can load the page, join and receive state', async () => {
   }
 });
 
-test('rounds: late joiners wait, and everyone joins the next round', async () => {
+test('public lobbies: players gather, the countdown starts the game, newcomers get the next lobby, and everyone moves on after', async () => {
   const C = require('../shared/config');
-  const srv = createServer({ port: 0, botTarget: 0 });
+  const srv = createServer({ port: 0, botTarget: 4, waits: { solo: 30, group: 20, ready: 0.3, late: 0 } });
   await new Promise((r) => srv.server.once('listening', r));
   const { port } = srv.server.address();
   const open = async () => {
@@ -74,27 +74,64 @@ test('rounds: late joiners wait, and everyone joins the next round', async () =>
     }
     throw new Error('timeout');
   };
+  const last = (ws, pred) => [...ws.msgs].reverse().find(pred);
   try {
+    // A arrives alone: a public lobby with the long solo countdown
     const a = await open();
     a.send(JSON.stringify({ t: 'join', name: 'A' }));
-    const wa = await waitFor(a, (m) => m.t === 'welcome');
-    srv.game.time = C.ROUND_JOIN_WINDOW + 1; // joining has closed
+    const la = await waitFor(a, (m) => m.t === 'room' && m.pub);
+    assert.strictEqual(la.phase, 'lobby');
+    assert.strictEqual(la.members.length, 1);
+    assert.ok(la.startIn > 25 && la.startIn <= 30, `solo wait (${la.startIn})`);
+    assert.strictEqual(la.max, C.LOBBY_MAX);
+    // B joins: the countdown shortens to the group wait
     const b = await open();
     b.send(JSON.stringify({ t: 'join', name: 'B' }));
-    await waitFor(b, (m) => m.t === 'wait');
-
-    // A's round ends (A is the last core standing). The server's own tick may end it before B has
-    // even connected, so check the scoreboard on A, who is always there for it.
-    srv.game.update(0.05);
-    const over = await waitFor(a, (m) => m.t === 'roundover');
-    assert.strictEqual(over.winner.id, wa.id);
-    srv.newRound();
+    const lb = await waitFor(b, (m) => m.t === 'room' && m.members.length === 2);
+    assert.strictEqual(lb.code, la.code, 'same lobby');
+    assert.ok(lb.startIn <= 20, `group wait (${lb.startIn})`);
+    // one ready isn't enough; both ready starts it soon
+    a.send(JSON.stringify({ t: 'ready', on: true }));
+    await waitFor(b, (m) => m.t === 'room' && m.members.some((x) => x.name === 'A' && x.ready));
+    assert.ok(last(b, (m) => m.t === 'room').startIn > 5, 'not everyone is ready yet');
+    b.send(JSON.stringify({ t: 'ready', on: true }));
+    const wa = await waitFor(a, (m) => m.t === 'welcome');
     const wb = await waitFor(b, (m) => m.t === 'welcome');
-    assert.strictEqual(wb.round, 2);
-    await waitFor(a, (m) => m.t === 'welcome' && m.round === 2);
-    assert.strictEqual(srv.game.players.size, 2);
-    a.close();
-    b.close();
+    const room = srv.rooms.get(la.code);
+    assert.strictEqual(room.phase, 'playing');
+    assert.ok(room.game.players.has(wa.id) && room.game.players.has(wb.id));
+    assert.strictEqual(room.game.botTarget, 4, 'bots fill the empty seats (they arrive over the first minute)');
+
+    // C presses Play now: a new lobby, not the running game
+    const c = await open();
+    c.send(JSON.stringify({ t: 'join', name: 'C' }));
+    const lc = await waitFor(c, (m) => m.t === 'room' && m.pub);
+    assert.notStrictEqual(lc.code, la.code);
+    assert.ok(!room.game.roster || ![...room.game.players.values()].some((p) => p.name === 'C'));
+    // nor can it join the running game by its code
+    const d = await open();
+    d.send(JSON.stringify({ t: 'join', name: 'D', room: la.code }));
+    await waitFor(d, (m) => m.t === 'err' && /started/.test(m.m));
+    // the menu's list: one lobby gathering (C), one game in progress; D watches it
+    d.send(JSON.stringify({ t: 'list' }));
+    const list = await waitFor(d, (m) => m.t === 'list');
+    assert.deepStrictEqual(list.lobbies.map((l) => [l.code, l.players]), [[lc.code, 1]]);
+    assert.deepStrictEqual(list.games.map((g) => [g.code, g.players]), [[la.code, 2]]);
+    d.send(JSON.stringify({ t: 'watch', name: 'D', room: la.code }));
+    await waitFor(d, (m) => m.t === 'watching');
+    const seen = await waitFor(d, (m) => m.t === 's' && m.full);
+    assert.strictEqual(seen.me, null, 'a watcher plays nothing');
+    assert.ok(![...room.game.players.values()].some((p) => p.name === 'D'));
+
+    // the game ends: scoreboard, then its players move on to the open lobby together (with C); D goes back to the menu
+    room.game.endRound();
+    await waitFor(a, (m) => m.t === 'roundover' && m.pub);
+    room.resetAt = Date.now() - 1;
+    const back = await waitFor(a, (m) => m.t === 'room' && m.pub && m.phase === 'lobby' && m.code === lc.code && m.members.length === 3);
+    assert.deepStrictEqual(back.members.map((m) => m.name).sort(), ['A', 'B', 'C']);
+    await waitFor(d, (m) => m.t === 'left');
+    assert.ok(!srv.rooms.has(la.code), 'the finished game is gone');
+    for (const ws of [a, b, c, d]) ws.close();
   } finally {
     srv.close();
   }
@@ -147,7 +184,6 @@ test('private rooms: create, join by code, host starts, back to the lobby after 
     assert.strictEqual(w1.room, lobby.code);
     const room = srv.rooms.get(lobby.code);
     assert.ok(room.game.players.has(w1.id) && room.game.players.has(w2.id));
-    assert.ok(!srv.game.players.has(w1.id) || srv.game.players.get(w1.id).name !== 'Host', 'not in the public game');
     // state carries the room code
     const st = await waitFor(host, (m) => m.t === 's' && m.round);
     assert.strictEqual(st.round.code, lobby.code);

@@ -4,7 +4,7 @@ import { placeWall, wallsBuilt } from './walls.js';
 import { onFx, play } from './audio.js';
 import { resetFog, setExplored, updateFog } from './fog.js';
 import { newOffers } from './diplomacy.js';
-import { formError, onLeft, onRoom } from './lobby.js';
+import { formError, onLeft, onPublicList, onRoom } from './lobby.js';
 import { clearSelection } from './overlay.js';
 import { showDeath, showMenu, showRoundOver, startSpectating, stopSpectating, toast } from './screens.js';
 import { S, $, C, ALL_UNIT_KEYS, baseLift, cam, CAMP_KEYS, hexSpot, CREEP_KEYS, feed, grid, KIND_KEYS, players, selUnits, terr } from './state.js';
@@ -47,6 +47,7 @@ function handle(msg) {
       applyState(msg);
       break;
     case 'welcome':
+      S.watchingGame = false;
       stopSpectating();
       S.queued = false;
       if (S.round && msg.round !== S.round.n) {
@@ -83,9 +84,30 @@ function handle(msg) {
       showRoundOver(msg);
       break;
     case 'room':
+      S.watchingGame = false;
       onRoom(msg);
       break;
+    case 'list':
+      onPublicList(msg);
+      break;
+    case 'watching':
+      // watching a public game from the menu: a fresh map, seen whole
+      S.effects = [];
+      feed.length = 0;
+      S.towers = new Map();
+      S.units = new Map();
+      S.myId = null;
+      S.me = null;
+      S.lastKiller = 0;
+      S.watchingGame = true;
+      resetFog();
+      $('lobby').classList.add('hidden');
+      $('roundover').classList.add('hidden');
+      startSpectating();
+      toast('Watching a game in progress: Esc → Leave game to go back', true);
+      break;
     case 'left':
+      S.watchingGame = false;
       onLeft();
       break;
     case 'err':

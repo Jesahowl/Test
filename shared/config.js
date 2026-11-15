@@ -176,6 +176,13 @@
     // possible; past 12 players the hues come round again in a paler tone, then a deeper one.
     PLAYER_HUES: [0, 25, 48, 90, 130, 168, 195, 220, 255, 285, 315, 340],
     HUE_ORDER: [0, 6, 3, 9, 1, 7, 4, 10, 2, 8, 5, 11], // most spread-out first
+    // Public lobbies (see server/room.js): players gather, then the game starts on its own.
+    LOBBY_MAX: 8, // people in a public game (bots fill the rest up to BOT_TARGET)
+    LOBBY_WAIT_SOLO: 45, // seconds after the first player arrives
+    LOBBY_WAIT_GROUP: 30, // ...cut to this once a second player is in
+    LOBBY_READY_START: 5, // ...and to this once everyone has pressed Ready
+    LOBBY_FULL_START: 3, // ...or this once the lobby is full
+    LOBBY_LATE_MIN: 10, // someone who just arrived always gets at least this long
     MAX_ROOMS: 200, // private rooms open at once
     PRIVATE_DEFAULT_BOTS: 2, // bots in a new private room (the host can change it)
     PRIVATE_MAX_BOTS: 10,

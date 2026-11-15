@@ -25,10 +25,11 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O or 1/I mix-ups
 const ROOM_IDLE_MS = 60000; // an empty private room is closed after this long
 
-function createServer({ port = 3000, botTarget } = {}) {
+// waits: lobby countdowns in seconds (see Room), shortened by tests.
+function createServer({ port = 3000, botTarget, waits = {} } = {}) {
   const clients = new Set();
-  const publicRoom = new Room({ isPublic: true, botTarget: botTarget ?? C.BOT_TARGET });
-  const rooms = new Map(); // code -> private Room
+  const rooms = new Map(); // code -> Room (public and private)
+  let lastPublic = null; // the public game that started most recently (tests and tools)
 
   function newCode() {
     for (;;) {
@@ -36,6 +37,28 @@ function createServer({ port = 3000, botTarget } = {}) {
       for (let i = 0; i < 5; i++) code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
       if (!rooms.has(code)) return code;
     }
+  }
+
+  // The public lobby players gather in (a new one once the last has started or filled up).
+  function openLobby() {
+    for (const r of rooms.values()) if (r.isPublic && r.phase === 'lobby' && r.humans() < C.LOBBY_MAX) return r;
+    const r = new Room({ code: newCode(), isPublic: true, botTarget: botTarget ?? C.BOT_TARGET, waits });
+    rooms.set(r.code, r);
+    return r;
+  }
+
+  // Public lobbies and games, for the menu's list.
+  function publicList() {
+    const lobbies = [];
+    const games = [];
+    for (const r of rooms.values()) {
+      if (!r.isPublic) continue;
+      if (r.phase === 'lobby') {
+        if (r.humans()) lobbies.push(r.info());
+      } else if (!r.done && r.game && r.game.phase === 'playing') games.push(r.info());
+    }
+    games.sort((a, b) => b.players - a.players);
+    return { t: 'list', lobbies, games };
   }
 
   const server = http.createServer((req, res) => {
@@ -87,19 +110,44 @@ function createServer({ port = 3000, botTarget } = {}) {
       let err = null;
       switch (msg.t) {
         case 'join': {
-          // Play: the public game, or a private room by code. Again while in a room: join its next round.
+          // Play: the open public lobby, or a room by code. Again while in a game: a public game's
+          // players go on to the open lobby (the game goes on without them); in a private room,
+          // join its next round.
           if (client.room) {
-            client.room.joinGame(client);
-            return;
+            const r = client.room;
+            if (!r.isPublic) {
+              r.joinGame(client);
+              return;
+            }
+            if (r.phase === 'lobby') return; // already gathering
+            r.remove(client);
           }
           client.name = nameOf(msg);
           if (msg.room) {
             const room = rooms.get(String(msg.room).toUpperCase().trim());
             if (!room) err = 'No room with that code. Check it, or create a new one.';
-            else if (room.clients.size >= C.MAX_PLAYERS) err = 'That room is full';
+            else if (room.isPublic && room.phase !== 'lobby') err = 'That game has already started: watch it from the menu, or press Play for the next one';
+            else if (room.clients.size >= (room.isPublic ? C.LOBBY_MAX : C.MAX_PLAYERS)) err = 'That room is full';
             else room.add(client);
           } else {
-            publicRoom.add(client);
+            openLobby().add(client);
+          }
+          break;
+        }
+        case 'ready':
+          err = client.room ? client.room.setReady(client, !!msg.on) : null;
+          break;
+        case 'list':
+          send(client, publicList());
+          return;
+        case 'watch': {
+          // watch a public game in progress (from the menu's list)
+          const room = rooms.get(String(msg.room || '').toUpperCase().trim());
+          if (!room || !room.isPublic || room.phase === 'lobby' || room.done) err = 'That game has ended';
+          else {
+            if (client.room) client.room.remove(client);
+            client.name = nameOf(msg);
+            room.watch(client);
           }
           break;
         }
@@ -137,12 +185,30 @@ function createServer({ port = 3000, botTarget } = {}) {
     });
   });
 
+  // A public game that's over: its players go on together to the open lobby; its watchers back to
+  // the menu.
+  function finishPublic(room) {
+    rooms.delete(room.code);
+    const people = [...room.clients];
+    const watchers = new Set(people.filter((c) => c.watching));
+    for (const c of people) room.remove(c);
+    for (const c of people) {
+      if (c.ws.readyState !== c.ws.OPEN) continue;
+      if (watchers.has(c)) send(c, { t: 'left' });
+      else openLobby().add(c);
+    }
+  }
+
   const interval = setInterval(() => {
-    publicRoom.step();
     const now = Date.now();
     for (const [code, room] of rooms) {
-      if (!room.clients.size && now - room.emptySince > ROOM_IDLE_MS) rooms.delete(code);
-      else room.step();
+      const wasLobby = room.phase === 'lobby';
+      if (room.done) finishPublic(room);
+      else if (!room.clients.size && (now - room.emptySince > ROOM_IDLE_MS || (room.isPublic && room.phase !== 'lobby'))) rooms.delete(code); // (a public game everyone has left ends)
+      else {
+        room.step();
+        if (wasLobby && room.isPublic && room.phase === 'playing') lastPublic = room;
+      }
     }
   }, 1000 / C.TICK_RATE);
 
@@ -151,11 +217,14 @@ function createServer({ port = 3000, botTarget } = {}) {
   return {
     server,
     rooms,
-    publicRoom,
+    openLobby,
+    // the public game that started most recently
     get game() {
-      return publicRoom.game;
+      return lastPublic && lastPublic.game;
     },
-    newRound: () => publicRoom.newRound(),
+    get publicRoom() {
+      return lastPublic;
+    },
     close() {
       clearInterval(interval);
       for (const c of clients) c.ws.terminate();

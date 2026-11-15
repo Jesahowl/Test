@@ -1,4 +1,5 @@
-// Private rooms: creating and joining from the menu, the lobby screen, and invite links.
+// Lobbies: the public lobby players gather in before a game (with its countdown and Ready), private
+// rooms (creating and joining by code or invite link), and the menu's list of public games.
 
 import { S, $ } from './state.js';
 import { sendMsg } from './net.js';
@@ -37,13 +38,37 @@ function formError(text) {
 }
 
 // The server's view of my room: lobby (show this screen) or playing (the game takes over).
+const fmtClock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+// The public lobby's countdown, ticking locally between the server's updates.
+let lobbyTimer = null;
+function tickLobby() {
+  const r = S.room;
+  if (!r || !r.pub || r.phase !== 'lobby' || $('lobby').classList.contains('hidden')) {
+    clearInterval(lobbyTimer);
+    lobbyTimer = null;
+    return;
+  }
+  const left = r.startAt ? Math.max(0, (r.startAt - performance.now()) / 1000) : null;
+  $('lobby-timer').textContent = left === null ? 'Waiting for players…' : left < 0.5 ? 'Starting…' : `Starts in ${fmtClock(Math.ceil(left))}`;
+  const full = r.span || 1;
+  $('lobby-bar').firstElementChild.style.width = `${left === null ? 0 : Math.max(0, Math.min(100, 100 * (1 - left / full)))}%`;
+}
+
 function onRoom(msg) {
   S.room = msg;
-  setUrlRoom(msg.code);
+  if (msg.pub && msg.startIn !== null) {
+    msg.startAt = performance.now() + msg.startIn * 1000;
+    msg.span = Math.max(msg.startIn, (S.lastSpan && S.lastSpanRoom === msg.code ? S.lastSpan : 0));
+    S.lastSpan = msg.span;
+    S.lastSpanRoom = msg.code;
+  }
+  setUrlRoom(msg.pub ? null : msg.code);
   if (msg.phase !== 'lobby') {
     $('lobby').classList.add('hidden');
     return;
   }
+  $('lobby').classList.toggle('pub', !!msg.pub);
   // back in the lobby: drop any game screens
   stopSpectating();
   S.myId = null;
@@ -52,6 +77,12 @@ function onRoom(msg) {
   for (const id of ['menu', 'hud', 'death', 'roundover']) $(id).classList.add('hidden');
   $('lobby').classList.remove('hidden');
   $('lobby-err').textContent = '';
+  if (msg.pub) {
+    onPublicLobby(msg);
+    return;
+  }
+  $('lobby-tag').textContent = '🔒 Private room';
+  $('lobby-leave').textContent = 'Leave room';
   $('lobby-code').textContent = msg.code;
   $('lobby-count').textContent = `(${msg.members.length})`;
   $('lobby-last').textContent = msg.round ? (msg.lastWinner ? `Round ${msg.round}: ${msg.lastWinner} won.` : `Round ${msg.round} is over.`) : 'Share the code or the invite link with your friends.';
@@ -71,6 +102,56 @@ function onRoom(msg) {
     ? (total < 2 ? 'Add a bot or wait for a friend to join.' : `${total} players: ${msg.members.length} human${msg.members.length === 1 ? '' : 's'} and ${msg.bots} bot${msg.bots === 1 ? '' : 's'}. Start when everyone's in.`)
     : 'Waiting for the host to start the round…';
 }
+
+// The public lobby: who's here (and ready), the countdown, and how it starts.
+function onPublicLobby(msg) {
+  $('lobby-tag').textContent = '🌐 Public lobby';
+  $('lobby-leave').textContent = 'Leave lobby';
+  $('lobby-count').textContent = `${msg.members.length}/${msg.max}`;
+  $('lobby-last').textContent = '';
+  const empty = Math.max(0, msg.max - msg.members.length);
+  $('lobby-members').innerHTML = msg.members.map((m, i) => `<div class="${i === msg.me ? 'me' : ''}">
+    <span>${escapeHtml(m.name)}</span><span class="rdy ${m.ready ? 'on' : ''}">${m.ready ? '✓ Ready' : 'not ready'}</span></div>`).join('')
+    + (empty ? `<div class="open">${empty} open seat${empty === 1 ? '' : 's'}${msg.bots ? ` · ${Math.min(empty, msg.bots)} filled by bots if nobody joins` : ''}</div>` : '');
+  $('lobby-ready').textContent = msg.ready ? '✓ Ready' : 'I\'m ready';
+  $('lobby-ready').dataset.tip = msg.ready ? 'Click to take it back' : 'When everyone is ready, the game starts in a few seconds';
+  $('lobby-ready').classList.toggle('secondary', msg.ready);
+  const n = msg.members.length;
+  $('lobby-hint').innerHTML = n >= msg.max ? 'The lobby is full: starting!'
+    : n === 1 ? `Waiting for others to join. The game starts when the timer runs out, with bots in the empty seats. <b>Ready</b> starts it sooner.`
+      : `Starts when the timer runs out, the lobby fills up (${msg.max}), or <b>everyone is ready</b>.`;
+  tickLobby();
+  if (!lobbyTimer) lobbyTimer = setInterval(tickLobby, 200);
+}
+
+$('lobby-ready').onclick = () => sendMsg({ t: 'ready', on: !(S.room && S.room.ready) });
+
+// ---- the menu's list of public games (asked for every few seconds while the menu is up)
+function onPublicList(msg) {
+  const rows = [];
+  for (const l of msg.lobbies) {
+    rows.push(`<div class="pub-row"><span class="st lobby">Gathering</span><span class="who">${l.players}/${l.max} players</span>
+      <span class="when">${l.startIn === null ? '' : `starts in ${fmtClock(Math.ceil(l.startIn))}`}</span><button data-join="${l.code}">Join</button></div>`);
+  }
+  for (const g of msg.games) {
+    rows.push(`<div class="pub-row"><span class="st live">In progress</span><span class="who">${g.players} player${g.players === 1 ? '' : 's'} · ${g.alive} cores left</span>
+      <span class="when">${fmtClock(g.time)}</span><button class="secondary" data-watch="${g.code}">👁 Watch</button></div>`);
+  }
+  $('pub-rows').innerHTML = rows.length ? rows.join('') : '<div class="muted pub-empty">No games yet: press <b>Play</b> to open a lobby.</div>';
+  const online = msg.lobbies.reduce((n, l) => n + l.players, 0) + msg.games.reduce((n, g) => n + g.players, 0);
+  $('pub-online').textContent = online ? `${online} playing` : '';
+}
+
+$('pub-rows').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.join) sendMsg({ t: 'join', name: playerName(), room: b.dataset.join });
+  else if (b.dataset.watch) sendMsg({ t: 'watch', name: playerName(), room: b.dataset.watch });
+});
+
+setInterval(() => {
+  if (!$('menu').classList.contains('hidden')) sendMsg({ t: 'list' });
+}, 2500);
 
 function onLeft() {
   S.room = null;
@@ -124,4 +205,4 @@ if (invited.length === 5) {
   $('join-code').classList.remove('secondary');
 }
 
-export { formError, leaveRoom, onLeft, onRoom };
+export { formError, leaveRoom, onLeft, onPublicList, onRoom };

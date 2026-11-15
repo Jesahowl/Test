@@ -36,7 +36,7 @@ function showDeath(info) {
   S.lastKiller = info.killerId || 0;
   // With no other people left in the round, a new one starts straight away.
   // In a private room you go back to the lobby when the round ends (or can leave now).
-  $('again').textContent = info.priv ? 'Leave room' : info.humansAlive ? 'Join next round' : 'New round';
+  $('again').textContent = info.priv ? 'Leave room' : info.pub ? 'Find next game' : info.humansAlive ? 'Join next round' : 'New round';
   $('death-by').textContent = info.killer ? `Destroyed by ${info.killer}` : 'Your core fell';
   $('death-spoils').textContent = info.killer
     ? `${info.killer} took your ${info.goldTaken}g, all ${info.landTaken || 0} tiles of your land, ${info.towersTaken ? `your ${info.towersTaken} building${info.towersTaken === 1 ? '' : 's'}, ` : ''}and turned your core into a tower. Your troops fell with it.`
@@ -70,12 +70,12 @@ function updateRound() {
   }
   el.classList.remove('hidden');
   let sub = '';
-  if (S.round.join > 0) sub = `<div class="sub">Joining open for ${fmtTime(S.round.join)} · last core standing wins</div>`;
+  if (S.round.join > 0 && !S.round.pub) sub = `<div class="sub">Joining open for ${fmtTime(S.round.join)} · last core standing wins</div>`;
   else if (S.round.t < C.CORE_FORTIFY_TIME) sub = `<div class="sub">🛡 Cores fortified for ${fmtTime(C.CORE_FORTIFY_TIME - S.round.t)} (${Math.round(C.CORE_FORTIFY * 100)}% less damage)</div>`;
   else if (S.round.t >= C.SIEGE_RAMP_START && S.round.sd > 120) sub = `<div class="sub">⚔ Siege power ×${(1 + (S.round.t - C.SIEGE_RAMP_START) / 60 * C.SIEGE_RAMP_PER_MIN).toFixed(1)} · sudden death in ${fmtTime(S.round.sd)}</div>`;
   else if (S.round.sd <= 0) sub = '<div class="sd">☠ Sudden death: cores crumble · troops hit buildings ×2 · no home turf</div>';
   else if (S.round.sd <= 120) sub = `<div class="sd">Sudden death in ${fmtTime(S.round.sd)}</div>`;
-  el.innerHTML = `${S.round.code ? `🔒 Room <b>${S.round.code}</b> · ` : ''}Round <b>${S.round.n}</b> · <b>${players.size}</b> core${players.size === 1 ? '' : 's'} left · ${fmtTime(S.round.t)}${sub}`;
+  el.innerHTML = `${S.round.code ? `🔒 Room <b>${S.round.code}</b> · ` : S.round.pub ? '🌐 Public game · ' : ''}Round <b>${S.round.n}</b> · <b>${players.size}</b> core${players.size === 1 ? '' : 's'} left · ${fmtTime(S.round.t)}${sub}`;
 }
 
 let roundTimer = null;
@@ -94,7 +94,9 @@ function showRoundOver(msg) {
   $('roundover').classList.remove('hidden');
   let left = msg.next;
   const tick = () => {
-    $('ro-next').textContent = msg.priv
+    $('ro-next').textContent = msg.pub
+      ? (S.watchingGame ? (left > 0 ? `Back to the menu in ${left}s…` : 'Back to the menu…') : (left > 0 ? `On to the next lobby in ${left}s…` : 'On to the lobby…'))
+      : msg.priv
       ? (left > 0 ? `Back to the lobby in ${left}s…` : 'Back to the lobby…')
       : (left > 0 ? `Next round starts in ${left}s on a fresh map…` : 'Starting…');
     left--;

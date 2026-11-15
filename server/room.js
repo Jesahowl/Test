@@ -1,12 +1,17 @@
 'use strict';
 
-// A room is one running game and the clients in it.
+// A room is one game and the clients in it. Every room starts as a lobby, where players gather.
 //
-// - The public room always runs: anyone who presses Play lands there, bots fill it up, and a new
-//   round starts automatically after each scoreboard.
-// - Private rooms are created by a player (the host) and joined with a 5-letter code. They start
-//   in a lobby: the host picks how many bots to add and presses Start. After each round's
-//   scoreboard everyone returns to the lobby. A round also ends early if no humans are left.
+// - Public lobbies: anyone who presses Play lands in the open one (see index.js). It starts on its
+//   own: LOBBY_WAIT_SOLO seconds after the first player arrives, LOBBY_WAIT_GROUP once a second
+//   one does, LOBBY_READY_START once everyone has pressed Ready, and at once when it's full (late
+//   arrivals always get LOBBY_LATE_MIN to look around). Bots fill the empty seats. Once it starts,
+//   the next Play opens a new lobby; the game can be watched from the menu. After its scoreboard,
+//   everyone in it moves on to the open public lobby together (`done`).
+// - Private rooms are created by a player (the host) and joined with a 5-letter code. The host
+//   picks how many bots to add and presses Start. After each round's scoreboard everyone returns
+//   to the lobby.
+// A round ends early once no humans are left alive in it.
 
 const C = require('../shared/config');
 const Game = require('./game');
@@ -65,22 +70,85 @@ function send(client, obj) {
 }
 
 class Room {
-  constructor({ code = null, isPublic = false, botTarget = C.BOT_TARGET } = {}) {
-    this.code = code; // null for the public room
+  constructor({ code = null, isPublic = false, botTarget = C.BOT_TARGET, waits = {} } = {}) {
+    this.code = code;
     this.isPublic = isPublic;
-    this.botTarget = botTarget; // public room: bots fill up to this many players
+    this.botTarget = botTarget; // public: bots fill up to this many players
+    // public lobby countdowns (seconds; tests shorten them)
+    this.waits = { solo: C.LOBBY_WAIT_SOLO, group: C.LOBBY_WAIT_GROUP, ready: C.LOBBY_READY_START, full: C.LOBBY_FULL_START, late: C.LOBBY_LATE_MIN, ...waits };
+    this.ready = new Set(); // public lobby: members who pressed Ready
+    this.startAt = 0; // public lobby: when it starts (ms), 0 = nobody here yet
+    this.done = false; // public game over: its players move on to the open lobby
+    this.startedAt = 0;
     this.bots = C.PRIVATE_DEFAULT_BOTS; // private room: how many bots join each round
     this.clients = new Set();
     this.host = null;
     this.game = null;
     this.roundNo = 0;
-    this.phase = isPublic ? 'playing' : 'lobby';
+    this.phase = 'lobby';
     this.lastWinner = null;
     this.emptySince = Date.now();
     this.tick = 0;
     this.trackers = null;
     this.resetAt = 0; // when the scoreboard of a finished round gives way (ms)
-    if (isPublic) this.newRound();
+  }
+
+  humans() {
+    let n = 0;
+    for (const c of this.clients) if (c.name && !c.watching) n++;
+    return n;
+  }
+
+  // Public lobby: when it starts, from who's here and who's ready (see the top of this file).
+  updateCountdown(arrived = false) {
+    if (!this.isPublic || this.phase !== 'lobby') return;
+    const n = this.humans();
+    const now = Date.now();
+    if (!n) {
+      this.startAt = 0;
+      return;
+    }
+    const s = this.waits;
+    if (!this.startAt) this.startAt = now + s.solo * 1000;
+    if (n >= 2) this.startAt = Math.min(this.startAt, now + s.group * 1000);
+    const players = [...this.clients].filter((c) => c.name && !c.watching);
+    if (players.every((c) => this.ready.has(c))) this.startAt = Math.min(this.startAt, now + s.ready * 1000);
+    if (n >= C.LOBBY_MAX) this.startAt = Math.min(this.startAt, now + s.full * 1000);
+    else if (arrived) this.startAt = Math.max(this.startAt, now + s.late * 1000); // a newcomer gets a moment
+  }
+
+  setReady(client, on) {
+    if (!this.isPublic || this.phase !== 'lobby') return null;
+    if (on) this.ready.add(client);
+    else this.ready.delete(client);
+    this.updateCountdown();
+    this.sendRoom();
+    return null;
+  }
+
+  // Someone watching a public game in progress (from the menu): they see everything, play nothing.
+  watch(client) {
+    client.room = this;
+    client.watching = true;
+    this.clients.add(client);
+    this.emptySince = 0;
+    client.synced = false;
+    send(client, { t: 'watching', round: this.game ? this.game.round : 0, code: this.code });
+  }
+
+  // For the menu's list of public games.
+  info() {
+    const g = this.game;
+    return {
+      code: this.code,
+      phase: this.phase,
+      players: this.humans(),
+      max: C.LOBBY_MAX,
+      startIn: this.phase === 'lobby' && this.startAt ? Math.max(0, (this.startAt - Date.now()) / 1000) : null,
+      time: g ? Math.floor(g.time) : 0,
+      alive: g ? [...g.players.values()].filter((p) => p.alive).length : 0,
+      humansAlive: g ? g.humansAlive() : 0,
+    };
   }
 
   // ---------------------------------------------------------------- membership
@@ -89,10 +157,13 @@ class Room {
     client.room = this;
     this.clients.add(client);
     this.emptySince = 0;
+    client.watching = false;
     if (!this.isPublic && !this.host) this.host = client;
-    if (this.phase === 'lobby') this.sendRoom();
-    else {
-      if (!this.isPublic) this.sendRoom();
+    if (this.phase === 'lobby') {
+      this.updateCountdown(true);
+      this.sendRoom();
+    } else {
+      this.sendRoom();
       this.joinGame(client);
     }
   }
@@ -103,9 +174,14 @@ class Room {
     client.pid = null;
     client.room = null;
     client.queued = false;
+    client.watching = false;
+    this.ready.delete(client);
     if (this.host === client) this.host = this.clients.values().next().value || null;
     if (!this.clients.size) this.emptySince = Date.now();
-    else if (!this.isPublic) this.sendRoom();
+    else {
+      this.updateCountdown();
+      this.sendRoom();
+    }
   }
 
   // A member wants to play: join the running round if it's still open, else wait for the next.
@@ -130,14 +206,17 @@ class Room {
     send(client, { t: 'welcome', id: p.id, round: this.game.round, room: this.code });
   }
 
-  // Lobby state for every member of a private room.
+  // Lobby state for every member (watchers of a public game don't need it).
   sendRoom() {
-    if (this.isPublic) return;
-    const members = [...this.clients].filter((c) => c.name).map((c) => ({ name: c.name, host: c === this.host }));
-    for (const c of this.clients) {
+    const people = [...this.clients].filter((c) => c.name && !c.watching);
+    const members = people.map((c) => ({ name: c.name, host: c === this.host, ready: this.ready.has(c) }));
+    const startIn = this.isPublic && this.phase === 'lobby' && this.startAt ? Math.max(0, (this.startAt - Date.now()) / 1000) : null;
+    for (const c of people) {
       send(c, {
-        t: 'room', code: this.code, phase: this.phase, host: c === this.host, members, bots: this.bots,
-        maxBots: C.PRIVATE_MAX_BOTS, round: this.roundNo, lastWinner: this.lastWinner,
+        t: 'room', code: this.code, pub: this.isPublic, phase: this.phase, host: c === this.host, members,
+        bots: this.isPublic ? Math.max(0, this.botTarget - people.length) : this.bots, maxBots: C.PRIVATE_MAX_BOTS,
+        round: this.roundNo, lastWinner: this.lastWinner, me: people.indexOf(c),
+        startIn, max: C.LOBBY_MAX, ready: this.ready.has(c),
       });
     }
   }
@@ -149,6 +228,15 @@ class Room {
     this.bots = Math.max(0, Math.min(C.PRIVATE_MAX_BOTS, Math.round(Number(n) || 0)));
     this.sendRoom();
     return null;
+  }
+
+  // A public lobby's countdown ran out: play.
+  startPublic() {
+    this.phase = 'playing';
+    this.startedAt = Date.now();
+    this.ready.clear();
+    this.newRound();
+    this.sendRoom();
   }
 
   start(client) {
@@ -170,7 +258,7 @@ class Room {
       for (const client of this.clients) {
         if (client.pid === p.id) {
           client.pid = null;
-          send(client, { t: 'dead', ...info, humansAlive: this.game.humansAlive(), priv: !this.isPublic });
+          send(client, { t: 'dead', ...info, humansAlive: this.game.humansAlive(), priv: !this.isPublic, pub: this.isPublic });
         }
       }
     };
@@ -182,7 +270,7 @@ class Room {
       client.expView = null;
       client.pid = null;
       client.terrVersion = -1;
-      if (client.name) this.addToGame(client);
+      if (client.name && !client.watching) this.addToGame(client);
     }
   }
 
@@ -260,18 +348,19 @@ class Room {
   // ---------------------------------------------------------------- tick
 
   step() {
+    if (this.phase === 'lobby' && this.isPublic && this.startAt && Date.now() >= this.startAt) this.startPublic();
     const game = this.game;
-    if (!game || this.phase === 'lobby') return;
+    if (!game || this.phase === 'lobby' || this.done) return;
     game.update(1 / C.TICK_RATE);
-    // A private round with no humans left ends now (once joining has closed).
-    if (!this.isPublic && game.phase === 'playing' && game.time >= C.ROUND_JOIN_WINDOW && game.humansAlive() === 0) game.endRound();
+    // A round with no humans left alive ends now (once joining has closed).
+    if (game.phase === 'playing' && game.time >= C.ROUND_JOIN_WINDOW && game.humansAlive() === 0) game.endRound();
     if (game.phase === 'over') {
       if (!this.resetAt) {
         this.resetAt = Date.now() + C.ROUND_RESET_DELAY * 1000;
-        const msg = { t: 'roundover', round: game.round, winner: game.winner, standings: game.standings(), next: C.ROUND_RESET_DELAY, priv: !this.isPublic };
+        const msg = { t: 'roundover', round: game.round, winner: game.winner, standings: game.standings(), next: C.ROUND_RESET_DELAY, priv: !this.isPublic, pub: this.isPublic };
         for (const client of this.clients) send(client, msg);
       } else if (Date.now() >= this.resetAt) {
-        if (this.isPublic) this.newRound();
+        if (this.isPublic) this.done = true; // its players move on to the open lobby (index.js)
         else this.backToLobby();
       }
     }
@@ -307,7 +396,7 @@ class Room {
     for (const key of PRIVATE) {
       priv[key] = snap[key].map((r) => ({ id: r[0], s: JSON.stringify(r), x: r[2] / 10, y: r[3] / 10, owner: key === 'units' ? r[4] : 0 }));
     }
-    const round = snap.round ? { ...snap.round, code: this.code } : undefined;
+    const round = snap.round ? { ...snap.round, code: this.isPublic ? null : this.code, pub: this.isPublic } : undefined;
     const shared = JSON.stringify({ tk: this.tick, feed: snap.feed, round }).slice(1, -1);
     let allFx = null;
     let terrJson = null;
