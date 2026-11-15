@@ -1,6 +1,6 @@
 // Order targets: what is under the cursor and how to name it.
 
-import { S, C, baseLift, explored, hexSpot, players, towerInHex } from './state.js';
+import { S, C, baseLift, explored, hexSpot, players, terr, towerInHex } from './state.js';
 
 // ------------------------------------------------------------------ targets
 // Targets are encoded like the server does: 't:<tower id>', 'c:<player id>', 'j:<camp id>'.
@@ -70,6 +70,11 @@ function orderTargetAt(wx, wy) {
   for (const c of S.campsView) {
     const sp = hexSpot(c.x, c.y);
     if (Math.hypot(sp.x - wx, sp.y - wy) < 1.8) return { k: 'j', id: c.id }; // waiting camps too
+  }
+  // Anywhere else on an enemy's land: attack their base (their troops and buildings, then the core).
+  if (wx >= 0 && wy >= 0 && wx < C.MAP_W && wy < C.MAP_H) {
+    const owner = terr[Math.floor(wy) * C.MAP_W + Math.floor(wx)];
+    if (owner && owner !== S.myId && players.has(owner)) return { k: 'c', id: owner, base: true };
   }
   return null;
 }

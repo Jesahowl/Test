@@ -849,3 +849,29 @@ test('standing squads settle still on evenly spaced spots; F puts a squad in a r
   assert.ok(avg('soldier') > avg('archer'), 'soldiers in front');
   assert.strictEqual(g.personal(a).squads[0][6], 'rect', 'the client hears about it');
 });
+
+test('attacking a base: on that player\'s land, a squad fights their troops (not just the core)', () => {
+  const { g, a, b } = duel(27, { rivers: false });
+  // a patch of b's land well away from b's core (further than MARCH_ENGAGE)
+  const core = g.hex.hexes[g.hexAt(b.core.x, b.core.y)];
+  const far = g.hex.hexes.filter((h) => h.full && !g.hexOwner[h.i] && Math.hypot(h.cx - core.cx, h.cy - core.cy) > C.MARCH_ENGAGE + 3 && Math.hypot(h.cx - core.cx, h.cy - core.cy) < C.MARCH_ENGAGE + 6)[0];
+  g.setHex(far.i, b.id);
+  for (const j of far.n) if (!g.hexOwner[j]) g.setHex(j, b.id);
+  g.update(0.05);
+  const [mine] = troops(g, a, 'soldier', 1, far.cx - 1, far.cy);
+  mine.hp = mine.maxHp = 1e6;
+  const [foe] = troops(g, b, 'soldier', 1, far.cx + 1.6, far.cy + 1.6);
+  foe.hp = foe.maxHp = 1e6;
+  foe.attack = { k: 'p', id: g.idx(Math.floor(foe.x), Math.floor(foe.y)) }; // it holds its ground
+  assert.strictEqual(mine.stance, 'defensive');
+  g.order(a.id, [mine.id], { k: 'c', id: b.id });
+  assert.ok(Math.hypot(mine.x - b.core.x, mine.y - b.core.y) > C.MARCH_ENGAGE, 'far from the core');
+  let hits = 0; // (count the blows: on its own land the defender heals between them)
+  const dmg = g.damageUnit.bind(g);
+  g.damageUnit = (v, ...rest) => {
+    if (v === foe) hits++;
+    return dmg(v, ...rest);
+  };
+  run(g, 4);
+  assert.ok(hits > 0, 'it fought the defender on their land');
+});

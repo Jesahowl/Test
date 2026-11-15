@@ -1030,7 +1030,9 @@ module.exports = {
       // Marching to a far-off target: don't get pulled into fights on the way. Troops keep walking
       // and only shoot at enemy troops (or angry barbarians) in reach as they pass; once they're
       // within MARCH_ENGAGE of the target they fight everything there as usual.
-      if (tgt && !def.heal && stance !== 'aggressive' && dist(u.x, u.y, tgt.x, tgt.y) > C.MARCH_ENGAGE) {
+      // (attacking a base: once on that player's land, troops fight everything there)
+      const inBase = u.attack && u.attack.k === 'c' && this.terr[this.idx(Math.max(0, Math.min(this.w - 1, Math.floor(u.x))), Math.max(0, Math.min(this.h - 1, Math.floor(u.y))))] === u.attack.id;
+      if (tgt && !def.heal && stance !== 'aggressive' && !inBase && dist(u.x, u.y, tgt.x, tgt.y) > C.MARCH_ENGAGE) {
         if (u.cd <= 0) {
           const near = this.pickTarget(u, def, s.range, false);
           if (near) this.unitFire(u, near, s, def);
@@ -1174,42 +1176,49 @@ module.exports = {
   scoutTick(u, speed, dt) {
     const p = this.players.get(u.owner);
     if (!p) return;
-    if (!u.scoutTo || this.time > u.scoutUntil || dist(u.x, u.y, u.scoutTo.x, u.scoutTo.y) < 1.5) {
+    // A new spot once this one has been uncovered (scouts see far: no need to walk all the way),
+    // reached, or taken too long.
+    const seenIt = u.scoutTo && p.explored && p.explored[this.idx(Math.floor(u.scoutTo.x), Math.floor(u.scoutTo.y))];
+    if (!u.scoutTo || seenIt || this.time > u.scoutUntil || dist(u.x, u.y, u.scoutTo.x, u.scoutTo.y) < 1.5) {
       u.scoutTo = this.pickScoutSpot(u, p);
       u.scoutUntil = this.time + C.SCOUT_LEG_TIME;
     }
-    // Straight there: scouts pick spots clear of enemy guns, so they don't need pathfinding.
+    // Straight there (round walls and rivers when they're in the way): scouts pick spots clear of
+    // enemy guns.
     this.stepToward(u, u.scoutTo.x, u.scoutTo.y, 1, speed, dt);
   },
 
+  // Where a scout heads next: the fog. Looks over the whole map on a coarse grid for unexplored
+  // spots out of reach of enemy towers and cores, and picks one with a lot of fog round it that's
+  // near the scout (the nearest fog first, so it sweeps outward rather than zigzagging), away from
+  // where its owner's other scouts are going.
   pickScoutSpot(u, p) {
+    const ex = p.explored;
+    const unseen = (x, y) => this.inBounds(x, y) && !(ex && ex[this.idx(x, y)]);
+    const others = [];
+    for (const v of this.units.values()) if (v !== u && v.owner === p.id && v.worker && v.scoutTo && v.job && v.job.type === 'scout') others.push(v.scoutTo);
+    const danger = [];
+    for (const t of this.towers.values()) if (this.hostile(p.id, t.owner)) danger.push([t.x, t.y, C.structSight(t.kind, t.level) + 1]);
+    for (const q of this.players.values()) if (q.alive && this.hostile(p.id, q.id)) danger.push([q.core.x, q.core.y, C.CORE_RANGE + 3]);
+    const STEP = 5;
     let best = null;
     let bestScore = -Infinity;
-    for (let i = 0; i < 16; i++) {
-      const a = this.rand() * Math.PI * 2;
-      const r = 6 + this.rand() * C.SCOUT_RANGE;
-      const x = Math.max(2, Math.min(this.w - 3, p.core.x + Math.cos(a) * r));
-      const y = Math.max(2, Math.min(this.h - 3, p.core.y + Math.sin(a) * r));
-      let danger = false;
-      for (const t of this.towers.values()) {
-        if (this.hostile(p.id, t.owner) && dist(x, y, t.x, t.y) < C.structSight(t.kind, t.level)) danger = true;
-      }
-      for (const q of this.players.values()) if (this.hostile(p.id, q.id) && dist(x, y, q.core.x, q.core.y) < C.CORE_RANGE + 2) danger = true;
-      if (danger) continue;
-      let unseen = 0;
-      for (let dy = -4; dy <= 4; dy += 2) {
-        for (let dx = -4; dx <= 4; dx += 2) {
-          const tx = Math.floor(x + dx);
-          const ty = Math.floor(y + dy);
-          if (this.inBounds(tx, ty) && !(p.explored && p.explored[this.idx(tx, ty)])) unseen++;
+    for (let y = 2; y < this.h - 2; y += STEP) {
+      for (let x = 2; x < this.w - 2; x += STEP) {
+        const cx = x + ((y / STEP) % 2 ? STEP / 2 : 0);
+        if (!unseen(Math.floor(cx), y)) continue;
+        if (danger.some(([dx, dy, r]) => dist(cx, y, dx, dy) < r)) continue;
+        let fog = 0; // how much fog round it (a 7x7 sample, 3 tiles apart)
+        for (let oy = -9; oy <= 9; oy += 3) for (let ox = -9; ox <= 9; ox += 3) if (unseen(Math.floor(cx + ox), y + oy)) fog++;
+        const d = dist(u.x, u.y, cx, y);
+        let score = fog * 1.5 - d * 1.2 + this.rand() * 4;
+        for (const o of others) if (dist(o.x, o.y, cx, y) < 18) score -= 40; // spread out
+        if (score > bestScore) {
+          bestScore = score;
+          best = { x: cx, y };
         }
       }
-      const score = unseen * 10 - dist(u.x, u.y, x, y) * 0.3 + this.rand() * 5;
-      if (score > bestScore) {
-        bestScore = score;
-        best = { x, y };
-      }
     }
-    return best || { x: p.core.x + 0.5, y: p.core.y + 0.5 };
+    return best || { x: p.core.x + 0.5, y: p.core.y + 0.5 }; // all explored (or all guarded): home
   },
 };
