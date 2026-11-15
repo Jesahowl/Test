@@ -102,7 +102,7 @@ module.exports = {
     const armyStep = Math.min(low ? C.upgradeCost('barracks', low.level) : Infinity, barracks < C.MAX_BARRACKS ? bCost : Infinity);
 
     // Grow: buy land at the border, keeping some gold back for buildings and troops.
-    const hexCost = C.landCost(p.territory) * 16; // about one hex
+    const hexCost = C.landCost(p.territory) * Math.round(2.598 * C.HEX_R * C.HEX_R); // about one hex
     const keep = 60 + (towers.length < 2 ? C.TOWERS.tower.cost : 0) + (wantTrade ? C.TOWERS.trade.cost : 0) + (Number.isFinite(armyStep) ? armyStep : 0);
     if (p.gold >= keep + hexCost && roll < 0.75) {
       const n = Math.min(p.gold > keep + hexCost * 4 ? 3 : 2, Math.floor((p.gold - keep) / hexCost));
