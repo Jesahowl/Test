@@ -22,8 +22,23 @@ const STATIC = {
 };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 
+const crypto = require('crypto');
+
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O or 1/I mix-ups
 const ROOM_IDLE_MS = 60000; // an empty private room is closed after this long
+const RESUME_MS = 45000; // a player whose connection drops mid-game keeps their place this long
+const HEARTBEAT_MS = 15000; // connections that don't answer a ping within this are dropped
+const MAX_BUFFERED = 4 * 1024 * 1024; // a client this far behind gets a fresh full state instead of more deltas
+
+// Log a problem without letting it take the server down (at most once a minute per kind).
+const lastLog = new Map();
+function logError(where, e) {
+  const key = `${where}:${e && e.message}`;
+  const now = Date.now();
+  if (now - (lastLog.get(key) || 0) < 60000) return;
+  lastLog.set(key, now);
+  console.error(`[${new Date().toISOString()}] ${where}:`, e && e.stack ? e.stack : e);
+}
 
 // waits: lobby countdowns in seconds (see Room), shortened by tests.
 // dev: test mode is on offer (the menu's Test game: infinite gold and wood in your own private room).
@@ -86,7 +101,7 @@ function createServer({ port = 3000, botTarget, waits = {}, dev = false } = {}) 
   // permessage-deflate: state messages are repetitive JSON and shrink about 7x. Level 1 keeps it cheap.
   const wss = new WebSocketServer({
     server,
-    maxPayload: 2048,
+    maxPayload: 64 * 1024, // (a long wall drag or a big land purchase is a few KB)
     perMessageDeflate: { zlibDeflateOptions: { level: 1 }, threshold: 256 },
   });
 
@@ -96,10 +111,27 @@ function createServer({ port = 3000, botTarget, waits = {}, dev = false } = {}) 
 
   const nameOf = (msg) => String(msg.name || '').slice(0, 40) || 'Player';
 
+  wss.on('error', (e) => logError('websocket server', e));
+  const tokens = new Map(); // resume token -> client (for getting back into a game after a dropped connection)
+
   wss.on('connection', (ws) => {
-    const client = { ws, room: null, pid: null, terrVersion: -1, name: null, queued: false, synced: false };
+    let client = { ws, room: null, pid: null, terrVersion: -1, name: null, queued: false, synced: false, token: crypto.randomBytes(12).toString('hex') };
     clients.add(client);
-    if (dev) send(client, { t: 'hello', dev: true }); // (the menu shows the test game button)
+    tokens.set(client.token, client);
+    // (the token lets this browser get back into its game if the connection drops; dev: the test game button)
+    send(client, { t: 'hello', dev, token: client.token });
+    ws.isAlive = true;
+    ws.on('pong', () => {
+      ws.isAlive = true;
+    });
+    // A bad frame, an oversized message or a network error on one connection only closes that
+    // connection (unhandled, it would take the whole server down).
+    ws.on('error', (e) => {
+      logError('connection', e);
+      try {
+        ws.terminate();
+      } catch { /* already gone */ }
+    });
 
     ws.on('message', (raw) => {
       let msg;
@@ -109,8 +141,49 @@ function createServer({ port = 3000, botTarget, waits = {}, dev = false } = {}) 
         return;
       }
       if (!msg || typeof msg !== 'object') return;
+      try {
+        handleMessage(msg);
+      } catch (e) {
+        logError(`message ${String(msg.t).slice(0, 20)}`, e);
+        send(client, { t: 'err', m: 'Something went wrong with that: please try again' });
+      }
+    });
+
+    // Back into a game after a dropped connection: this connection takes over the old one's place.
+    function resume(token) {
+      const old = tokens.get(String(token || ''));
+      if (!old || old === client || !old.dropped || !old.room || !rooms.has(old.room.code)) {
+        send(client, { t: 'resume-fail' });
+        return;
+      }
+      clearTimeout(old.dropTimer);
+      old.dropped = 0;
+      old.ws = ws;
+      old.synced = false; // a full state next
+      old.expSent = -1;
+      old.expView = null;
+      old.terrVersion = -1;
+      tokens.delete(client.token);
+      clients.delete(client);
+      client = old;
+      clients.add(client);
+      const game = client.room.game;
+      if (client.pid && game && game.players.has(client.pid)) {
+        send(client, { t: 'welcome', id: client.pid, round: game.round, room: client.room.code, resumed: 1, token: client.token });
+        client.room.sendRoom();
+      } else {
+        // their core fell while they were away
+        client.room.remove(client);
+        send(client, { t: 'resume-fail', fell: 1 });
+      }
+    }
+
+    function handleMessage(msg) {
       let err = null;
       switch (msg.t) {
+        case 'resume':
+          resume(msg.token);
+          return;
         case 'join': {
           // Play: the open public lobby, or a room by code. Again while in a game: a public game's
           // players go on to the open lobby (the game goes on without them); in a private room,
@@ -197,13 +270,45 @@ function createServer({ port = 3000, botTarget, waits = {}, dev = false } = {}) 
           err = client.room ? client.room.handle(client, msg) : null;
       }
       if (err) send(client, { t: 'err', m: err });
-    });
+    }
 
     ws.on('close', () => {
+      if (client.ws !== ws) return; // (this connection was replaced by a resumed one)
+      const r = client.room;
+      if (r && client.pid && r.phase !== 'lobby' && !client.watching && r.game && r.game.phase === 'playing') {
+        // mid-game: keep their place for a while, in case they reconnect
+        const c = client;
+        c.dropped = Date.now();
+        c.dropTimer = setTimeout(() => {
+          if (!c.dropped) return;
+          tokens.delete(c.token);
+          clients.delete(c);
+          if (c.room) c.room.remove(c);
+        }, RESUME_MS);
+        return;
+      }
+      tokens.delete(client.token);
       clients.delete(client);
-      if (client.room) client.room.remove(client);
+      if (r) r.remove(client);
     });
   });
+
+  // Heartbeat: connections that stop answering (a closed laptop, a lost network) are dropped, so
+  // their place is held for a resume and then handed on, instead of hanging on for ever.
+  const heartbeat = setInterval(() => {
+    for (const c of clients) {
+      const ws = c.ws;
+      if (!ws || c.dropped || ws.readyState !== ws.OPEN) continue;
+      if (ws.isAlive === false) {
+        ws.terminate();
+        continue;
+      }
+      ws.isAlive = false;
+      try {
+        ws.ping();
+      } catch { /* closing */ }
+    }
+  }, HEARTBEAT_MS);
 
   // A public game that's over: its players go on together to the open lobby; its watchers back to
   // the menu.
@@ -226,7 +331,12 @@ function createServer({ port = 3000, botTarget, waits = {}, dev = false } = {}) 
       if (room.done) finishPublic(room);
       else if (!room.clients.size && (now - room.emptySince > ROOM_IDLE_MS || (room.isPublic && room.phase !== 'lobby'))) rooms.delete(code); // (a public game everyone has left ends)
       else {
-        room.step();
+        // (a bug in one game is logged; it doesn't stop the server or the other games)
+        try {
+          room.step();
+        } catch (e) {
+          logError(`room ${code}`, e);
+        }
         if (wasLobby && room.isPublic && room.phase === 'playing') lastPublic = room;
       }
     }
@@ -247,6 +357,7 @@ function createServer({ port = 3000, botTarget, waits = {}, dev = false } = {}) 
     },
     close() {
       clearInterval(interval);
+      clearInterval(heartbeat);
       for (const c of clients) c.ws.terminate();
       wss.close();
       server.close();
@@ -262,6 +373,9 @@ if (require.main === module) {
   const srv = createServer({ port, dev });
   console.log(`Territory Siege running at http://localhost:${port}${dev ? ' (test mode available)' : ''}`);
   // Hosts like Render send SIGTERM before restarting or redeploying: close cleanly.
+  // a last resort: log anything unexpected rather than dropping every player at once
+  process.on('uncaughtException', (e) => logError('uncaught', e));
+  process.on('unhandledRejection', (e) => logError('unhandled rejection', e));
   process.on('SIGTERM', () => {
     srv.close();
     process.exit(0);

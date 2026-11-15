@@ -12,15 +12,58 @@ import { S, $, C, ALL_UNIT_KEYS, baseLift, cam, CAMP_KEYS, hexSpot, CREEP_KEYS, 
 import { tipDone } from './tips.js';
 
 // ------------------------------------------------------------------ network
+// If the connection drops mid-game, the client reconnects on its own (retrying for up to
+// RESUME_FOR seconds, a little longer between tries each time) and asks to be put back in its game
+// (the server holds a dropped player's place for a while), showing a small banner meanwhile.
+const RESUME_FOR = 42000;
+let resumeUntil = 0;
+let retryIn = 500;
+
+function setReconnecting(on) {
+  S.reconnecting = on;
+  $('reconnect').classList.toggle('hidden', !on);
+}
+
+function giveUpResume(why) {
+  resumeUntil = 0;
+  setReconnecting(false);
+  S.myId = null;
+  if (S.room) $('code').value = S.room.code; // one click to rejoin the room
+  S.room = null;
+  showMenu();
+  if (why) $('conn').textContent = why;
+}
+
 function connect() {
-  $('conn').textContent = 'Connecting…';
-  $('play').disabled = true;
+  if (!S.reconnecting) {
+    $('conn').textContent = 'Connecting…';
+    $('play').disabled = true;
+  }
   S.ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
   S.ws.onopen = () => {
+    retryIn = 500;
+    if (S.reconnecting && S.resumeToken) {
+      S.ws.send(JSON.stringify({ t: 'resume', token: S.resumeToken }));
+      return;
+    }
     $('conn').textContent = '';
     $('play').disabled = false;
   };
   S.ws.onclose = () => {
+    const now = performance.now();
+    // in a game: try to get back into it
+    if ((S.myId || S.reconnecting) && S.resumeToken) {
+      if (!S.reconnecting) {
+        resumeUntil = now + RESUME_FOR;
+        setReconnecting(true);
+      }
+      if (now < resumeUntil) {
+        setTimeout(connect, retryIn);
+        retryIn = Math.min(4000, retryIn * 1.6);
+        return;
+      }
+      giveUpResume('Lost the connection to the game: press Play to start again');
+    }
     $('conn').textContent = 'Disconnected - retrying…';
     $('play').disabled = true;
     S.myId = null;
@@ -48,6 +91,14 @@ function handle(msg) {
       applyState(msg);
       break;
     case 'welcome':
+      if (msg.token) S.resumeToken = msg.token;
+      if (msg.resumed) {
+        // back in the game after a dropped connection
+        setReconnecting(false);
+        $('conn').textContent = '';
+        $('play').disabled = false;
+        toast('Reconnected', true);
+      }
       S.watchingGame = false;
       stopSpectating();
       S.queued = false;
@@ -94,7 +145,13 @@ function handle(msg) {
     case 'ping':
       onPing(msg);
       break;
+    case 'resume-fail':
+      // couldn't get back in (the game ended, or our core fell meanwhile): to the menu
+      giveUpResume(msg.fell ? 'Your core fell while you were disconnected' : 'Couldn\'t get back into that game: press Play for a new one');
+      $('play').disabled = false;
+      break;
     case 'hello':
+      if (!S.reconnecting) S.resumeToken = msg.token; // (the key to this game if the connection drops)
       // (the test-mode fog switch in the round bar: one listener, the bar is redrawn often)
       if (!S.fogClick) {
         S.fogClick = true;

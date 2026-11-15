@@ -17,6 +17,7 @@ const C = require('../shared/config');
 const Game = require('./game');
 
 const SEND_EVERY = Math.max(1, Math.round(C.TICK_RATE / C.SNAPSHOT_RATE));
+const MAX_BUFFERED = 4 * 1024 * 1024; // bytes waiting to go out to a client before it's skipped
 // Buildings, players and camps are the same for everyone; troops, monsters and effects are
 // filtered per player by fog of war (spectators see everything).
 const COLLECTIONS = ['players', 'towers', 'walls', 'camps', 'forest', 'ore'];
@@ -446,6 +447,12 @@ class Room {
     let terrJson = null;
     for (const client of this.clients) {
       if (client.ws.readyState !== client.ws.OPEN) continue;
+      if (client.ws.bufferedAmount > MAX_BUFFERED) {
+        // far behind (a slow connection): skip it this time, and send it a full state when it
+        // catches up, instead of piling up more
+        client.synced = false;
+        continue;
+      }
       let body = deltaParts;
       if (!client.synced) {
         if (!fullBody) fullBody = COLLECTIONS.map((key, i) => `"${key}":{"c":[${fullParts[i]().join(',')}],"r":[]},`).join('') + '"full":1,';

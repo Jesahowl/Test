@@ -59,6 +59,14 @@ The menu has a **🛠 Test game** button: it starts a private game straight away
 Test mode is also a setting in private rooms, so you can test with friends. It only ever applies
 to those private rooms, never to public games. To hide it on a server, start it with `TEST_MODE=0`.
 
+## Connection drops
+
+If your connection drops mid-game (Wi-Fi blip, laptop lid, network switch), the game reconnects on
+its own and puts you back where you were: a banner shows while it tries, and your base carries on
+(troops keep their orders) for up to 45 seconds. A bad or oversized message from any one player
+only closes that player's connection; errors are logged, never taking the server (and everyone's
+game) down.
+
 ## Public lobbies
 
 **Play** puts you in the open **public lobby**, where players gather before a game (up to 8 people).

@@ -247,7 +247,7 @@ test('test mode: refused when the server turns it off; gold and wood never run o
     assert.ok(!room.dev);
     ws.send(JSON.stringify({ t: 'rule', key: 'testMode', value: true }));
     await waitFor(ws, (m) => m.t === 'err' && /turned off/.test(m.m));
-    assert.ok(!ws.msgs.some((m) => m.t === 'hello'), 'no dev greeting');
+    assert.ok(!ws.msgs.some((m) => m.t === 'hello' && m.dev), 'no test mode offered');
     ws.close();
   } finally {
     prod.close();
@@ -365,6 +365,67 @@ test('pings: your allies see them (and you do), others don\'t; rate-limited', as
     for (let i = 0; i < 3; i++) a.send(JSON.stringify({ t: 'ping', kind: 'look', x: 5, y: 5 }));
     await waitFor(a, (m) => m.t === 'err' && /Too many/.test(m.m));
     for (const ws of [a, b, c]) ws.close();
+  } finally {
+    srv.close();
+  }
+});
+
+test('a bad message from one player never takes the server down; a dropped player can resume', async () => {
+  const srv = createServer({ port: 0, botTarget: 0 });
+  await new Promise((r) => srv.server.once('listening', r));
+  const port = srv.server.address().port;
+  const open = async () => {
+    const ws = new WebSocket(`ws://localhost:${port}`);
+    ws.msgs = [];
+    ws.on('message', (d) => ws.msgs.push(JSON.parse(d)));
+    ws.on('error', () => {});
+    await new Promise((r) => ws.once('open', r));
+    return ws;
+  };
+  const waitFor = async (ws, pred, ms = 8000) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const m = ws.msgs.find(pred);
+      if (m) return m;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    throw new Error('timeout');
+  };
+  try {
+    // a broken frame and an oversized message: only that connection suffers
+    const bad = await open();
+    bad._socket.write(Buffer.from([0x8f, 0x80, 0, 0, 0, 0]));
+    const big = await open();
+    const edges = [];
+    for (let i = 0; i < 250; i++) edges.push([1000 + i, 1100 + i]);
+    big.send(JSON.stringify({ t: 'walls', edges })); // (a long wall drag: bigger than the old 2 KB limit)
+    await new Promise((r) => setTimeout(r, 300));
+    // the server is still up: a new player gets in and plays
+    const a = await open();
+    const hello = await waitFor(a, (m) => m.t === 'hello');
+    assert.ok(hello.token, 'a resume token');
+    a.send(JSON.stringify({ t: 'create', name: 'A' }));
+    await waitFor(a, (m) => m.t === 'room');
+    a.send(JSON.stringify({ t: 'start' }));
+    const w = await waitFor(a, (m) => m.t === 'welcome');
+    const room = srv.rooms.get(w.room);
+    // A's connection drops mid-game: their place is held...
+    a.terminate();
+    await new Promise((r) => setTimeout(r, 200));
+    assert.ok(room.game.players.has(w.id), 'still in the game');
+    assert.ok(!room.game.players.get(w.id).isBot, 'not handed to a bot yet');
+    // ...and a new connection resumes it
+    const a2 = await open();
+    a2.send(JSON.stringify({ t: 'resume', token: hello.token }));
+    const back = await waitFor(a2, (m) => m.t === 'welcome' && m.resumed);
+    assert.strictEqual(back.id, w.id, 'the same player');
+    const st = await waitFor(a2, (m) => m.t === 's' && m.full && m.me);
+    assert.strictEqual(st.me.id, w.id, 'and full state again');
+    // a stale or unknown token doesn't
+    const z = await open();
+    z.send(JSON.stringify({ t: 'resume', token: 'nope' }));
+    await waitFor(z, (m) => m.t === 'resume-fail');
+    for (const ws of [bad, big, a2, z]) ws.terminate();
   } finally {
     srv.close();
   }
