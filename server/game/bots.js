@@ -104,7 +104,7 @@ module.exports = {
     const hexCost = C.landCost(p.territory) * 16; // about one hex
     const keep = 60 + (towers.length < 2 ? C.TOWERS.tower.cost : 0) + (wantTrade ? C.TOWERS.trade.cost : 0) + (Number.isFinite(armyStep) ? armyStep : 0);
     if (p.gold >= keep + hexCost && roll < 0.75) {
-      const n = Math.min(2, Math.floor((p.gold - keep) / hexCost));
+      const n = Math.min(p.gold > keep + hexCost * 4 ? 3 : 2, Math.floor((p.gold - keep) / hexCost));
       this.botBuyLand(p, n);
     }
 
@@ -139,34 +139,41 @@ module.exports = {
       return;
     }
 
-    // Defend: towers inside the land, towards the border.
-    if (!this.suddenDeath() && towers.length < Math.min(5, 1 + Math.floor(age / 60)) && p.gold >= C.TOWERS.tower.cost + 40 + (wantTrade ? C.TOWERS.trade.cost : 0) && p.wood >= C.TOWERS.tower.wood && roll < 0.4) {
-      const bases = [p.core, ...towers];
-      const base = bases[Math.floor(this.rand() * bases.length)];
-      for (let i = 0; i < 30; i++) {
-        const ang = this.rand() * Math.PI * 2;
-        const r = 3 + this.rand() * 4;
-        const x = Math.round(base.x + Math.cos(ang) * r);
-        const y = Math.round(base.y + Math.sin(ang) * r);
-        if (this.inBounds(x, y) && this.build(p.id, x, y, 'tower') === null) break;
-      }
+    // Defend: towers on the side facing the enemies, spread out along the border.
+    const maxTowers = p.gold > 700 ? 7 : 5; // (a surplus buys a couple more)
+    if (!this.suddenDeath() && towers.length < Math.min(maxTowers, 1 + Math.floor(age / 60)) && p.gold >= C.TOWERS.tower.cost + 40 + (wantTrade ? C.TOWERS.trade.cost : 0) && p.wood >= C.TOWERS.tower.wood && roll < 0.4) {
+      this.botPlaceTower(p, towers);
       return;
     }
 
 
     // Squads: shape the army (free), then buy levels.
     this.botArmy(p);
-    if (p.gold >= 120 && roll < 0.7 && !wantTrade) {
-      const kinds = UNIT_KEYS.filter((k) => p.squads.some((q) => q.mix[k] > 0) && p.levels[k] < C.MAX_LEVEL);
-      if (kinds.length) this.armyLevel(p.id, kinds[Math.floor(this.rand() * kinds.length)]);
+    if (p.gold >= 120 && (roll < 0.7 || p.gold > 350) && !wantTrade) {
+      // the troop kinds the army has most of (by slots), weighted
+      const use = {};
+      for (const q of p.squads) for (const k of UNIT_KEYS) use[k] = (use[k] || 0) + (q.mix[k] || 0) * C.slotsOf(k);
+      const kinds = UNIT_KEYS.filter((k) => use[k] > 0 && p.levels[k] < C.MAX_LEVEL);
+      const total = kinds.reduce((t, k) => t + use[k] / (1 + p.levels[k]), 0);
+      let pick = this.rand() * total;
+      for (const k of kinds) {
+        pick -= use[k] / (1 + p.levels[k]);
+        if (pick <= 0) {
+          this.armyLevel(p.id, k);
+          break;
+        }
+      }
     }
 
     // Walls on the side facing the nearest enemy, with a gate toward them.
     if (towers.length >= 2 && p.gold >= 150 && p.wood >= 40 && roll < 0.35 && !this.suddenDeath()) this.botWalls(p);
 
-    // Upgrade towers when rich.
-    if (p.gold > 400 && towers.length && roll < 0.2) {
-      this.upgrade(p.id, towers[Math.floor(this.rand() * towers.length)].id);
+    // Upgrade towers when rich: the one nearest the enemy first.
+    if (p.gold > 300 && towers.length && (roll < 0.25 || p.gold > 600)) {
+      const enemy = this.nearestEnemy(p.core.x, p.core.y, p.id, false);
+      const front = towers.filter((t) => !(t.progress < 1) && t.level < C.maxLevel('tower'))
+        .sort((a, b) => (enemy ? dist(a.x, a.y, enemy.core.x, enemy.core.y) - dist(b.x, b.y, enemy.core.x, enemy.core.y) : a.level - b.level))[0];
+      if (front) this.upgrade(p.id, front.id);
     }
 
     // Orders.
@@ -179,16 +186,109 @@ module.exports = {
     // Sudden death: everything goes for the nearest rival's core, even with intruders at home
     // (cores are crumbling: waiting it out only stalls the round).
     if (this.suddenDeath()) {
-      const rival = this.nearestEnemy(p.core.x, p.core.y, p.id, true);
+      // (the weakest reachable rival: finish someone off)
+      const rival = this.botPickEnemy(p, troops.reduce((t, u) => t + (u.worker ? 0 : this.botUnitPower(u)), 0)) || this.nearestEnemy(p.core.x, p.core.y, p.id, true);
       if (rival) {
         this.order(p.id, null, { k: 'c', id: rival.id });
         return;
       }
     }
-    const intruders = [...this.units.values()].filter((u) => this.hostile(p.id, u.owner)
+    this.botOrders(p, troops, towers);
+  },
+
+  // ---- judging fights: a troop's or building's strength is about sqrt(HP x damage per second)
+  // (Lanchester: armies scale with numbers squared), summed over a group.
+  botUnitPower(u) {
+    const st = C.towerStats(u.kind, u.level || 1);
+    return Math.sqrt(Math.max(1, u.hp) * (st.damage * st.rate + st.heal * 0.6 + 2));
+  },
+
+  botStructPower(t) {
+    const st = C.towerStats(t.kind, t.level);
+    return st.damage ? 1.4 * Math.sqrt(t.hp * st.damage * st.rate) : 0; // (they don't move, but they hit hard)
+  },
+
+  // Strength of pid's troops within r of (x, y), and of their towers (and core) covering it.
+  botDefence(pid, x, y, r) {
+    let troops = 0;
+    for (const u of this.nearUnits(x, y, r)) if (u.owner === pid && !u.worker && !u.trade && dist(u.x, u.y, x, y) <= r) troops += this.botUnitPower(u);
+    let guns = 0;
+    for (const t of this.towers.values()) {
+      if (t.owner !== pid || t.progress < 1) continue;
+      if (dist(t.x, t.y, x, y) <= C.towerStats(t.kind, t.level).range + 3) guns += this.botStructPower(t);
+    }
+    const q = this.players.get(pid);
+    if (q && q.alive && dist(q.core.x, q.core.y, x, y) <= C.CORE_RANGE + 3) guns += 1.4 * Math.sqrt(q.core.hp * C.CORE_DAMAGE * C.CORE_RATE) * 0.5;
+    return { troops, guns, total: troops + guns };
+  },
+
+  // Which rival to go after: near, weakly defended (compared with my strike force), with its army
+  // away or its core worn down. Sticks with its pick unless another is clearly better.
+  botPickEnemy(p, power) {
+    let best = null;
+    let bestScore = Infinity;
+    let cur = null;
+    let curScore = Infinity;
+    for (const q of this.players.values()) {
+      if (!q.alive || !this.hostile(p.id, q.id) || this.isShielded(q)) continue;
+      const d = dist(p.core.x, p.core.y, q.core.x, q.core.y);
+      const def = this.botDefence(q.id, q.core.x, q.core.y, 16).total;
+      let score = d + 35 * (def / (power + 50)) - 20 * (1 - q.core.hp / q.core.maxHp);
+      if (p.bot.grudge && p.bot.grudge.has(q.id)) score *= 0.6; // whoever betrayed it
+      // gang up: an enemy an ally's strike force is already attacking
+      for (const aid of this.alliesOf(p.id)) {
+        const ally = this.players.get(aid);
+        const o = ally && ally.squads && ally.squads[0] && ally.squads[0].order;
+        if (o && o.type === 'attack' && o.target && ((o.target.k === 'c' && o.target.id === q.id) || (o.target.k === 't' && this.towers.get(o.target.id)?.owner === q.id))) score *= 0.7;
+      }
+      if (score < bestScore) {
+        bestScore = score;
+        best = q;
+      }
+      if (q.id === p.bot.target) {
+        cur = q;
+        curScore = score;
+      }
+    }
+    if (cur && curScore <= bestScore * 1.3) return cur;
+    if (best) p.bot.target = best.id;
+    return best;
+  },
+
+  // What to hit in that rival's base: its core when it's lightly held, else the building on our
+  // side of it with the least cover.
+  botPickObjective(p, enemy, power) {
+    const coreDef = this.botDefence(enemy.id, enemy.core.x, enemy.core.y, 10).total;
+    if (power > coreDef * 1.3) return { k: 'c', id: enemy.id };
+    let best = null;
+    let bestScore = Infinity;
+    for (const t of this.towers.values()) {
+      if (t.owner !== enemy.id) continue;
+      const cover = this.botDefence(enemy.id, t.x, t.y, 8).total;
+      const score = dist(p.core.x, p.core.y, t.x, t.y) * 0.5 + cover / (power + 50) * 40;
+      if (score < bestScore) {
+        bestScore = score;
+        best = t;
+      }
+    }
+    return best ? { k: 't', id: best.id } : { k: 'c', id: enemy.id };
+  },
+
+  botOrders(p, troops, towers) {
+    const [strike, guard, jungle, second] = p.squads;
+    const alive = (q) => troops.filter((u) => u.sq === q.id).length;
+    const size = (q) => this.mixSlots(q.mix);
+    const send = (q, target) => this.order(p.id, null, target, [q.id]);
+    const powerOf = (list) => list.reduce((t, u) => t + this.botUnitPower(u), 0);
+    const strikeTroops = troops.filter((u) => u.sq === strike.id || u.sq === second.id);
+    const strikePower = powerOf(strikeTroops);
+    const L = this.botLevel;
+
+    // Intruders on my land: the home guard deals with raids; the strike force comes back only
+    // when the guard and my towers can't hold them (and they're near something that matters).
+    const intruders = [...this.units.values()].filter((u) => this.hostile(p.id, u.owner) && !u.trade && !u.worker
       && this.terr[this.idx(Math.floor(u.x), Math.floor(u.y))] === p.id);
-    if (intruders.length >= 3) {
-      // Strike force and home guard defend whichever of our structures is closest to the intruders.
+    if (intruders.length) {
       const cx = intruders.reduce((sum, u) => sum + u.x, 0) / intruders.length;
       const cy = intruders.reduce((sum, u) => sum + u.y, 0) / intruders.length;
       let anchor = { k: 'c', id: p.id };
@@ -200,11 +300,18 @@ module.exports = {
           anchor = { k: 't', id: t.id };
         }
       }
-      this.order(p.id, null, anchor, [strike.id, guard.id]);
-      return;
-    }
-    // The home guard stays home.
-    if (guard.order.type !== 'defend') send(guard, { k: 'c', id: p.id });
+      const threat = powerOf(intruders);
+      const guardPower = powerOf(troops.filter((u) => u.sq === guard.id));
+      const mine = this.botDefence(p.id, cx, cy, 6).guns;
+      const key = (o) => (o.type === 'defend' ? `d${o.anchor || 0}` : 'a');
+      if (key(guard.order) !== `d${anchor.k === 't' ? anchor.id : 0}`) send(guard, anchor);
+      if (threat > (guardPower + mine) * 0.8 || (bestD < 10 && threat > guardPower * 0.6)) {
+        this.order(p.id, null, anchor, [strike.id, second.id]);
+        p.bot.attackSince = 0;
+        return;
+      }
+    } else if (guard.order.type !== 'defend' || guard.order.anchor) send(guard, { k: 'c', id: p.id }); // the home guard stays home
+
     // The jungle squad farms the nearest camp (it pays well; the warlord's fort is worth a detour),
     // unless it's pillaging (then it picks camps itself).
     if (size(jungle) && jungle.stance !== 'pillage' && (jungle.order.type !== 'attack' || jungle.order.target.k !== 'j' || !this.camps[jungle.order.target.id]?.alive)) {
@@ -214,24 +321,71 @@ module.exports = {
         .sort((c1, c2) => campScore(c1) - campScore(c2))[0];
       if (camp && alive(jungle) >= Math.min(3, size(jungle))) send(jungle, { k: 'j', id: camp.id });
     }
-    // The strike force attacks once it's mostly up to strength, and falls back to regroup when
-    // it has been worn down.
-    const enemy = this.nearestEnemy(p.core.x, p.core.y, p.id, true);
-    if (strike.order.type === 'attack' && alive(strike) < size(strike) * this.botLevel.retreatAt) {
-      this.order(p.id, null, { k: 'c', id: p.id }, [strike.id, second.id]);
-    } else if (enemy && strike.order.type === 'defend' && size(strike) && alive(strike) >= size(strike) * this.botLevel.attackAt) {
-      let target = { k: 'c', id: enemy.id };
-      let bestD = Infinity;
-      for (const t of this.towers.values()) {
-        if (t.owner !== enemy.id) continue;
-        const d = dist(p.core.x, p.core.y, t.x, t.y);
-        if (d < bestD) {
-          bestD = d;
-          target = { k: 't', id: t.id };
-        }
+
+    // The strike forces (squads 1 and 4).
+    const full = size(strike) + size(second);
+    const up = alive(strike) + alive(second);
+    if (!full) return;
+    if (strike.order.type === 'attack') {
+      // At the front: fall back if worn down, or if what it's fighting there is clearly stronger.
+      const fx = strikeTroops.reduce((t, u) => t + u.x, 0) / (strikeTroops.length || 1);
+      const fy = strikeTroops.reduce((t, u) => t + u.y, 0) / (strikeTroops.length || 1);
+      let against = 0;
+      for (const q of this.players.values()) if (q.alive && this.hostile(p.id, q.id)) against += this.botDefence(q.id, fx, fy, 9).total;
+      // (outmatched there and already worn down: pull back and regroup)
+      const losing = strikeTroops.length && against > strikePower * 1.6 && up < full * 0.65;
+      if (up < full * L.retreatAt || losing) {
+        this.order(p.id, null, { k: 'c', id: p.id }, [strike.id, second.id]);
+        p.bot.attackSince = 0;
+        return;
       }
-      this.order(p.id, null, target, [strike.id, second.id]); // the second strike force goes too
+      // still going: point at the best thing to hit there (the base itself once it's weak)
+      const enemy = this.players.get(p.bot.target);
+      if (enemy && enemy.alive && strike.order.target && strike.order.target.k === 't' && !this.towers.has(strike.order.target.id)) {
+        this.order(p.id, null, this.botPickObjective(p, enemy, strikePower), [strike.id, second.id]);
+      }
+      return;
     }
+    // At home: attack once strong enough to win (or it has waited long enough at full strength).
+    if (up < full * L.attackAt) {
+      p.bot.readySince = 0;
+      return;
+    }
+    if (!p.bot.readySince) p.bot.readySince = this.time;
+    const enemy = this.botPickEnemy(p, strikePower);
+    if (!enemy) return;
+    const def = this.botDefence(enemy.id, enemy.core.x, enemy.core.y, 16).total;
+    const waited = this.time - p.bot.readySince > 60;
+    if (strikePower >= def * (L.attackAt < 0.7 ? 0.75 : 0.95) || waited) {
+      this.order(p.id, null, this.botPickObjective(p, enemy, strikePower), [strike.id, second.id]);
+      p.bot.readySince = 0;
+    }
+  },
+
+  // Put a tower up on the border facing the nearest enemy, away from my other towers.
+  botPlaceTower(p, towers) {
+    const enemy = this.nearestEnemy(p.core.x, p.core.y, p.id, false);
+    const ex = enemy ? enemy.core.x - p.core.x : 0;
+    const ey = enemy ? enemy.core.y - p.core.y : 0;
+    const el = Math.hypot(ex, ey) || 1;
+    const bh = this.buildingHexes();
+    const spots = [];
+    for (const h of this.hex.hexes) {
+      if (this.hexOwner[h.i] !== p.id || bh[h.i] || h.centre < 0 || !h.full) continue;
+      const dx = h.cx - p.core.x;
+      const dy = h.cy - p.core.y;
+      const d = Math.hypot(dx, dy) || 1;
+      const facing = enemy ? (dx * ex + dy * ey) / (d * el) : 0;
+      const border = h.n.some((j) => this.hexOwner[j] !== p.id) ? 1 : 0;
+      let crowd = 0;
+      for (const t of towers) if (dist(t.x, t.y, h.cx, h.cy) < 6) crowd++;
+      spots.push([h, facing * 6 + border * 2 - Math.abs(d - 8) * 0.4 - crowd * 4 + this.rand() * 2]);
+    }
+    spots.sort((x, y) => y[1] - x[1]);
+    for (const [h] of spots.slice(0, 5)) {
+      if (this.build(p.id, h.centre % this.w, Math.floor(h.centre / this.w), 'tower') === null) return true;
+    }
+    return false;
   },
 
   // A bot's squads: 1 and 4 strike forces (with a siege ram or two once they're big enough), 2 a
