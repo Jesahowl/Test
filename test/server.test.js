@@ -243,10 +243,7 @@ test('test mode: refused when the server turns it off; gold and wood never run o
     ws.send(JSON.stringify({ t: 'test', name: 'Dev' }));
     await waitFor(ws, (m) => m.t === 'err' && /turned off/.test(m.m));
     ws.send(JSON.stringify({ t: 'create', name: 'Dev' }));
-    const room = await waitFor(ws, (m) => m.t === 'room');
-    assert.ok(!room.dev);
-    ws.send(JSON.stringify({ t: 'rule', key: 'testMode', value: true }));
-    await waitFor(ws, (m) => m.t === 'err' && /turned off/.test(m.m));
+    await waitFor(ws, (m) => m.t === 'room');
     assert.ok(!ws.msgs.some((m) => m.t === 'hello' && m.dev), 'no test mode offered');
     ws.close();
   } finally {
@@ -274,6 +271,14 @@ test('test mode: refused when the server turns it off; gold and wood never run o
     assert.strictEqual(p.gold, C.TEST_FUNDS);
     assert.strictEqual(p.wood, C.TEST_FUNDS);
     ws.close();
+    // a normal private room on the same server: test mode can't be switched on there
+    const ws2 = await open(dev.server.address().port);
+    ws2.send(JSON.stringify({ t: 'create', name: 'Friend' }));
+    const r2 = await waitFor(ws2, (m) => m.t === 'room');
+    ws2.send(JSON.stringify({ t: 'rule', key: 'testMode', value: true }));
+    await waitFor(ws2, (m) => m.t === 'err' && /Invalid/.test(m.m));
+    assert.strictEqual(dev.rooms.get(r2.code).rules.testMode, false);
+    ws2.close();
   } finally {
     dev.close();
   }

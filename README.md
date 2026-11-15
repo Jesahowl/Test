@@ -56,8 +56,7 @@ git reset --hard origin/claude/determined-johnson-hion2w
 The menu has a **🛠 Test game** button: it starts a private game straight away (with two bots) in
 **test mode**, where your gold and wood never run out (they show as ∞; bots play normally). A
 **🌫 Fog** switch next to the TEST badge in the round bar shows or hides the fog of war for you.
-Test mode is also a setting in private rooms, so you can test with friends. It only ever applies
-to those private rooms, never to public games. To hide it on a server, start it with `TEST_MODE=0`.
+Test game is the only way into test mode: normal private rooms and public games never have it. To hide it on a server, start it with `TEST_MODE=0`.
 
 ## Connection drops
 

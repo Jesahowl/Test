@@ -46,11 +46,10 @@ const RULES = [
   ['suddenDeath', 'Sudden death', [[780, '13 min'], [1140, '19 min'], [1500, '25 min']], 'When cores start crumbling and troops hit buildings twice as hard: how long rounds last'],
   ['rivers', 'Rivers', [[true, 'On'], [false, 'Off']], 'Rivers across the map, crossed only at bridges'],
   ['fog', 'Fog of war', [[true, 'On'], [false, 'Off']], 'Off: everyone sees the whole map'],
-  ['testMode', '🛠 Test mode', [[false, 'Off'], [true, 'On']], 'Your gold and wood never run out (bots play normally)', 'dev'],
 ];
 
-function rulesHtml(rules, host, dev) {
-  return RULES.filter((r) => r[4] !== 'dev' || dev).map(([key, label, opts, what]) => `<div class="rule"><span class="rl" data-tip="${what}">${label}</span><span class="seg">${opts.map(([v, t]) => `<button class="${rules[key] === v ? 'on' : ''}" data-rule="${key}" data-v='${JSON.stringify(v)}'${host ? '' : ' disabled'}>${t}</button>`).join('')}</span></div>`).join('');
+function rulesHtml(rules, host) {
+  return RULES.map(([key, label, opts, what]) => `<div class="rule"><span class="rl" data-tip="${what}">${label}</span><span class="seg">${opts.map(([v, t]) => `<button class="${rules[key] === v ? 'on' : ''}" data-rule="${key}" data-v='${JSON.stringify(v)}'${host ? '' : ' disabled'}>${t}</button>`).join('')}</span></div>`).join('');
 }
 
 $('lobby-rules').addEventListener('click', (e) => {
@@ -116,7 +115,7 @@ function onRoom(msg) {
     $('bots-less').onclick = () => sendMsg({ t: 'bots', n: msg.bots - 1 });
     $('bots-more').onclick = () => sendMsg({ t: 'bots', n: msg.bots + 1 });
   }
-  $('lobby-rules').innerHTML = rulesHtml(msg.rules || {}, msg.host, msg.dev);
+  $('lobby-rules').innerHTML = rulesHtml(msg.rules || {}, msg.host);
   const total = msg.members.length + msg.bots;
   $('lobby-start').classList.toggle('hidden', !msg.host);
   $('lobby-start').disabled = total < 2;

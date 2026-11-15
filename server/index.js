@@ -233,7 +233,7 @@ function createServer({ port = 3000, botTarget, waits = {}, dev = false } = {}) 
             break;
           }
           client.name = nameOf(msg);
-          const room = new Room({ code: newCode(), dev });
+          const room = new Room({ code: newCode() });
           rooms.set(room.code, room);
           room.add(client);
           break;
@@ -246,7 +246,7 @@ function createServer({ port = 3000, botTarget, waits = {}, dev = false } = {}) 
           }
           if (client.room) client.room.remove(client);
           client.name = nameOf(msg);
-          const room = new Room({ code: newCode(), dev });
+          const room = new Room({ code: newCode() });
           room.rules.testMode = true;
           rooms.set(room.code, room);
           room.add(client);
