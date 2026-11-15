@@ -52,7 +52,8 @@ module.exports = {
     const cands = [];
     for (const h of this.hex.hexes) {
       if (!this.canBuyHex(p.id, h.i)) continue;
-      cands.push([h.i, Math.hypot(h.cx - p.core.x, h.cy - p.core.y) + this.rand() * 4]);
+      // (a gold vein on the border is worth reaching for)
+      cands.push([h.i, Math.hypot(h.cx - p.core.x, h.cy - p.core.y) + this.rand() * 4 - (this.veins.has(h.i) ? 25 : 0)]);
     }
     cands.sort((a, b) => a[1] - b[1]);
     if (cands.length) this.buyLand(p.id, cands.slice(0, n).map((c) => c[0]));

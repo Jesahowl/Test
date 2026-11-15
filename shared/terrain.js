@@ -125,7 +125,11 @@
   const IRON_AT = 0.7;
   const isIron = (seed, h) => h.full !== false && !isForest(seed, h) && fbm(seed + 77, h.cx / 7, h.cy / 7) > IRON_AT && hash(seed + 5, h.q, h.r) < 0.45;
 
-  const api = { hash, isForest, isIron, riversOf };
+  // Is hex h a gold vein? Rare (about one hex in 140: a handful a map): whole hexes only, never a
+  // forest or an ore deposit.
+  const isGoldVein = (seed, h) => h.full !== false && !isForest(seed, h) && !isIron(seed, h) && hash(seed + 913, h.q * 7 + 3, h.r * 11 + 5) < 0.007;
+
+  const api = { hash, isForest, isIron, isGoldVein, riversOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.TD_TERRAIN = api;
 })(typeof window !== 'undefined' ? window : globalThis);

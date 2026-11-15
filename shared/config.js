@@ -19,6 +19,8 @@
     MINE_RATE: 0.5, // iron a second one worker mines...
     IRON_CARRY: 6, // ...until it carries this much home
     MINE_WORKERS: 2, // at most this many mining one deposit
+    VEIN_GOLD: 1.2, // gold a second each worker farming a gold vein makes (vs FARM_GOLD on plain land)
+    VEIN_WORKERS: 3, // at most this many farming one vein
     LEVEL_IRON: 15, // iron to raise a troop type a level: this x level x its slots (and the late-level markup)
 
     // ---- Workers: they build, repair, chop wood and farm. Separate from the army (no squad, no army

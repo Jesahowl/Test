@@ -15,6 +15,9 @@ const STUMP = '#4a3826';
 // iron ore deposits: rust-dark ground, red-brown rocks with ore specks (rubble once mined out)
 const ORE = { ground: '#2a201c', rock: '#6b3f30', lit: '#8a5440', crack: '#40241a', speck: '#c0704a', rubble: '#3e2a22' };
 
+// gold veins: dark rock shot with gold round a timber mine mouth, with a soft glow
+const VEIN = { ground: '#26221b', rock: '#4a4136', lit: '#5e5344', crack: '#2e2820', gold: '#f2c14e', beam: '#7a5a36', mouth: '#120f0b' };
+
 // One ore rock at (x, y), size s (tile units), as paths.
 function oreRock(x, y, s) {
   const r = { x, y, s, shadow: new Path2D(), body: new Path2D(), lit: new Path2D(), crack: new Path2D() };
@@ -35,7 +38,7 @@ function oreRock(x, y, s) {
   return r;
 }
 
-const { hash, isForest, isIron, riversOf } = window.TD_TERRAIN; // shared with the server (shared/terrain.js)
+const { hash, isForest, isIron, isGoldVein, riversOf } = window.TD_TERRAIN; // shared with the server (shared/terrain.js)
 
 // rivers: bank, deep water, the lighter middle (widths in tiles) and the stone of their bridges
 const RIVER = { bank: '#2b3326', deep: '#1a3440', mid: '#22495a', flow: 'rgba(200, 230, 240, 0.16)', bankW: 1.6, deepW: 1.2, midW: 0.55 };
@@ -137,6 +140,14 @@ function riverView() {
   return built.rivers;
 }
 
+// The current map's gold veins (for the minimap).
+function veinsView() {
+  const seed = S.round && S.round.seed;
+  if (seed === undefined || seed === null) return [];
+  if (!built || built.seed !== seed) built = build(seed);
+  return built.veins;
+}
+
 function build(seed) {
   const rivers = buildRivers(seed);
   const fill = new Path2D();
@@ -160,6 +171,21 @@ function build(seed) {
     rocks.sort((a, b) => a.y - b.y);
     ores.push({ i: h.i, x: h.cx, y: h.cy, rocks });
   }
+  const veinFill = new Path2D();
+  const veins = [];
+  for (const h of HEX.hexes) {
+    if (!isGoldVein(seed, h)) continue;
+    const cs = HEX.corners(h);
+    veinFill.moveTo(cs[0][0], cs[0][1]);
+    for (let k = 1; k < 6; k++) veinFill.lineTo(cs[k][0], cs[k][1]);
+    veinFill.closePath();
+    const rocks = [[-1.05, -0.75, 0.55], [1.0, -0.6, 0.48], [0.95, 0.85, 0.52], [-0.95, 0.9, 0.42]].map(([dx, dy, s]) => {
+      const r = oreRock(h.cx + dx, h.cy + dy, s);
+      r.flecks = [0, 1, 2].map((j) => [r.x + (hash(seed, h.i * 4 + j, 950) - 0.5) * r.s * 1.2, r.y + (hash(seed, h.i * 4 + j, 960) - 0.65) * r.s * 0.7]);
+      return r;
+    });
+    veins.push({ i: h.i, x: h.cx, y: h.cy, rocks });
+  }
   for (const h of HEX.hexes) {
     if (!isForest(seed, h)) continue;
     const cs = HEX.corners(h);
@@ -178,7 +204,7 @@ function build(seed) {
     trees.sort((a, b) => a.y - b.y);
     forests.push({ i: h.i, x: h.cx, y: h.cy, trees });
   }
-  return { seed, fill, forests, rivers, oreFill, ores };
+  return { seed, fill, forests, rivers, oreFill, ores, veinFill, veins };
 }
 
 // Draw the ground under the map rectangle at screen (ox, oy), s pixels per tile.
@@ -199,6 +225,8 @@ function drawTerrain(ox, oy, s) {
   ctx.fill(built.fill);
   ctx.fillStyle = ORE.ground;
   ctx.fill(built.oreFill);
+  ctx.fillStyle = VEIN.ground;
+  ctx.fill(built.veinFill);
   drawRivers(built.rivers);
   if (s >= 5) {
     // trees on the forest hexes in view, except where a building, core or camp stands
@@ -211,6 +239,59 @@ function drawTerrain(ox, oy, s) {
     const y0 = -oy / s - 3;
     const x1 = x0 + ctx.canvas.width / s + 6;
     const y1 = y0 + ctx.canvas.height / s + 6;
+    // gold veins: glowing rocks with gold flecks round a mine mouth
+    const glint = 0.75 + 0.25 * Math.sin(performance.now() / 600);
+    for (const v of built.veins) {
+      if (v.x < x0 || v.x > x1 || v.y < y0 || v.y > y1 || taken.has(v.i)) continue;
+      const glow = ctx.createRadialGradient(v.x, v.y, 0.2, v.x, v.y, 1.9);
+      glow.addColorStop(0, `rgba(242, 193, 78, ${0.28 * glint})`);
+      glow.addColorStop(1, 'rgba(242, 193, 78, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(v.x, v.y, 1.9, 0, Math.PI * 2);
+      ctx.fill();
+      for (const r of v.rocks) {
+        ctx.fillStyle = TREE_SHADOW;
+        ctx.fill(r.shadow);
+        ctx.fillStyle = VEIN.rock;
+        ctx.fill(r.body);
+        ctx.fillStyle = VEIN.lit;
+        ctx.fill(r.lit);
+        ctx.strokeStyle = VEIN.crack;
+        ctx.lineWidth = 0.04;
+        ctx.stroke(r.crack);
+        ctx.fillStyle = VEIN.gold;
+        for (const [fx, fy] of r.flecks) {
+          ctx.beginPath();
+          ctx.moveTo(fx, fy - 0.12);
+          ctx.lineTo(fx + 0.06, fy);
+          ctx.lineTo(fx, fy + 0.12);
+          ctx.lineTo(fx - 0.06, fy);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+      // the mine mouth in its timber frame
+      ctx.fillStyle = VEIN.mouth;
+      ctx.beginPath();
+      ctx.arc(v.x, v.y + 0.12, 0.42, Math.PI, 0);
+      ctx.lineTo(v.x + 0.42, v.y + 0.38);
+      ctx.lineTo(v.x - 0.42, v.y + 0.38);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = VEIN.beam;
+      ctx.lineWidth = 0.12;
+      ctx.beginPath();
+      ctx.moveTo(v.x - 0.5, v.y + 0.4);
+      ctx.lineTo(v.x - 0.5, v.y - 0.38);
+      ctx.lineTo(v.x + 0.5, v.y - 0.38);
+      ctx.lineTo(v.x + 0.5, v.y + 0.4);
+      ctx.stroke();
+      ctx.fillStyle = VEIN.gold;
+      ctx.beginPath();
+      ctx.arc(v.x, v.y + 0.2, 0.08 * glint + 0.04, 0, Math.PI * 2);
+      ctx.fill();
+    }
     // iron ore deposits: their rocks (mined-out ones as rubble)
     for (const o of built.ores) {
       if (o.x < x0 || o.x > x1 || o.y < y0 || o.y > y1 || taken.has(o.i)) continue;
@@ -264,4 +345,4 @@ function drawTerrain(ox, oy, s) {
   ctx.restore();
 }
 
-export { drawTerrain, riverView };
+export { drawTerrain, riverView, veinsView };

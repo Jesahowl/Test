@@ -86,7 +86,7 @@ module.exports = {
       const y = (k - x) / this.w;
       if (this.grid[k] !== 0 || this.hexOwner[hx.i] || hx.n.some((j) => this.hexOwner[j])) continue;
       if (this.riverHexes.has(hx.i) || hx.n.some((j) => this.riverHexes.has(j))) continue; // no river through a new base
-      if (this.ore.has(hx.i)) continue; // nor a core on an ore deposit
+      if (this.ore.has(hx.i) || this.veins.has(hx.i)) continue; // nor a core on an ore deposit or gold vein
       if (this.camps.some((c) => c.alive && dist(x, y, c.x, c.y) < 7)) continue;
       let score = Infinity; // distance to the nearest base (buildings count as a bit closer than they are)
       for (const o of others) score = Math.min(score, dist(x, y, o.x, o.y) - o.w);

@@ -25,6 +25,8 @@ module.exports = {
   initForest() {
     this.forest = new Map(); // hex index -> wood left
     for (const h of this.hex.hexes) if (Terrain.isForest(this.mapSeed, h)) this.forest.set(h.i, C.FOREST_WOOD);
+    this.veins = new Set(); // gold vein hexes: farmed on your own land, they pay VEIN_GOLD a worker
+    for (const h of this.hex.hexes) if (Terrain.isGoldVein(this.mapSeed, h)) this.veins.add(h.i);
     this.ore = new Map(); // hex index -> iron left in an ore deposit
     for (const h of this.hex.hexes) if (Terrain.isIron(this.mapSeed, h)) this.ore.set(h.i, C.IRON_ORE);
   },
@@ -190,10 +192,11 @@ module.exports = {
     const busy = (key) => taken.get(key) || 0;
     let best = null;
     let bestD = Infinity;
-    const consider = (job, x, y, cap) => {
+    // (bias: subtracted from the distance, to put some tasks first)
+    const consider = (job, x, y, cap, bias = 0) => {
       const key = `${job.k}:${job.id}`;
       if (busy(key) >= cap) return;
-      const d = dist(u.x, u.y, x, y);
+      const d = dist(u.x, u.y, x, y) - bias;
       if (d < bestD) {
         bestD = d;
         best = job;
@@ -223,7 +226,12 @@ module.exports = {
     } else if (type === 'scout') {
       consider({ type, k: 's', id: 0 }, u.x, u.y, C.SCOUT_WORKERS);
     } else if (type === 'farm') {
-      for (const h of this.hex.hexes) if (this.hexOwner[h.i] === p.id && this.canFarm(p, h.i)) consider({ type, k: 'h', id: h.i }, h.cx, h.cy, 1);
+      // (my gold veins first: they pay four times as much, and take a few workers)
+      for (const h of this.hex.hexes) {
+        if (this.hexOwner[h.i] !== p.id || !this.canFarm(p, h.i)) continue;
+        const vein = this.veins.has(h.i);
+        consider({ type, k: 'h', id: h.i }, h.cx, h.cy, vein ? C.VEIN_WORKERS : 1, vein ? 1e3 : 0);
+      }
     }
     return best;
   },
@@ -359,7 +367,7 @@ module.exports = {
       u.carry += dug;
       u.carryKind = 'iron';
     } else if (job.type === 'farm') {
-      u.farmed = (u.farmed || 0) + C.FARM_GOLD * dt;
+      u.farmed = (u.farmed || 0) + (this.veins.has(job.id) ? C.VEIN_GOLD : C.FARM_GOLD) * dt;
       if (u.farmed >= 3) {
         this.award(p, u.farmed, 'farm', u.x, u.y - 0.6);
         u.farmed = 0;

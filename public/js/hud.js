@@ -240,7 +240,7 @@ const JOBS = [
   ['repair', '🔧', 'Repair', `Fix damaged buildings, walls and your core (${C.REPAIR_GOLD_PER_HP}g per HP)`],
   ['gather', '🪓', 'Chop wood', 'Chop forests anywhere on the map (the nearest first) and carry the wood to your core or a workshop'],
   ['mine', '⛏', 'Mine iron', 'Mine iron ore deposits (rust-red rocks) anywhere on the map, the nearest first, and carry the iron home. Troop level-ups need iron'],
-  ['farm', '🌾', 'Farm', `Work open hexes of your land: +${C.FARM_GOLD}g/s each`],
+  ['farm', '🌾', 'Farm', `Work open hexes of your land: +${C.FARM_GOLD}g/s each, or a gold vein on your land (glowing rocks round a mine mouth, rare): +${C.VEIN_GOLD}g/s each, up to ${C.VEIN_WORKERS} at once (veins first)`],
   ['scout', '🔭', 'Scout', `Run off exploring the fog: fast, seeing ${C.SCOUT_SIGHT} tiles, keeping clear of enemy guns (at most ${C.SCOUT_WORKERS})`],
 ];
 const LEVELS = ['Off', 'Low', 'Med', 'High'];

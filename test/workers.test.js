@@ -203,3 +203,24 @@ test('sudden death: workers can\'t patch a crumbling core back up', () => {
   assert.ok(a.core.hp < hp, `the core kept crumbling (${Math.round(hp)} -> ${Math.round(a.core.hp)})`);
   assert.ok(workers(g, a).every((u) => !u.job || u.job.k !== 'c'), 'nobody repairing it');
 });
+
+test('gold veins: rare; farming one on your land pays four times as much, and veins come first', () => {
+  const { g, a } = setup(78);
+  assert.ok(g.veins.size >= 1 && g.veins.size <= 12, `rare (${g.veins.size} on this map)`);
+  for (const i of g.veins) assert.ok(!g.forest.has(i) && !g.ore.has(i), 'never on a forest or ore');
+  // put a vein on a's land (and keep a plain hex too)
+  const core = g.hex.hexes[g.hexAt(a.core.x, a.core.y)];
+  const [vh, plain] = core.n.filter((j) => g.hexOwner[j] === a.id && !g.forest.has(j) && !g.ore.has(j));
+  g.veins.add(vh);
+  only(a, 'farm');
+  respawn(g, a);
+  run(g, 10);
+  const onVein = workers(g, a).filter((u) => u.job && u.job.id === vh).length;
+  assert.strictEqual(onVein, Math.min(C.VEIN_WORKERS, workers(g, a).length), 'the vein is farmed first, by up to VEIN_WORKERS');
+  const e0 = a.earned.farm || 0;
+  run(g, 20);
+  const rate = ((a.earned.farm || 0) - e0) / 20;
+  assert.ok(rate > onVein * C.VEIN_GOLD * 0.7, `vein pays well (${rate.toFixed(2)}g/s)`);
+  assert.ok(C.VEIN_GOLD >= 4 * C.FARM_GOLD);
+  assert.ok(plain !== undefined);
+});
