@@ -1,7 +1,7 @@
 // Rendering basics: canvas sizing, background, labels, health bars and simple shapes.
 
 import { S, C, canvas, ctx, HEX, scale, toScreen } from './state.js';
-import { drawTerrain, landOnly } from './terrain.js';
+import { drawTerrain } from './terrain.js';
 import { drawTerritoryShapes } from './territory.js';
 
 // ------------------------------------------------------------------ rendering
@@ -32,20 +32,7 @@ function drawBackground() {
   const [ox, oy] = toScreen(0, 0);
   drawTerrain(ox, oy, s); // plains and forests
 
-  // the hex grid: a faint outline round every hex, built once (in tiles) and drawn scaled
-  if (s >= 6) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(ox, oy, C.MAP_W * s, C.MAP_H * s);
-    ctx.clip();
-    ctx.translate(ox, oy);
-    ctx.scale(s, s);
-    ctx.clip(landOnly(), 'evenodd'); // (the grid is for the land: none over the sea or lakes)
-    ctx.strokeStyle = 'rgba(255,255,255,0.045)';
-    ctx.lineWidth = 1 / s;
-    ctx.stroke(hexGridPath());
-    ctx.restore();
-  }
+  // (the hex grid is part of the cached terrain: see terrain.js)
 
   drawTerritoryShapes(ox, oy, s);
 
@@ -355,4 +342,4 @@ function lungeOffset(id, x, y, now) {
   return [(dx / d) * reach, (dy / d) * reach];
 }
 
-export { lungeOffset, drawBackground, drawShape, hpBar, label, onScreen, resize };
+export { lungeOffset, drawBackground, drawShape, hexGridPath, hpBar, label, onScreen, resize };

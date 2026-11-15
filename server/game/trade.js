@@ -73,6 +73,14 @@ module.exports = {
       if (t.partner && this.time >= (t.nextCaravan || 0)) {
         t.nextCaravan = this.time + C.CARAVAN_EVERY;
         this.sendCaravan(t, this.towers.get(t.partner));
+      } else if (!t.partner) {
+        // no ally to trade with: a local market, paying a little every CARAVAN_EVERY seconds
+        if (!t.nextMarket) t.nextMarket = this.time + C.CARAVAN_EVERY;
+        if (this.time >= t.nextMarket) {
+          t.nextMarket = this.time + C.CARAVAN_EVERY;
+          const p = this.players.get(t.owner);
+          if (p && p.alive) this.award(p, C.TRADE_LOCAL_GOLD + C.TRADE_LOCAL_PER_LEVEL * (t.level - 1), 'trade', t.x + 0.5, t.y - 0.5);
+        }
       }
     }
   },

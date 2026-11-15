@@ -68,19 +68,11 @@ module.exports = {
     const roll = this.rand();
 
     // With an ally and a tower up, a trade post comes next (saved up for).
-    const wantTrade = towers.length >= 1 && this.alliesOf(p.id).length > 0 && !structures.some((t) => t.kind === 'trade');
+    // (no ally: later on, for its local market)
+    const wantTrade = towers.length >= 1 && (this.alliesOf(p.id).length > 0 || age > 420) && !structures.some((t) => t.kind === 'trade');
 
     // A barracks raises a squad, and there are no troops without one: the first comes before anything.
-    const placeBarracks = () => {
-      for (let i = 0; i < 25; i++) {
-        const ang = this.rand() * Math.PI * 2;
-        const r = 2 + this.rand() * 3;
-        const x = Math.round(p.core.x + Math.cos(ang) * r);
-        const y = Math.round(p.core.y + Math.sin(ang) * r);
-        if (this.inBounds(x, y) && this.build(p.id, x, y, 'barracks') === null) return true;
-      }
-      return false;
-    };
+    const placeBarracks = () => this.botBuildNearCore(p, 'barracks');
     if (!barracks) {
       if (p.gold >= C.buildCost('barracks', 0) && p.wood >= C.TOWERS.barracks.wood) placeBarracks();
       return;
@@ -102,10 +94,12 @@ module.exports = {
     const armyStep = Math.min(low ? C.upgradeCost('barracks', low.level) : Infinity, barracks < C.MAX_BARRACKS ? bCost : Infinity);
 
     // Grow: buy land at the border, keeping some gold back for buildings and troops.
-    const hexCost = C.landCost(p.territory) * Math.round(2.598 * C.HEX_R * C.HEX_R); // about one hex
+    const hexCost = C.hexPrice(Math.round(2.598 * C.HEX_R * C.HEX_R), p.territory, p.hexesBought || 0); // about one hex
     const keep = 60 + (towers.length < 2 ? C.TOWERS.tower.cost : 0) + (wantTrade ? C.TOWERS.trade.cost : 0) + (Number.isFinite(armyStep) ? armyStep : 0);
-    if (p.gold >= keep + hexCost && roll < 0.75) {
-      const n = Math.min(p.gold > keep + hexCost * 4 ? 3 : 2, Math.floor((p.gold - keep) / hexCost));
+    // (a land budget: behind a steady growth of about a hex a minute, land comes before the army)
+    const behind = p.territory < C.START_TERRITORY_EST + (age / 60) * Math.round(2.598 * C.HEX_R * C.HEX_R) * 0.8;
+    if ((p.gold >= keep + hexCost || (behind && p.gold >= hexCost + 60)) && roll < 0.75) {
+      const n = Math.max(1, Math.min(p.gold > keep + hexCost * 4 ? 3 : 2, Math.floor((p.gold - (behind ? 60 : keep)) / hexCost)));
       this.botBuyLand(p, n);
     }
 
@@ -121,25 +115,13 @@ module.exports = {
     const shops = structures.filter((t) => t.kind === 'workshop').length;
     if (towers.length >= 1 && shops < Math.min(C.MAX_WORKSHOPS, 1 + Math.floor(age / 300)) && p.gold >= C.TOWERS.workshop.cost + 60
       && p.wood >= C.TOWERS.workshop.wood && roll < 0.5) {
-      for (let i = 0; i < 25; i++) {
-        const ang = this.rand() * Math.PI * 2;
-        const r = 2 + this.rand() * 3;
-        const x = Math.round(p.core.x + Math.cos(ang) * r);
-        const y = Math.round(p.core.y + Math.sin(ang) * r);
-        if (this.inBounds(x, y) && this.build(p.id, x, y, 'workshop') === null) break;
-      }
+      this.botBuildNearCore(p, 'workshop');
       return;
     }
 
     // Trade: with an ally, put up a trade post near the core (the route opens by itself).
     if (wantTrade && p.gold >= C.TOWERS.trade.cost && p.wood >= C.TOWERS.trade.wood && roll < 0.7) {
-      for (let i = 0; i < 25; i++) {
-        const ang = this.rand() * Math.PI * 2;
-        const r = 3 + this.rand() * 3;
-        const x = Math.round(p.core.x + Math.cos(ang) * r);
-        const y = Math.round(p.core.y + Math.sin(ang) * r);
-        if (this.inBounds(x, y) && this.build(p.id, x, y, 'trade') === null) break;
-      }
+      this.botBuildNearCore(p, 'trade');
       return;
     }
 
@@ -259,11 +241,28 @@ module.exports = {
     return best;
   },
 
+  // Put up a building of `kind` in one of p's own free hexes, the nearest the core first (a few
+  // tries among the nearest, so they don't all bunch on one side). True if it was placed.
+  botBuildNearCore(p, kind) {
+    const bh = this.buildingHexes();
+    const core = this.hex.hexes[this.hexAt(p.core.x, p.core.y)];
+    const free = this.hex.hexes.filter((h) => this.hexOwner[h.i] === p.id && h !== core && !bh[h.i] && h.centre >= 0 && h.full && !this.mountains.has(h.i))
+      .map((h) => ({ h, d: Math.hypot(h.cx - core.cx, h.cy - core.cy) + this.rand() * 3 }))
+      .sort((a, b) => a.d - b.d);
+    for (const { h } of free.slice(0, 6)) {
+      if (this.build(p.id, h.centre % this.w, Math.floor(h.centre / this.w), kind) === null) return true;
+    }
+    return false;
+  },
+
   // What to hit in that rival's base: its core when it's lightly held, else the building on our
   // side of it with the least cover.
+  // While cores are fortified (peace time) there's no point hitting one: towers, or else the
+  // nearest barbarian camp.
   botPickObjective(p, enemy, power) {
+    const peace = this.time < this.rules.fortify;
     const coreDef = this.botDefence(enemy.id, enemy.core.x, enemy.core.y, 10).total;
-    if (power > coreDef * 1.3) return { k: 'c', id: enemy.id };
+    if (!peace && power > coreDef * 1.3) return { k: 'c', id: enemy.id };
     let best = null;
     let bestScore = Infinity;
     for (const t of this.towers.values()) {
@@ -275,7 +274,12 @@ module.exports = {
         best = t;
       }
     }
-    return best ? { k: 't', id: best.id } : { k: 'c', id: enemy.id };
+    if (best) return { k: 't', id: best.id };
+    if (peace) {
+      const camp = this.camps.filter((c) => c.alive).sort((a, b) => dist(a.x, a.y, p.core.x, p.core.y) - dist(b.x, b.y, p.core.x, p.core.y))[0];
+      if (camp) return { k: 'j', id: camp.id };
+    }
+    return { k: 'c', id: enemy.id };
   },
 
   botOrders(p, troops, towers) {

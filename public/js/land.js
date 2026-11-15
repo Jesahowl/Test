@@ -33,9 +33,10 @@ function canBuy(i, pending) {
 function costOf(list) {
   let total = 0;
   let land = myLand();
+  let bought = (S.me && S.me.bought) || 0;
   for (const i of list) {
     const n = HEX.hexes[i].tiles.length;
-    total += C.landCost(land) * n;
+    total += C.hexPrice(n, land, bought++);
     land += n;
   }
   return total;

@@ -213,7 +213,9 @@ module.exports = {
     const home = this.onHomeLand(u) ? 1 + C.HOME_DAMAGE_BONUS : 1;
     const buff = this.buffed(u.owner) ? 1 + C.JUNGLE_BUFF_DAMAGE : 1;
     const base = s.damage * buff;
-    const siege = isStruct ? (def.siege || 1) * (this.suddenDeath() ? C.SUDDEN_DEATH_SIEGE : this.siegeRamp()) : 1;
+    // (momentum: each core its owner has destroyed adds CONQUEST_SIEGE against buildings)
+    const won = Math.min(C.CONQUEST_MAX, (this.players.get(u.owner) || {}).conquests || 0);
+    const siege = isStruct ? (def.siege || 1) * (this.suddenDeath() ? C.SUDDEN_DEATH_SIEGE : this.siegeRamp()) * (1 + C.CONQUEST_SIEGE * won) : 1;
     const dmg = base * home * siege * wallBonus;
     if (def.ranged) {
       // Archer: an arrow flies to the target.
@@ -662,7 +664,8 @@ module.exports = {
     }
     const taken = new Map(); // owner -> tile keys in use
     const groups = [...byHex.values()].sort((a, b) => a.owner - b.owner || a.first - b.first || a.h - b.h);
-    const rank = (u) => (C.UNITS[u.kind].heal ? 3 : C.UNITS[u.kind].melee || C.UNITS[u.kind].breaker ? 0 : 1);
+    // front to back: soldiers, then siege rams (shielded by them), archers, medics
+    const rank = (u) => (C.UNITS[u.kind].heal ? 3 : C.UNITS[u.kind].breaker ? 1 : C.UNITS[u.kind].melee ? 0 : 2);
     for (const grp of groups) {
       const { h, owner, home, list } = grp;
       if (!taken.has(owner)) taken.set(owner, new Set());

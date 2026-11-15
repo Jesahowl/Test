@@ -54,7 +54,8 @@
     WORKER_CARRY: 10, // ...until it carries this much back to the core or a workshop
     TREE_WORKERS: 3, // at most this many chopping one forest hex
     FARM_GOLD: 0.3, // gold a second each farming worker earns
-    WORKER_BOUNTY: 20, // gold for killing an enemy worker (plus any wood it carried)
+    FARM_BUILT_SHARE: 0.6, // ...on a hex with a building on it: this share of that
+    WORKER_BOUNTY: 8, // gold for killing an enemy worker (plus any wood it carried)
     BASE_INCOME: 1.5, // gold per second
     INCOME_PER_TILE: 0.0075, // extra gold per second for each owned tile...
     INCOME_FULL_TILES: 800, // ...for the first this many tiles; beyond that each tile pays
@@ -62,7 +63,7 @@
 
     // The core: your base. It shoots like a tower; if it falls, you're out.
     CORE_HP: 5000,
-    CORE_RANGE: 5,
+    CORE_RANGE: 6.5, // (reaching a little into the hexes round it: hexes are 3.5 tiles across)
     CORE_DAMAGE: 60,
     CORE_RATE: 1,
     CORE_CLAIM: 8.5, // how far apart bases must be (a new core starts with its hex and the six around it)
@@ -97,8 +98,8 @@
     BARRACKS_TROOPS: 5, // troop slots a barracks gives its squad per level...
     SQUAD_MAX_TROOPS: 20, // ...up to this many (level 4)
     MAX_BARRACKS: 4, // one per squad
-    BARRACKS_COST_STEP: 150, // each extra barracks costs this much more than the last
-    BARRACKS_UPGRADE_STEP: 150, // a barracks upgrade costs this much per level it has
+    BARRACKS_COST_STEP: 100, // each extra barracks costs this much more than the last
+    BARRACKS_UPGRADE_STEP: 100, // a barracks upgrade costs this much per level it has
     // Squads stay together: on the march a squad moves at its slowest troop's pace, and troops
     // more than SQUAD_SPREAD (+ a little per troop) from the squad's centre wait for it or catch up.
     SQUAD_SPREAD: 1.4,
@@ -176,6 +177,9 @@
     SUDDEN_DEATH_LIMIT: 360, // seconds of sudden death before time runs out: the most land wins (no stalemates)
     ROUND_SUDDEN_DEATH: 1140, // 19 minutes: rounds run about 15-22 minutes
     SUDDEN_DEATH_SIEGE: 2, // troop damage multiplier against towers and cores
+    CONQUEST_SIEGE: 0.25, // momentum: each enemy core a player destroys adds this to their troops' damage to buildings...
+    CONQUEST_MAX: 3, // ...for up to this many cores (x1.75): the leader can finish the round
+    SUDDEN_DEATH_REVEAL: 7, // in sudden death every core (and this far round it) is revealed to everyone
     // Pacing: cores take less damage for the first minutes, and troop damage to buildings
     // ramps up from SIEGE_RAMP_START so pushes get easier as the round goes on.
     CORE_FORTIFY: 0.8, // fraction of core damage blocked...
@@ -234,6 +238,8 @@
     // between the posts, +CARAVAN_LEVEL_CARGO for each post level past 1. Enemies who destroy one
     // take RAID_SHARE of its cargo. Caravans steer around hostile towers and cores.
     MAX_TRADE_POSTS: 2,
+    TRADE_LOCAL_GOLD: 20, // a trade post with no ally to trade with runs a local market: this much every CARAVAN_EVERY...
+    TRADE_LOCAL_PER_LEVEL: 8, // ...plus this per level past 1 (a caravan to an ally pays more)
     CARAVAN_EVERY: 30,
     CARAVAN_BASE: 15,
     CARAVAN_PER_TILE: 0.3,
@@ -262,7 +268,7 @@
         color: '#a5d6a7', desc: 'Sword and shield: the backbone of every wave. Empty wave slots are filled with soldiers',
       },
       medic: {
-        name: 'Medic', key: '3', cost: 90, slots: 1, hp: 200, range: 3, heal: 15, patients: 2, rate: 1, speed: 2.4, sight: 5,
+        name: 'Medic', key: '3', cost: 90, slots: 1, hp: 260, range: 3, heal: 15, patients: 2, rate: 1, speed: 2.4, sight: 5,
         color: '#f48fb1', desc: 'Heals the two most wounded troops near it, cannot attack',
       },
       archer: {
@@ -293,7 +299,7 @@
     // Fixed structures.
     TOWERS: {
       tower: {
-        name: 'Tower', key: 'B', cost: 120, wood: 40, hp: 2400, range: 5, damage: 58, dmgPerLevel: 0.2, rate: 1,
+        name: 'Tower', key: 'B', cost: 120, wood: 40, hp: 2400, range: 6.5, damage: 58, dmgPerLevel: 0.2, rate: 1,
         color: '#80deea', desc: 'Zaps enemy troops that come near. Build on your own land',
       },
       barracks: {
@@ -315,6 +321,9 @@
     // realms pay more). Enemy land can't be bought: taking an enemy tower opens up their hexes next to
     // it (for anyone to buy), and destroying a core wins all of that player's land.
     LAND_BASE_COST: 2.5,
+    START_TERRITORY_EST: 220, // (bots: about how much land a base starts with)
+    LAND_STARTER_HEXES: 5, // a player's first few hexes bought...
+    LAND_STARTER_PRICE: 0.5, // ...cost this share of the usual price (getting going is cheap)
     LAND_COST_PER_TILE: 0.018,
     LAND_BUY_MAX: 120, // hexes one buy message may ask for (a drag, or a whole ring of border)
 
@@ -454,6 +463,12 @@
   // Gold for the next tile of land, for a player who owns `territory` tiles.
   CONFIG.landCost = function (territory) {
     return Math.ceil(CONFIG.LAND_BASE_COST + territory * CONFIG.LAND_COST_PER_TILE);
+  };
+
+  // Gold for a hex of `tiles` tiles, for a player who owns `territory` tiles and has bought `bought`
+  // hexes so far (the first LAND_STARTER_HEXES are cheaper).
+  CONFIG.hexPrice = function (tiles, territory, bought = Infinity) {
+    return Math.round(CONFIG.landCost(territory) * tiles * (bought < CONFIG.LAND_STARTER_HEXES ? CONFIG.LAND_STARTER_PRICE : 1));
   };
 
   CONFIG.income = function (territory) {

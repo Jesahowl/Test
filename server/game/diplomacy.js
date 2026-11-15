@@ -215,8 +215,15 @@ module.exports = {
     const humans = [...this.players.values()].filter((q) => q.alive && !q.isBot && q !== rival
       && !this.allied(p.id, q.id) && this.alliesOf(q.id).length < C.MAX_ALLIES
       && !(p.bot.grudge && p.bot.grudge.has(q.id)) && !this.allyOffers.has(`${p.id}>${q.id}`));
-    if (!humans.length || [...this.players.values()].filter((q) => q.alive).length < 3) return;
-    const q = humans[Math.floor(this.rand() * humans.length)];
+    if ([...this.players.values()].filter((q) => q.alive).length < 3) return;
+    // (now and then another bot instead: at most one bot ally each, never its nearest rival)
+    const bots = [...this.players.values()].filter((q) => q.alive && q.isBot && q !== p && q !== rival
+      && !this.allied(p.id, q.id) && this.alliesOf(q.id).length < C.MAX_ALLIES
+      && !this.alliesOf(p.id).some((a) => this.players.get(a)?.isBot) && !this.alliesOf(q.id).some((a) => this.players.get(a)?.isBot)
+      && !(p.bot.grudge && p.bot.grudge.has(q.id)) && !this.allyOffers.has(`${p.id}>${q.id}`));
+    const pool = humans.length && (!bots.length || this.rand() < 0.6) ? humans : bots;
+    if (!pool.length) return;
+    const q = pool[Math.floor(this.rand() * pool.length)];
     if (this.botLikesAlliance(p, q.id)) this.proposeAlliance(p.id, q.id);
   },
 };

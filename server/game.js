@@ -248,6 +248,7 @@ class Game {
       gold: Math.floor(p.gold),
       wood: Math.floor(p.wood),
       iron: Math.floor(p.iron || 0),
+      bought: p.hexesBought || 0, // hexes bought so far (the first few are cheaper)
       noFog: p.noFog || undefined, // (test mode: fog switched off for me)
       // [cap, how many each job wants (build/repair: on or off), flee?, keep forests?, build order]
       workers: [this.workerCap(p), C.WORKER_JOBS.map((j) => p.jobs[j]), p.workerFlee !== false ? 1 : 0, p.keepForest ? 1 : 0, p.buildOrder || []],

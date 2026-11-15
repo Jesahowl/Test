@@ -218,6 +218,7 @@ module.exports = {
 
     const killer = killerId ? this.players.get(killerId) : null;
     const conquered = !!(killer && killer.alive && killer.id !== p.id);
+    if (conquered) killer.conquests = (killer.conquests || 0) + 1; // (momentum: see CONQUEST_SIEGE)
 
     // Their towers and barracks: the conqueror's (otherwise they fall to ruins).
     let towersTaken = 0;

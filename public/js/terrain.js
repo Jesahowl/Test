@@ -7,6 +7,10 @@
 // chopped, then grows back). Where forests grow comes from the round's map seed.
 
 import { S, C, HEX, ctx, players } from './state.js';
+import { hexGridPath } from './render.js';
+
+// What the drawing helpers below draw on: the screen, or (while filling the terrain cache) a cached chunk.
+let dc = ctx;
 
 const PLAINS = '#18211d';
 // things placed round a hex (trees, rocks, peaks) were laid out for hexes 2.5 tiles across: spread
@@ -135,85 +139,92 @@ function buildRivers(seed, sea, lakes = []) {
 function drawBridge(b) {
   const L = 2.3; // deck length, across the water
   const Wd = 1.15; // deck width
-  ctx.save();
-  ctx.translate(b.x, b.y);
-  ctx.rotate(b.ang);
-  ctx.fillStyle = STONE.shadow;
-  ctx.fillRect(-Wd / 2 + 0.12, -L / 2 + 0.15, Wd, L);
-  ctx.fillStyle = STONE.base;
-  ctx.beginPath();
-  ctx.roundRect(-Wd / 2, -L / 2, Wd, L, 0.15);
-  ctx.fill();
-  ctx.fillStyle = STONE.block;
+  dc.save();
+  dc.translate(b.x, b.y);
+  dc.rotate(b.ang);
+  dc.fillStyle = STONE.shadow;
+  dc.fillRect(-Wd / 2 + 0.12, -L / 2 + 0.15, Wd, L);
+  dc.fillStyle = STONE.base;
+  dc.beginPath();
+  dc.roundRect(-Wd / 2, -L / 2, Wd, L, 0.15);
+  dc.fill();
+  dc.fillStyle = STONE.block;
   for (let i = 0; i < 8; i++) {
-    for (let j = 0; j < 3; j++) ctx.fillRect(-Wd / 2 + 0.2 + j * 0.27 + (i % 2 ? 0.1 : 0), -L / 2 + 0.12 + i * 0.27, 0.2, 0.2);
+    for (let j = 0; j < 3; j++) dc.fillRect(-Wd / 2 + 0.2 + j * 0.27 + (i % 2 ? 0.1 : 0), -L / 2 + 0.12 + i * 0.27, 0.2, 0.2);
   }
-  ctx.fillStyle = STONE.rail;
-  ctx.fillRect(-Wd / 2 - 0.04, -L / 2, 0.16, L);
-  ctx.fillRect(Wd / 2 - 0.12, -L / 2, 0.16, L);
-  ctx.fillStyle = STONE.post;
+  dc.fillStyle = STONE.rail;
+  dc.fillRect(-Wd / 2 - 0.04, -L / 2, 0.16, L);
+  dc.fillRect(Wd / 2 - 0.12, -L / 2, 0.16, L);
+  dc.fillStyle = STONE.post;
   for (const sx of [-1, 1]) {
     for (const sy of [-1, 1]) {
-      ctx.beginPath();
-      ctx.arc(sx * (Wd / 2 + 0.04), sy * (L / 2 - 0.08), 0.14, 0, Math.PI * 2);
-      ctx.fill();
+      dc.beginPath();
+      dc.arc(sx * (Wd / 2 + 0.04), sy * (L / 2 - 0.08), 0.14, 0, Math.PI * 2);
+      dc.fill();
     }
   }
-  ctx.restore();
+  dc.restore();
 }
 
 // Rivers and bridges (in tile units: the caller has scaled the context). The lighter dashes drift
 // along to show the water flowing.
 function drawRivers(r, sea) {
   if (!r.paths.length) return;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.save();
+  dc.lineCap = 'round';
+  dc.lineJoin = 'round';
+  dc.save();
   // (kept to the land: at the coast the river's banks simply stop)
   const land = new Path2D();
   land.rect(-10, -10, C.MAP_W + 20, C.MAP_H + 20);
   land.addPath(sea.all);
   land.addPath(sea.lakeAll);
-  ctx.clip(land, 'evenodd');
+  dc.clip(land, 'evenodd');
   for (const [col, w] of [[RIVER.bank, RIVER.bankW], [RIVER.deep, RIVER.deepW], [RIVER.mid, RIVER.midW]]) {
-    ctx.strokeStyle = col;
-    ctx.lineWidth = w;
-    for (const p of r.paths) ctx.stroke(p.p);
+    dc.strokeStyle = col;
+    dc.lineWidth = w;
+    for (const p of r.paths) dc.stroke(p.p);
   }
-  ctx.restore();
+  dc.restore();
   // the mouths: the water spills over the edge into the sea (no banks), foaming where it lands
-  ctx.lineCap = 'butt';
+  dc.lineCap = 'butt';
   for (const m of r.mouths) {
-    const g = ctx.createLinearGradient(m.x1, m.y1, m.x2, m.y2);
+    const g = dc.createLinearGradient(m.x1, m.y1, m.x2, m.y2);
     g.addColorStop(0, RIVER.deep);
     g.addColorStop(1, m.calm || 'rgba(36, 80, 92, 0)'); // (into a lake: into its own water colour)
-    ctx.strokeStyle = g;
-    ctx.lineWidth = RIVER.deepW;
-    ctx.beginPath();
-    ctx.moveTo(m.x1, m.y1);
-    ctx.lineTo(m.x2, m.y2);
-    ctx.stroke();
+    dc.strokeStyle = g;
+    dc.lineWidth = RIVER.deepW;
+    dc.beginPath();
+    dc.moveTo(m.x1, m.y1);
+    dc.lineTo(m.x2, m.y2);
+    dc.stroke();
     if (m.calm) continue; // (a lake: calm water, no spray or foam)
-    ctx.strokeStyle = 'rgba(200, 230, 240, 0.35)';
-    ctx.lineWidth = RIVER.midW * 0.8;
-    ctx.beginPath();
-    ctx.moveTo(m.x1, m.y1);
-    ctx.lineTo(m.x1 + (m.x2 - m.x1) * 0.85, m.y1 + (m.y2 - m.y1) * 0.85);
-    ctx.stroke();
-    const t = performance.now() / 1000;
-    ctx.fillStyle = `rgba(235, 245, 245, ${0.35 + 0.12 * Math.sin(t * 2.2 + m.x1)})`;
-    ctx.beginPath();
-    ctx.ellipse(m.x2, m.y2, 0.7, 0.32, 0, 0, Math.PI * 2);
-    ctx.fill();
+    dc.strokeStyle = 'rgba(200, 230, 240, 0.35)';
+    dc.lineWidth = RIVER.midW * 0.8;
+    dc.beginPath();
+    dc.moveTo(m.x1, m.y1);
+    dc.lineTo(m.x1 + (m.x2 - m.x1) * 0.85, m.y1 + (m.y2 - m.y1) * 0.85);
+    dc.stroke();
+    dc.fillStyle = 'rgba(235, 245, 245, 0.4)';
+    dc.beginPath();
+    dc.ellipse(m.x2, m.y2, 0.7, 0.32, 0, 0, Math.PI * 2);
+    dc.fill();
   }
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = RIVER.flow;
-  ctx.lineWidth = 0.08;
-  ctx.setLineDash([0.35, 1.6]);
-  ctx.lineDashOffset = -(performance.now() / 1000) * 0.6;
-  for (const p of r.paths) ctx.stroke(p.p);
-  ctx.setLineDash([]);
-  ctx.lineCap = 'butt';
+  dc.lineCap = 'butt';
+  for (const b of r.bridges) drawBridge(b);
+}
+
+// The water flowing down the rivers (lighter dashes drifting along), drawn live over the cached
+// terrain, with the bridges back on top.
+function drawRiverFlow(r) {
+  if (!r.paths.length) return;
+  dc.lineCap = 'round';
+  dc.strokeStyle = RIVER.flow;
+  dc.lineWidth = 0.08;
+  dc.setLineDash([0.35, 1.6]);
+  dc.lineDashOffset = -(performance.now() / 1000) * 0.6;
+  for (const p of r.paths) dc.stroke(p.p);
+  dc.setLineDash([]);
+  dc.lineCap = 'butt';
   for (const b of r.bridges) drawBridge(b);
 }
 
@@ -539,43 +550,43 @@ function buildSea(seed) {
 // The sea, under the land: water by depth, the shadow the land throws on it, rocks in the shallows,
 // then the cliff faces with surf at their foot (the land is drawn over them afterwards, so only the
 // faces that drop toward the viewer show).
-function drawSea(sea) {
+function drawSea(sea, animate = true) {
   SEA.depth.forEach((c, d) => {
-    ctx.fillStyle = c;
-    ctx.fill(sea.bands[d]);
+    dc.fillStyle = c;
+    dc.fill(sea.bands[d]);
   });
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = SEA.shadow;
+  dc.lineJoin = 'round';
+  dc.lineCap = 'round';
+  dc.strokeStyle = SEA.shadow;
   for (const w of [3.2, 1.8]) {
-    ctx.lineWidth = w;
-    ctx.stroke(sea.coast);
+    dc.lineWidth = w;
+    dc.stroke(sea.coast);
   }
-  const t = performance.now() / 1000;
+  const t = animate ? performance.now() / 1000 : 0;
   for (const r of sea.rocks) {
-    ctx.fillStyle = SEA.rock;
-    ctx.beginPath();
-    ctx.ellipse(r.x, r.y, r.s, r.s * 0.75, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = SEA.rockLit;
-    ctx.beginPath();
-    ctx.ellipse(r.x - r.s * 0.25, r.y - r.s * 0.2, r.s * 0.45, r.s * 0.32, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = `rgba(${SEA.surf}, ${0.28 + 0.12 * Math.sin(t * 1.3 + r.x)})`;
-    ctx.lineWidth = 0.13;
-    ctx.beginPath();
-    ctx.ellipse(r.x, r.y + 0.12, r.s * 1.5, r.s * 1.0, 0, 0, Math.PI);
-    ctx.stroke();
+    dc.fillStyle = SEA.rock;
+    dc.beginPath();
+    dc.ellipse(r.x, r.y, r.s, r.s * 0.75, 0, 0, Math.PI * 2);
+    dc.fill();
+    dc.fillStyle = SEA.rockLit;
+    dc.beginPath();
+    dc.ellipse(r.x - r.s * 0.25, r.y - r.s * 0.2, r.s * 0.45, r.s * 0.32, 0, 0, Math.PI * 2);
+    dc.fill();
+    dc.strokeStyle = `rgba(${SEA.surf}, ${0.28 + 0.12 * Math.sin(t * 1.3 + r.x)})`;
+    dc.lineWidth = 0.13;
+    dc.beginPath();
+    dc.ellipse(r.x, r.y + 0.12, r.s * 1.5, r.s * 1.0, 0, 0, Math.PI);
+    dc.stroke();
   }
-  ctx.fillStyle = SEA.cliff;
-  ctx.fill(sea.cliffs);
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
-  ctx.lineWidth = 0.07;
-  ctx.stroke(sea.strata);
-  ctx.strokeStyle = `rgba(${SEA.surf}, ${0.38 + 0.12 * Math.sin(t * 0.9)})`; // (the surf rises and falls)
-  ctx.lineWidth = 0.18;
-  ctx.stroke(sea.foot);
-  ctx.lineCap = 'butt';
+  dc.fillStyle = SEA.cliff;
+  dc.fill(sea.cliffs);
+  dc.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+  dc.lineWidth = 0.07;
+  dc.stroke(sea.strata);
+  dc.strokeStyle = `rgba(${SEA.surf}, ${0.38 + 0.12 * Math.sin(t * 0.9)})`; // (the surf rises and falls)
+  dc.lineWidth = 0.18;
+  dc.stroke(sea.foot);
+  dc.lineCap = 'butt';
 }
 
 // ---- lakes: each painted once into a small picture (PX pixels a tile) with a shore along its hex edges,
@@ -710,66 +721,66 @@ function drawLakeProp(p) {
   const { x, y } = p;
   switch (p.kind) {
     case 'lily':
-      ctx.fillStyle = '#4f7a3e';
-      ctx.beginPath();
-      ctx.arc(x, y, 0.32, 0.5, Math.PI * 2 - 0.2);
-      ctx.lineTo(x, y);
-      ctx.fill();
+      dc.fillStyle = '#4f7a3e';
+      dc.beginPath();
+      dc.arc(x, y, 0.32, 0.5, Math.PI * 2 - 0.2);
+      dc.lineTo(x, y);
+      dc.fill();
       if (p.flower) {
-        ctx.fillStyle = '#e7d3e4';
-        ctx.beginPath();
-        ctx.arc(x + 0.08, y - 0.08, 0.13, 0, Math.PI * 2);
-        ctx.fill();
+        dc.fillStyle = '#e7d3e4';
+        dc.beginPath();
+        dc.arc(x + 0.08, y - 0.08, 0.13, 0, Math.PI * 2);
+        dc.fill();
       }
       break;
     case 'reed':
-      ctx.strokeStyle = 'rgba(125, 150, 82, 0.9)';
-      ctx.lineWidth = 0.07;
-      ctx.beginPath();
+      dc.strokeStyle = 'rgba(125, 150, 82, 0.9)';
+      dc.lineWidth = 0.07;
+      dc.beginPath();
       for (const k of [-0.18, 0, 0.18]) {
-        ctx.moveTo(x + k, y + 0.12);
-        ctx.lineTo(x + k * 1.5, y - 0.6);
+        dc.moveTo(x + k, y + 0.12);
+        dc.lineTo(x + k * 1.5, y - 0.6);
       }
-      ctx.stroke();
-      ctx.fillStyle = '#6b4a2a';
-      ctx.fillRect(x - 0.05, y - 0.75, 0.1, 0.26);
+      dc.stroke();
+      dc.fillStyle = '#6b4a2a';
+      dc.fillRect(x - 0.05, y - 0.75, 0.1, 0.26);
       break;
     case 'stone':
-      ctx.fillStyle = TREE_SHADOW;
-      ctx.beginPath();
-      ctx.ellipse(x + 0.05, y + 0.12, p.s * 1.1, p.s * 0.35, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = PROP.rock;
-      ctx.beginPath();
-      ctx.moveTo(x - p.s, y + 0.12);
-      ctx.lineTo(x - p.s * 0.5, y - p.s * 0.6);
-      ctx.lineTo(x + p.s * 0.5, y - p.s * 0.7);
-      ctx.lineTo(x + p.s, y + 0.12);
-      ctx.fill();
-      ctx.fillStyle = PROP.rockLit;
-      ctx.beginPath();
-      ctx.moveTo(x - p.s, y + 0.12);
-      ctx.lineTo(x - p.s * 0.5, y - p.s * 0.6);
-      ctx.lineTo(x, y + 0.12);
-      ctx.fill();
+      dc.fillStyle = TREE_SHADOW;
+      dc.beginPath();
+      dc.ellipse(x + 0.05, y + 0.12, p.s * 1.1, p.s * 0.35, 0, 0, Math.PI * 2);
+      dc.fill();
+      dc.fillStyle = PROP.rock;
+      dc.beginPath();
+      dc.moveTo(x - p.s, y + 0.12);
+      dc.lineTo(x - p.s * 0.5, y - p.s * 0.6);
+      dc.lineTo(x + p.s * 0.5, y - p.s * 0.7);
+      dc.lineTo(x + p.s, y + 0.12);
+      dc.fill();
+      dc.fillStyle = PROP.rockLit;
+      dc.beginPath();
+      dc.moveTo(x - p.s, y + 0.12);
+      dc.lineTo(x - p.s * 0.5, y - p.s * 0.6);
+      dc.lineTo(x, y + 0.12);
+      dc.fill();
       break;
     case 'palm':
-      ctx.fillStyle = TREE_SHADOW;
-      ctx.beginPath();
-      ctx.ellipse(x + 0.3, y + 0.1, 0.65, 0.2, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#7a5a36';
-      ctx.lineWidth = 0.16;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.quadraticCurveTo(x - 0.25, y - 0.7, x + 0.15, y - 1.35);
-      ctx.stroke();
-      ctx.fillStyle = '#4c7d3a';
+      dc.fillStyle = TREE_SHADOW;
+      dc.beginPath();
+      dc.ellipse(x + 0.3, y + 0.1, 0.65, 0.2, 0, 0, Math.PI * 2);
+      dc.fill();
+      dc.strokeStyle = '#7a5a36';
+      dc.lineWidth = 0.16;
+      dc.beginPath();
+      dc.moveTo(x, y);
+      dc.quadraticCurveTo(x - 0.25, y - 0.7, x + 0.15, y - 1.35);
+      dc.stroke();
+      dc.fillStyle = '#4c7d3a';
       for (let k = 0; k < 6; k++) {
         const a = (k / 6) * Math.PI * 2;
-        ctx.beginPath();
-        ctx.ellipse(x + 0.15 + Math.cos(a) * 0.45, y - 1.35 + Math.sin(a) * 0.22, 0.55, 0.17, a, 0, Math.PI * 2);
-        ctx.fill();
+        dc.beginPath();
+        dc.ellipse(x + 0.15 + Math.cos(a) * 0.45, y - 1.35 + Math.sin(a) * 0.22, 0.55, 0.17, a, 0, Math.PI * 2);
+        dc.fill();
       }
       break;
     default:
@@ -875,6 +886,107 @@ function build(seed) {
   return { seed, fill, forests, rivers, oreFill, ores, veinFill, veins, peaks, hillOverlay, sea, lakes, ...groundInfo };
 }
 
+// ---- the terrain cache: everything about the ground that never changes (biome colours, the sea
+// and its cliffs, lakes, mountain peaks, river banks and bridges, the hex grid) is painted once
+// into chunks of CHUNK x CHUNK tiles at a few fixed zoom levels and copied to the screen each
+// frame; only what moves or changes (river flow, trees, ore, veins, props) is drawn live on top.
+const CHUNK = 16;
+const BUCKETS = [2, 3, 4, 6, 8, 12, 16, 24, 32, 48]; // pixels a tile the chunks are painted at
+const CHUNK_PIXELS = 24e6; // chunks kept, in pixels (the least recently used go; never ones in view)
+const chunks = new Map(); // `${bucket}:${cx}:${cy}` -> { canvas, used }
+let chunkSeed = null;
+let chunkPixels = 0;
+let frameNo = 0;
+// Drop the least recently used chunks (not ones drawn this frame) while over the budget.
+function trimChunks() {
+  for (const [key, c] of chunks) {
+    if (chunkPixels <= CHUNK_PIXELS) break;
+    if (c.frame === frameNo) continue;
+    chunkPixels -= c.canvas.width * c.canvas.height;
+    chunks.delete(key);
+  }
+}
+
+// Paint the unchanging ground of tiles [x0, x1) x [y0, y1) onto g (set to tile units), s pixels a tile.
+function paintStatic(g, x0, y0, x1, y1, s) {
+  dc = g;
+  g.fillStyle = PLAINS;
+  g.fillRect(x0, y0, x1 - x0, y1 - y0);
+  drawSea(built.sea, false);
+  // each hex's biome ground (forest hexes a darker shade of theirs)
+  for (const [colour, path] of built.ground) {
+    g.fillStyle = colour;
+    g.fill(path);
+  }
+  g.fillStyle = ORE.ground;
+  g.fill(built.oreFill);
+  g.fillStyle = VEIN.ground;
+  g.fill(built.veinFill);
+  g.fillStyle = 'rgba(58, 62, 67, 0.4)';
+  g.fill(built.hillOverlay);
+  // lakes, with their reeds, lily pads, stones or palms
+  for (const lk of built.lakes) {
+    if (lk.x > x1 || lk.y > y1 || lk.x + lk.w < x0 || lk.y + lk.h < y0) continue;
+    g.drawImage(lk.canvas, lk.x, lk.y, lk.w, lk.h);
+    if (s >= 4) for (const p of lk.props) drawLakeProp(p);
+  }
+  // the dark lip of the land along the coast
+  g.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+  g.lineWidth = 0.26;
+  g.stroke(built.sea.coast);
+  drawRivers(built.rivers, built.sea);
+  // the hex grid: a faint outline round every hex of land (none over the sea or lakes)
+  if (s >= 6) {
+    g.save();
+    g.clip(landOnly(), 'evenodd');
+    g.strokeStyle = 'rgba(255,255,255,0.045)';
+    g.lineWidth = 1 / s;
+    g.stroke(hexGridPath());
+    g.restore();
+  }
+  // mountain peaks (at every zoom: they matter for where troops can go)
+  for (const p of built.peaks) {
+    if (p.x < x0 - 3 || p.x > x1 + 3 || p.y < y0 - 3 || p.y > y1 + 3) continue;
+    g.fillStyle = PEAK.shadow;
+    g.fill(p.shadow);
+    g.fillStyle = PEAK.body;
+    g.fill(p.body);
+    g.fillStyle = PEAK.lit;
+    g.fill(p.lit);
+    g.fillStyle = PEAK.snow;
+    g.fill(p.cap);
+  }
+  dc = ctx;
+}
+
+// Chunk (cx, cy) of the map painted at `bucket` pixels a tile (painted now if it isn't cached).
+function chunkAt(bucket, cx, cy) {
+  const key = `${bucket}:${cx}:${cy}`;
+  let c = chunks.get(key);
+  if (!c) {
+    const cv = document.createElement('canvas');
+    const w = Math.min(CHUNK, C.MAP_W - cx * CHUNK);
+    const h = Math.min(CHUNK, C.MAP_H - cy * CHUNK);
+    cv.width = Math.ceil(w * bucket);
+    cv.height = Math.ceil(h * bucket);
+    const g = cv.getContext('2d');
+    g.scale(bucket, bucket);
+    g.translate(-cx * CHUNK, -cy * CHUNK);
+    g.beginPath();
+    g.rect(cx * CHUNK, cy * CHUNK, w, h);
+    g.clip();
+    paintStatic(g, cx * CHUNK, cy * CHUNK, cx * CHUNK + w, cy * CHUNK + h, bucket);
+    c = { canvas: cv, w, h };
+    chunks.set(key, c);
+    chunkPixels += cv.width * cv.height;
+  } else {
+    // (most recently used last)
+    chunks.delete(key);
+    chunks.set(key, c);
+  }
+  return c;
+}
+
 // Draw the ground under the map rectangle at screen (ox, oy), s pixels per tile.
 function drawTerrain(ox, oy, s) {
   ctx.fillStyle = PLAINS;
@@ -882,6 +994,53 @@ function drawTerrain(ox, oy, s) {
   const seed = mapSeed();
   if (seed === undefined || seed === null) return;
   if (!built || built.seed !== seed) built = build(seed);
+  if (chunkSeed !== seed) {
+    chunks.clear();
+    chunkPixels = 0;
+    chunkSeed = seed;
+  }
+  frameNo++;
+  if (S.noTerrainCache) {
+    // (for comparison: paint it all straight onto the screen, every frame)
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(ox, oy, C.MAP_W * s, C.MAP_H * s);
+    ctx.clip();
+    ctx.translate(ox, oy);
+    ctx.scale(s, s);
+    paintStatic(ctx, 0, 0, C.MAP_W, C.MAP_H, s);
+    ctx.restore();
+  } else {
+  // the cached ground: the chunks in view, at the zoom level just above (or at) this one
+  const bucket = BUCKETS.find((b) => b >= s) || BUCKETS[BUCKETS.length - 1];
+  const W = ctx.canvas.width;
+  const H = ctx.canvas.height;
+  const cx0 = Math.max(0, Math.floor(-ox / s / CHUNK));
+  const cy0 = Math.max(0, Math.floor(-oy / s / CHUNK));
+  const cx1 = Math.min(Math.ceil(C.MAP_W / CHUNK) - 1, Math.floor((W - ox) / s / CHUNK));
+  const cy1 = Math.min(Math.ceil(C.MAP_H / CHUNK) - 1, Math.floor((H - oy) / s / CHUNK));
+  let painted = 0;
+  for (let cy = cy0; cy <= cy1; cy++) {
+    for (let cx = cx0; cx <= cx1; cx++) {
+      let b = bucket;
+      // (painting is spread over frames when zooming: meanwhile a nearby zoom level stands in)
+      if (!chunks.has(`${b}:${cx}:${cy}`) && painted >= 6) {
+        const alt = BUCKETS.find((x) => chunks.has(`${x}:${cx}:${cy}`));
+        if (alt) b = alt;
+      }
+      if (!chunks.has(`${b}:${cx}:${cy}`)) painted++;
+      const c = chunkAt(b, cx, cy);
+      c.frame = frameNo;
+      // (whole pixels, so chunks meet without seams)
+      const dx = Math.floor(ox + cx * CHUNK * s);
+      const dy = Math.floor(oy + cy * CHUNK * s);
+      const dw = Math.floor(ox + (cx * CHUNK + c.w) * s) - dx;
+      const dh = Math.floor(oy + (cy * CHUNK + c.h) * s) - dy;
+      ctx.drawImage(c.canvas, dx, dy, dw, dh);
+    }
+  }
+  trimChunks();
+  }
   ctx.save();
   // nothing past the map's edge (the hexes along it are cut off)
   ctx.beginPath();
@@ -889,46 +1048,7 @@ function drawTerrain(ox, oy, s) {
   ctx.clip();
   ctx.translate(ox, oy);
   ctx.scale(s, s);
-  drawSea(built.sea);
-  // each hex's biome ground (forest hexes a darker shade of theirs)
-  for (const [colour, path] of built.ground) {
-    ctx.fillStyle = colour;
-    ctx.fill(path);
-  }
-  ctx.fillStyle = ORE.ground;
-  ctx.fill(built.oreFill);
-  ctx.fillStyle = VEIN.ground;
-  ctx.fill(built.veinFill);
-  ctx.fillStyle = 'rgba(58, 62, 67, 0.4)';
-  ctx.fill(built.hillOverlay);
-  // lakes, with their reeds, lily pads, stones or palms
-  for (const lk of built.lakes) {
-    ctx.drawImage(lk.canvas, lk.x, lk.y, lk.w, lk.h);
-    if (s >= 4) for (const p of lk.props) drawLakeProp(p);
-  }
-  // the dark lip of the land along the coast
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
-  ctx.lineWidth = 0.26;
-  ctx.stroke(built.sea.coast);
-  drawRivers(built.rivers, built.sea);
-  // mountain peaks (at every zoom: they matter for where troops can go)
-  {
-    const px0 = -ox / s - 4;
-    const py0 = -oy / s - 4;
-    const px1 = px0 + ctx.canvas.width / s + 8;
-    const py1 = py0 + ctx.canvas.height / s + 8;
-    for (const p of built.peaks) {
-      if (p.x < px0 || p.x > px1 || p.y < py0 || p.y > py1) continue;
-      ctx.fillStyle = PEAK.shadow;
-      ctx.fill(p.shadow);
-      ctx.fillStyle = PEAK.body;
-      ctx.fill(p.body);
-      ctx.fillStyle = PEAK.lit;
-      ctx.fill(p.lit);
-      ctx.fillStyle = PEAK.snow;
-      ctx.fill(p.cap);
-    }
-  }
+  if (s >= 4) drawRiverFlow(built.rivers); // (live: the water flows)
   if (s >= 5) {
     // trees on the forest hexes in view, except where a building, core or camp stands
     const taken = new Set();

@@ -208,7 +208,8 @@ module.exports = {
 
   canFarm(p, i) {
     const h = this.hex.hexes[i];
-    return this.hexOwner[i] === p.id && !this.forest.has(i) && !this.ore.has(i) && !this.buildingHexes()[i] && h.full && i !== this.hexAt(p.core.x, p.core.y);
+    // (any hex of my land but the core's, forests and ore; one with a building pays FARM_BUILT_SHARE)
+    return this.hexOwner[i] === p.id && !this.forest.has(i) && !this.ore.has(i) && h.full && i !== this.hexAt(p.core.x, p.core.y);
   },
 
   // ---- choosing jobs
@@ -293,7 +294,8 @@ module.exports = {
       for (const h of this.hex.hexes) {
         if (this.hexOwner[h.i] !== p.id || !this.canFarm(p, h.i)) continue;
         const vein = this.veins.has(h.i);
-        consider({ type, k: 'h', id: h.i }, h.cx, h.cy, vein ? C.VEIN_WORKERS : 1, vein ? 1e3 : 0);
+        // (veins first, then open hexes, then hexes with a building)
+        consider({ type, k: 'h', id: h.i }, h.cx, h.cy, vein ? C.VEIN_WORKERS : 1, vein ? 1e3 : this.buildingHexes()[h.i] ? -8 : 0);
       }
     }
     return best;
@@ -418,9 +420,9 @@ module.exports = {
     const job = u.job;
     u.working = false;
     if (u.fleeUntil > this.time) {
-      // running home from raiders (the job waits)
-      const d = dist(u.x, u.y, p.core.x + 0.5, p.core.y + 0.5);
-      if (d > 2) this.stepToward(u, p.core.x + 0.5, p.core.y + 0.5, 1.5, speed * 1.15, dt);
+      // running from raiders to the nearest safety (the core, or one of my towers): the job waits
+      const safe = this.safeSpot(p, u);
+      if (dist(u.x, u.y, safe.x, safe.y) > 1.6) this.stepToward(u, safe.x, safe.y, 1.2, speed * 1.15, dt);
       return;
     }
     // carrying wood (or iron) and done with that job (or it changed, or the load is full): take it home
@@ -491,7 +493,7 @@ module.exports = {
       u.carry += dug;
       u.carryKind = 'iron';
     } else if (job.type === 'farm') {
-      u.farmed = (u.farmed || 0) + (this.veins.has(job.id) ? C.VEIN_GOLD : C.FARM_GOLD) * dt;
+      u.farmed = (u.farmed || 0) + (this.veins.has(job.id) ? C.VEIN_GOLD : C.FARM_GOLD) * (this.buildingHexes()[job.id] ? C.FARM_BUILT_SHARE : 1) * dt;
       if (u.farmed >= 3) {
         this.award(p, u.farmed, 'farm', u.x, u.y - 0.6);
         u.farmed = 0;
@@ -511,6 +513,21 @@ module.exports = {
       if (!obj.isWall) this.terrDirty = true;
       this.fx.push({ k: 'built', x: round2(obj.isWall ? obj.x : obj.x + 0.5), y: round2(obj.isWall ? obj.y : obj.y + 0.5) });
     }
+  },
+
+  // Where a worker runs to from raiders: the nearest of the core and my finished towers.
+  safeSpot(p, u) {
+    let best = { x: p.core.x + 0.5, y: p.core.y + 0.5 };
+    let bestD = dist(u.x, u.y, best.x, best.y);
+    for (const t of this.towers.values()) {
+      if (t.owner !== p.id || t.kind !== 'tower' || !this.finished(t)) continue;
+      const d = dist(u.x, u.y, t.x + 0.5, t.y + 0.5);
+      if (d < bestD) {
+        bestD = d;
+        best = { x: t.x + 0.5, y: t.y + 0.5 };
+      }
+    }
+    return best;
   },
 
   // Where a worker drops off wood: the nearest of the core and finished workshops.

@@ -30,6 +30,19 @@ module.exports = {
       if (!p.explored) p.explored = new Uint8Array(n);
       Vision.computeVision(p.vis, this.w, this.h, pid, this.terr, list);
     }
+    // In sudden death every core is revealed to everyone (so the leader can find the last ones).
+    if (this.suddenDeath()) {
+      const r = C.SUDDEN_DEATH_REVEAL;
+      for (const q of this.players.values()) {
+        if (!q.alive) continue;
+        for (let y = Math.max(0, q.core.y - r); y <= Math.min(this.h - 1, q.core.y + r); y++) {
+          for (let x = Math.max(0, q.core.x - r); x <= Math.min(this.w - 1, q.core.x + r); x++) {
+            if ((x - q.core.x) ** 2 + (y - q.core.y) ** 2 > r * r) continue;
+            for (const pid of sources.keys()) this.players.get(pid).vis[this.idx(x, y)] = 1;
+          }
+        }
+      }
+    }
     // Allies see each other's bases (their land), but not what each other's troops and towers see.
     for (const pid of sources.keys()) {
       const p = this.players.get(pid);

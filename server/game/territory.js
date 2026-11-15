@@ -97,8 +97,8 @@ module.exports = {
   },
 
   // Gold for hex i for a player who owns `land` tiles: the land price per tile, for each tile in it.
-  hexCost(i, land) {
-    return C.landCost(land) * this.hex.hexes[i].tiles.length;
+  hexCost(i, land, bought = Infinity) {
+    return C.hexPrice(this.hex.hexes[i].tiles.length, land, bought);
   },
 
   // Buy hexes (in order, so a drag along the border can grow outward). Stops when gold runs out.
@@ -116,7 +116,7 @@ module.exports = {
         if (!reason) reason = this.hexOwner[i] > 0 && this.hexOwner[i] !== pid ? "You can't buy someone else's land" : 'Land must be empty and touch your land';
         continue;
       }
-      const cost = this.hexCost(i, land);
+      const cost = this.hexCost(i, land, p.hexesBought || 0);
       if (p.gold < cost) {
         reason = 'Not enough gold';
         break;
@@ -125,6 +125,7 @@ module.exports = {
       this.setHex(i, pid);
       this.carryWallsOut(pid, i);
       land += this.hex.hexes[i].tiles.length;
+      p.hexesBought = (p.hexesBought || 0) + 1;
       this.lastBuy.n++;
       this.lastBuy.gold += cost;
     }

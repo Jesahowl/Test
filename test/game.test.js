@@ -64,8 +64,9 @@ test('land is claimed hex by hex at the border, pricier as you grow', () => {
   const far = g.hex.hexes.find((h) => !g.hexOwner[h.i] && !g.canBuyHex(a.id, h.i) && g.hex.dist(h, core) > 4);
   assert.match(g.buyLand(a.id, [far.i]), /touch your land/);
   const h1 = ring[0];
-  const cost1 = g.hexCost(h1.i, start);
-  assert.strictEqual(cost1, C.landCost(start) * h1.tiles.length);
+  const cost1 = g.hexCost(h1.i, start, 0);
+  assert.strictEqual(cost1, Math.round(C.landCost(start) * h1.tiles.length * C.LAND_STARTER_PRICE), 'the first hexes are cheaper');
+  assert.strictEqual(g.hexCost(h1.i, start, C.LAND_STARTER_HEXES), C.landCost(start) * h1.tiles.length, 'then full price');
   assert.strictEqual(g.buyLand(a.id, [h1.i]), null);
   assert.strictEqual(a.gold, 5000 - cost1);
   g.update(0.05);
