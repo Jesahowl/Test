@@ -582,7 +582,7 @@ const LAKE_STYLE = {
   // shore: [r, g, b, alpha, width in tiles]; water: shallow, deep, depth (tiles) to go from one to the other
   meadow: { shore: [78, 96, 58, 0.9, 0.3], shallow: '#2f6f78', deep: '#1d4a5e', depth: 3, edge: 0.45, tint: [40, 92, 104] },
   tarn: { shore: [88, 92, 96, 0.95, 0.4], shallow: '#2a4e60', deep: '#0f2235', depth: 1.4, edge: 0, ice: true, tint: [30, 60, 80] },
-  marsh: { shore: [58, 52, 38, 0.9, 0.6], shallow: '#2c4a46', deep: '#1c302f', depth: 2.5, edge: 0, weed: true, tint: [58, 84, 66] },
+  marsh: { shore: [58, 52, 38, 0.9, 0.6], shallow: '#2e5552', deep: '#1c3433', depth: 2.5, edge: 0, weed: true, tint: [58, 84, 66] },
   oasis: { shore: [196, 176, 120, 0.95, 0.7], shallow: '#4fb3a8', deep: '#227a83', depth: 2, edge: 0.5, green: true, tint: [70, 160, 150] },
 };
 // (cold or high: a tarn; warm and dry: an oasis, rare; the very wettest ground: a marsh pond; else a meadow lake)
@@ -689,9 +689,10 @@ function buildLakes(seed) {
     for (let y = y0 + 0.2; y < y1; y += 0.4) {
       for (let x = x0 + 0.2; x < x1; x += 0.4) {
         const d = at(x, y);
+        if (L.mountains.has(HEX.at(x, y))) continue; // (no reeds on a mountain beside it)
         const roll = hash(seed + 4700, Math.round(x * 10), Math.round(y * 10));
         if (kind === 'meadow' && d > 0.5 && d < 1.4 && roll < 0.05) props.push({ kind: 'lily', x, y, flower: roll < 0.018 });
-        else if ((kind === 'meadow' && d > -0.7 && d < 0.1 && roll < 0.08) || (kind === 'marsh' && d > -0.9 && d < 0.6 && roll < 0.2)) props.push({ kind: 'reed', x, y });
+        else if ((kind === 'meadow' && d > -0.7 && d < 0.1 && roll < 0.08) || (kind === 'marsh' && d > -0.6 && d < 0.3 && roll < 0.11)) props.push({ kind: 'reed', x, y });
         else if (kind === 'tarn' && d > -0.8 && d < 0.1 && roll < 0.09) props.push({ kind: 'stone', x, y, s: 0.25 + roll * 2 });
         else if (kind === 'oasis' && d > -1.4 && d < -0.5 && roll < 0.035) props.push({ kind: 'palm', x, y });
       }
@@ -1053,4 +1054,16 @@ function drawTerrain(ox, oy, s) {
   ctx.restore();
 }
 
-export { drawTerrain, groundCanvas, riverView, veinsView };
+// The land (a path to clip to with 'evenodd': the map without the sea and lakes), in tile units.
+function landOnly() {
+  if (built && built.land) return built.land;
+  const land = new Path2D();
+  land.rect(-10, -10, C.MAP_W + 20, C.MAP_H + 20);
+  if (!built) return land;
+  land.addPath(built.sea.all);
+  land.addPath(built.sea.lakeAll);
+  built.land = land; // (once per map)
+  return land;
+}
+
+export { drawTerrain, groundCanvas, landOnly, riverView, veinsView };

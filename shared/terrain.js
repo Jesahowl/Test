@@ -179,10 +179,13 @@
   // Everything comes from the seed and the hex grid, so the server and every browser agree.
   // With an ocean ({ ocean, sides } from oceanOf), rivers rise on the far side of the map and flow
   // into the sea, ending where they reach the coast.
+  const RIVER_GAP = 11; // rivers keep about this far (tiles, |dx| + |dy|) from each other unless joining
   const RIVER_BRIDGE_EVERY = 11; // a bridge every this many edges along a river (at least two each)
   // A river that runs into a lake (lakes: a Set of hex indices) ends there too.
   function riversOf(seed, hex, w, h, sea = null, lakes = new Set()) {
     const ocean = sea ? sea.ocean : new Set();
+    const coastal = new Set(); // land hexes on the coast
+    for (const i of ocean) for (const j of hex.hexes[i].n) if (!ocean.has(j)) coastal.add(j);
     const vkey = (p) => `${Math.round(p[0] * 100)},${Math.round(p[1] * 100)}`;
     const verts = new Map(); // key -> { p: [x, y], edges: [] }
     const edgeSeen = new Set();
@@ -208,6 +211,7 @@
         e.v1.edges.push(e);
         e.v2.edges.push(e);
         if (ocean.has(hx.i) || ocean.has(j)) e.v1.sea = e.v2.sea = true; // (a corner on the coast)
+        if (coastal.has(hx.i) || coastal.has(j)) e.v1.coastal = e.v2.coastal = true; // (near it)
         if (lakes.has(hx.i) || lakes.has(j)) {
           if (lakes.has(hx.i) && lakes.has(j)) { e.v1.edges.pop(); e.v2.edges.pop(); continue; } // (inside a lake)
           e.v1.lake = e.v2.lake = true; // (a corner on a lake's shore)
@@ -216,12 +220,14 @@
     }
     const count = Math.max(1, Math.round((w * h) / 6000));
     const used = new Set(); // vertex keys rivers already run through
+    const usedPts = []; // ...and their points
     const rivers = [];
     for (let r = 0; r < count; r++) {
       // start on one side of the map (left/top/right/bottom), head for the opposite side
       // (toward the sea when there is one: from the opposite side)
       const side = sea && sea.sides.length ? (sea.sides[r % sea.sides.length] + 2) % 4 : (Math.floor(hash(seed, r, 77) * 4) + r * 2) % 4;
-      const along = 0.25 + hash(seed, r, 78) * 0.5;
+      // (spread out along their side: rivers rising on the same side start well apart)
+      const along = 0.15 + ((hash(seed, 0, 78) + r * 0.38) % 1) * 0.7;
       const start = [[2, along * h], [along * w, 2], [w - 2, along * h], [along * w, h - 2]][side];
       const goal = [[w, (0.2 + hash(seed, r, 79) * 0.6) * h], [(0.2 + hash(seed, r, 79) * 0.6) * w, h], [0, (0.2 + hash(seed, r, 79) * 0.6) * h], [(0.2 + hash(seed, r, 79) * 0.6) * w, 0]][side];
       // start on the map's edge (a corner with fewer than three edges), nearest the start point, not on the coast
@@ -253,7 +259,17 @@
           if (here.has(nv.k)) continue;
           const dx = nv.p[0] - cur.p[0];
           const dy = nv.p[1] - cur.p[1];
-          const sc = Math.cos(Math.atan2(dy, dx) - ang) + (hash(seed, step, r * 13 + 5) - 0.5) * 0.3;
+          let sc = Math.cos(Math.atan2(dy, dx) - ang) + (hash(seed, step, r * 13 + 5) - 0.5) * 0.3;
+          // one step from the sea or a lake: flow straight in (rather than run along the shore)
+          if (nv.sea || nv.lake) sc += 10;
+          // keep clear of other rivers (no two running side by side), unless flowing into one
+          if (!used.has(nv.k) && usedPts.length) {
+            let d = Infinity;
+            for (const q of usedPts) d = Math.min(d, Math.abs(q[0] - nv.p[0]) + Math.abs(q[1] - nv.p[1]));
+            if (d < RIVER_GAP) sc -= ((RIVER_GAP - d) / RIVER_GAP) * 3;
+          }
+          // and don't run along the coast (a corner of a coastal hex, short of the sea itself)
+          if (nv.coastal && !nv.sea) sc -= 1.2;
           if (sc > score) {
             score = sc;
             pick = e;
@@ -275,6 +291,7 @@
       if (edges.length < 8) continue;
       if (ocean.size && !cur.sea && !cur.lake && !used.has(cur.k)) continue; // (with a sea, every river ends in it, a lake, or a river that does)
       for (const k of here) used.add(k);
+      usedPts.push(...pts);
       // bridges, evenly along it (not right at its ends)
       const every = Math.max(4, Math.min(RIVER_BRIDGE_EVERY, Math.floor((edges.length - 4) / 2)));
       const off = 2 + Math.floor(hash(seed, r, 80) * (every - 1));
