@@ -39,7 +39,12 @@ function oreRock(x, y, s) {
   return r;
 }
 
-const { hash, climate, biomeOf, groundColor, isForest, isIron, isGoldVein, riversOf } = window.TD_TERRAIN;
+const { hash, climate, biomeOf, groundColor, mapTerrain } = window.TD_TERRAIN;
+// the map's layout (rivers, mountains, forests, iron, gold veins), exactly as the server has it
+const layoutOf = (seed) => mapTerrain(seed, HEX, C.MAP_W, C.MAP_H, { rivers: !(S.round && S.round.rivers === false) });
+// mountains: grey rock hexes with snow-capped peaks; the hexes round them (foothills) lean grey too
+const ROCK_RGB = [58, 62, 67];
+const PEAK = { body: '#4a5058', lit: '#5d646d', snow: '#d8e0e4', shadow: 'rgba(0,0,0,0.35)' };
 const FOREST_RGB = [19, 40, 27];
 const mixRgb = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
 const SNOW_PINE = { dark: '#2d4a40', light: '#cfd9dc' };
@@ -86,7 +91,7 @@ function pine(x, y, s) {
 // The rivers of map `seed`: one path each (along the hex corners they follow), and their bridges
 // ({ x, y, ang }: the middle of the bridged edge and the edge's direction).
 function buildRivers(seed) {
-  const list = S.round && S.round.rivers === false ? [] : riversOf(seed, HEX, C.MAP_W, C.MAP_H);
+  const list = layoutOf(seed).rivers;
   const paths = [];
   const bridges = [];
   for (const r of list) {
@@ -193,6 +198,7 @@ function veinsView() {
 // The ground colour of every hex (stepped: one colour per hex, from the climate at its centre),
 // gathered into one path per colour so a frame fills each colour once; and each open hex's props.
 function buildGround(seed) {
+  const L = layoutOf(seed);
   const byColour = new Map();
   const props = [];
   const tint = new Map(); // hex -> [r, g, b] (the minimap uses these too)
@@ -201,10 +207,13 @@ function buildGround(seed) {
     // (a calm ground: the biome colour, drawn a little toward the old plains, barely varying hex to hex)
     const jitter = 0.985 + hash(seed, h.i, 1717) * 0.03;
     let c = mixRgb(groundColor(cl), PLAINS_RGB, 0.18).map((v) => v * jitter);
-    const forest = isForest(seed, h);
+    const forest = L.forest.has(h.i);
+    const mountain = L.mountains.has(h.i);
     if (forest) c = mixRgb(c, FOREST_RGB, 0.45);
+    if (mountain) c = mixRgb(c, ROCK_RGB, 0.8);
+    else if (L.foothills.has(h.i)) c = mixRgb(c, ROCK_RGB, 0.3); // (foothills: the range fades into the land)
     c = c.map((v) => Math.round(v / 3) * 3);
-    tint.set(h.i, c);
+    tint.set(h.i, mountain ? [88, 93, 100] : c); // (the minimap shows ranges a lighter grey)
     const key = `rgb(${c[0]},${c[1]},${c[2]})`;
     if (!byColour.has(key)) byColour.set(key, new Path2D());
     const path = byColour.get(key);
@@ -212,7 +221,7 @@ function buildGround(seed) {
     path.moveTo(cs[0][0], cs[0][1]);
     for (let k = 1; k < 6; k++) path.lineTo(cs[k][0], cs[k][1]);
     path.closePath();
-    if (forest || isIron(seed, h) || isGoldVein(seed, h)) continue;
+    if (forest || mountain || L.iron.has(h.i) || L.veins.has(h.i)) continue;
     // now and then a single small prop for the biome (most open hexes stay plain)
     const b = biomeOf(cl);
     if (hash(seed, h.i, 2100) > 0.25) continue;
@@ -309,15 +318,63 @@ function drawProp(p) {
   }
 }
 
+// A mountain peak at (x, y), size s (tile units): shadow, rock, its lit face and a snow cap
+// (bigger in the cold).
+function peak(x, y, s, snow) {
+  const p = { x, y, s, shadow: new Path2D(), body: new Path2D(), lit: new Path2D(), cap: new Path2D() };
+  p.shadow.ellipse(x + s * 0.2, y + s * 0.48, s * 0.95, s * 0.28, 0, 0, Math.PI * 2);
+  p.body.moveTo(x - s, y + s * 0.5);
+  p.body.lineTo(x, y - s);
+  p.body.lineTo(x + s, y + s * 0.5);
+  p.body.closePath();
+  p.lit.moveTo(x - s, y + s * 0.5);
+  p.lit.lineTo(x, y - s);
+  p.lit.lineTo(x + s * 0.1, y + s * 0.5);
+  p.lit.closePath();
+  const c = snow;
+  p.cap.moveTo(x - s * 0.32 * c, y - s + s * 0.48 * c);
+  p.cap.lineTo(x, y - s);
+  p.cap.lineTo(x + s * 0.32 * c, y - s + s * 0.48 * c);
+  p.cap.lineTo(x + s * 0.12 * c, y - s + s * 0.58 * c);
+  p.cap.lineTo(x - s * 0.05 * c, y - s + s * 0.45 * c);
+  p.cap.lineTo(x - s * 0.18 * c, y - s + s * 0.58 * c);
+  p.cap.closePath();
+  return p;
+}
+
 function build(seed) {
+  const L = layoutOf(seed);
   const rivers = buildRivers(seed);
+  // mountain peaks, two or three a hex, drawn back to front
+  const peaks = [];
+  for (const i of L.mountains) {
+    const h = HEX.hexes[i];
+    const cold = climate(seed, h.cx, h.cy, C.MAP_W, C.MAP_H).temp < 0.35;
+    const spots = [[-0.75, -0.35, 1.25], [0.8, -0.15, 1.1], [0.05, 0.7, 1.35]];
+    spots.forEach(([dx, dy, sz], k) => {
+      if (k === 1 && hash(seed, i, 3100) < 0.3) return;
+      const pk = peak(h.cx + dx + (hash(seed, i * 3 + k, 3200) - 0.5) * 0.4, h.cy + dy + (hash(seed, i * 3 + k, 3300) - 0.5) * 0.3, sz * (0.85 + hash(seed, i, 3400 + k) * 0.3), cold ? 1.25 : 0.9);
+      pk.i = i;
+      peaks.push(pk);
+    });
+  }
+  peaks.sort((a, b) => a.y - b.y);
+  // ore and veins in the foothills blend toward the rock
+  const hillOverlay = new Path2D();
+  for (const i of [...L.iron, ...L.veins]) {
+    if (!L.foothills.has(i)) continue;
+    const cs = HEX.corners(HEX.hexes[i]);
+    hillOverlay.moveTo(cs[0][0], cs[0][1]);
+    for (let k = 1; k < 6; k++) hillOverlay.lineTo(cs[k][0], cs[k][1]);
+    hillOverlay.closePath();
+  }
   const groundInfo = buildGround(seed);
   const fill = new Path2D();
   const forests = [];
   const oreFill = new Path2D();
   const ores = [];
   for (const h of HEX.hexes) {
-    if (!isIron(seed, h)) continue;
+    if (!L.iron.has(h.i)) continue;
     const cs = HEX.corners(h);
     oreFill.moveTo(cs[0][0], cs[0][1]);
     for (let k = 1; k < 6; k++) oreFill.lineTo(cs[k][0], cs[k][1]);
@@ -336,7 +393,7 @@ function build(seed) {
   const veinFill = new Path2D();
   const veins = [];
   for (const h of HEX.hexes) {
-    if (!isGoldVein(seed, h)) continue;
+    if (!L.veins.has(h.i)) continue;
     const cs = HEX.corners(h);
     veinFill.moveTo(cs[0][0], cs[0][1]);
     for (let k = 1; k < 6; k++) veinFill.lineTo(cs[k][0], cs[k][1]);
@@ -349,7 +406,7 @@ function build(seed) {
     veins.push({ i: h.i, x: h.cx, y: h.cy, rocks });
   }
   for (const h of HEX.hexes) {
-    if (!isForest(seed, h)) continue;
+    if (!L.forest.has(h.i)) continue;
     const cs = HEX.corners(h);
     fill.moveTo(cs[0][0], cs[0][1]);
     for (let k = 1; k < 6; k++) fill.lineTo(cs[k][0], cs[k][1]);
@@ -374,7 +431,7 @@ function build(seed) {
     trees.sort((a, b) => a.y - b.y);
     forests.push({ i: h.i, x: h.cx, y: h.cy, trees });
   }
-  return { seed, fill, forests, rivers, oreFill, ores, veinFill, veins, ...groundInfo };
+  return { seed, fill, forests, rivers, oreFill, ores, veinFill, veins, peaks, hillOverlay, ...groundInfo };
 }
 
 // Draw the ground under the map rectangle at screen (ox, oy), s pixels per tile.
@@ -400,7 +457,27 @@ function drawTerrain(ox, oy, s) {
   ctx.fill(built.oreFill);
   ctx.fillStyle = VEIN.ground;
   ctx.fill(built.veinFill);
+  ctx.fillStyle = 'rgba(58, 62, 67, 0.4)';
+  ctx.fill(built.hillOverlay);
   drawRivers(built.rivers);
+  // mountain peaks (at every zoom: they matter for where troops can go)
+  {
+    const px0 = -ox / s - 4;
+    const py0 = -oy / s - 4;
+    const px1 = px0 + ctx.canvas.width / s + 8;
+    const py1 = py0 + ctx.canvas.height / s + 8;
+    for (const p of built.peaks) {
+      if (p.x < px0 || p.x > px1 || p.y < py0 || p.y > py1) continue;
+      ctx.fillStyle = PEAK.shadow;
+      ctx.fill(p.shadow);
+      ctx.fillStyle = PEAK.body;
+      ctx.fill(p.body);
+      ctx.fillStyle = PEAK.lit;
+      ctx.fill(p.lit);
+      ctx.fillStyle = PEAK.snow;
+      ctx.fill(p.cap);
+    }
+  }
   if (s >= 5) {
     // trees on the forest hexes in view, except where a building, core or camp stands
     const taken = new Set();

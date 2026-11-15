@@ -5,12 +5,12 @@ const assert = require('node:assert');
 const C = require('../shared/config');
 const { duel, troops, run } = require('./helpers');
 
-// Every edge of p's border, as [mine, theirs] hex pairs.
+// Every edge of p's border that can take a wall (not along a river or a mountain), as [mine, theirs] hex pairs.
 function border(g, p) {
   const out = [];
   for (const h of g.hex.hexes) {
     if (g.hexOwner[h.i] !== p.id) continue;
-    for (const j of h.n) if (g.hexOwner[j] !== p.id) out.push([h.i, j]);
+    for (const j of h.n) if (g.hexOwner[j] !== p.id && !g.riverBetween(h.i, j)) out.push([h.i, j]); // (not along a river or mountain)
   }
   return out;
 }
@@ -253,4 +253,48 @@ test('rivers: troops only cross at bridges; no walls on them; no base starts bes
   });
   assert.strictEqual(crossed, 0, 'never stepped across the river');
   assert.ok(arrived, 'got across by a bridge');
+});
+
+test('mountains: impassable ridges; every map stays connected; iron and gold sit in the foothills', () => {
+  const Terrain = require('../shared/terrain');
+  // connected on every map: all open hexes reach each other (round mountains, over bridges)
+  for (let seed = 1; seed <= 30; seed++) {
+    const { g } = duel(seed);
+    const open = g.hex.hexes.filter((h) => !g.mountains.has(h.i));
+    const seen = new Set([open[0].i]);
+    const stack = [open[0].i];
+    while (stack.length) {
+      const i = stack.pop();
+      for (const j of g.hex.hexes[i].n) {
+        if (seen.has(j) || g.mountains.has(j) || g.riverBetween(i, j)) continue;
+        seen.add(j);
+        stack.push(j);
+      }
+    }
+    assert.strictEqual(seen.size, open.length, `seed ${seed}: no land cut off (${open.length - seen.size} hexes)`);
+  }
+  const { g, a } = duel(8);
+  assert.ok(g.mountains.size > 15, `the map has mountains (${g.mountains.size})`);
+  const layout = Terrain.mapTerrain(g.mapSeed, g.hex, g.w, g.h);
+  const inHills = [...g.ore.keys()].filter((i) => layout.foothills.has(i)).length;
+  assert.ok(inHills / g.ore.size > 0.7, `most iron in the foothills (${inHills}/${g.ore.size})`);
+  for (const i of g.mountains) assert.ok(!g.forest.has(i) && !g.ore.has(i) && !g.veins.has(i));
+  // nobody owns, buys or stands on a mountain
+  const m = [...g.mountains][0];
+  const next = g.hex.hexes[m].n.find((j) => !g.mountains.has(j));
+  g.setHex(next, a.id);
+  assert.ok(!g.canBuyHex(a.id, m), 'mountains can\'t be bought');
+  const mh = g.hex.hexes[m];
+  assert.match(g.makeOrder(a.id, { k: 'p', id: g.idx(Math.floor(mh.cx), Math.floor(mh.cy)) }), /mountains/);
+  // a troop sent past a mountain goes round it, never into it
+  const far = g.hex.hexes.find((h) => !g.mountains.has(h.i) && Math.hypot(h.cx - mh.cx, h.cy - mh.cy) > 6 && Math.hypot(h.cx - mh.cx, h.cy - mh.cy) < 9 && h.full);
+  const [u] = troops(g, a, 'soldier', 1, g.hex.hexes[next].cx, g.hex.hexes[next].cy);
+  u.hp = u.maxHp = 1e6;
+  g.order(a.id, [u.id], { k: 'p', id: g.idx(Math.floor(far.cx), Math.floor(far.cy)) });
+  let inside = 0;
+  run(g, 25, () => {
+    if (g.mountains.has(g.hexAt(Math.floor(u.x), Math.floor(u.y)))) inside++;
+    return false;
+  });
+  assert.strictEqual(inside, 0, 'never set foot on the mountain');
 });

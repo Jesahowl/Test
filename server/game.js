@@ -31,6 +31,7 @@ class Game {
     // The rules of this game (C.DEFAULT_RULES, or a private room's choices)
     this.rules = { ...C.DEFAULT_RULES, ...(opts.rules || {}) };
     if (opts.rivers === false) this.rules.rivers = false; // (tests: open ground)
+    this.openGround = opts.rivers === false; // (tests: no mountains either)
     this.riversOn = this.rules.rivers;
     this.botLevel = C.BOT_LEVELS[this.rules.difficulty] || C.BOT_LEVELS.normal;
     this.instantBuild = !!opts.instantBuild; // (tests) buildings and walls go up at once, no workers needed
@@ -183,6 +184,12 @@ class Game {
     this.visionTick = (this.visionTick || 0) + 1;
     if (this.visionTick % 2 === 0) this.updateVision();
     this.checkRoundOver();
+    // Time's up: a while into sudden death, the round ends and the most land wins (armies can
+    // stall each other at a mountain pass for ever otherwise).
+    if (this.rounds && this.phase === 'playing' && this.time >= this.rules.suddenDeath + C.SUDDEN_DEATH_LIMIT) {
+      this.pushFeed('⏰ Time\'s up!');
+      this.endRound();
+    }
   }
 
   // Shared (non-personal) part of the state broadcast. Clears per-tick fx/feed.
@@ -219,6 +226,7 @@ class Game {
         n: this.round, phase: this.phase, t: Math.floor(this.time), seed: this.mapSeed, rivers: this.riversOn,
         join: Math.max(0, Math.ceil(C.ROUND_JOIN_WINDOW - this.time)),
         sd: Math.ceil(this.rules.suddenDeath - this.time), // <= 0: sudden death is on
+        end: Math.ceil(this.rules.suddenDeath + C.SUDDEN_DEATH_LIMIT - this.time), // time's up (most land wins)
         fort: this.rules.fortify, // peace time (cores fortified until then)
         fog: this.rules.fog,
         test: this.rules.testMode || undefined,

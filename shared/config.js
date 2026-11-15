@@ -164,6 +164,7 @@
     ROUND_JOIN_WINDOW: 60, // seconds after a round starts during which players (and bots) can join
     // Sudden death after this many seconds: no home-turf bonuses, troops hit structures harder,
     // and cores slowly crumble - so every round ends.
+    SUDDEN_DEATH_LIMIT: 360, // seconds of sudden death before time runs out: the most land wins (no stalemates)
     ROUND_SUDDEN_DEATH: 1140, // 19 minutes: rounds run about 15-22 minutes
     SUDDEN_DEATH_SIEGE: 2, // troop damage multiplier against towers and cores
     // Pacing: cores take less damage for the first minutes, and troop damage to buildings

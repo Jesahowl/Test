@@ -24,11 +24,13 @@ module.exports = {
 
   initForest() {
     this.forest = new Map(); // hex index -> wood left
-    for (const h of this.hex.hexes) if (Terrain.isForest(this.mapSeed, h)) this.forest.set(h.i, C.FOREST_WOOD);
-    this.veins = new Set(); // gold vein hexes: farmed on your own land, they pay VEIN_GOLD a worker
-    for (const h of this.hex.hexes) if (Terrain.isGoldVein(this.mapSeed, h)) this.veins.add(h.i);
+    // the map's layout (shared/terrain.js): rivers, mountains, forests, iron and gold veins
+    this.layout = Terrain.mapTerrain(this.mapSeed, this.hex, this.w, this.h, { rivers: this.riversOn, mountains: !this.openGround });
+    this.mountains = this.layout.mountains; // impassable hexes (see walls.js initRivers)
+    for (const i of this.layout.forest) this.forest.set(i, C.FOREST_WOOD);
+    this.veins = new Set(this.layout.veins); // gold vein hexes: farmed on your own land, they pay VEIN_GOLD a worker
     this.ore = new Map(); // hex index -> iron left in an ore deposit
-    for (const h of this.hex.hexes) if (Terrain.isIron(this.mapSeed, h)) this.ore.set(h.i, C.IRON_ORE);
+    for (const i of this.layout.iron) this.ore.set(i, C.IRON_ORE);
   },
 
   // Ore deposits that aren't full, as snapshot rows [hex, iron left in fifths (0-4)].

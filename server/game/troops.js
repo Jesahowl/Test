@@ -584,12 +584,13 @@ module.exports = {
     if (this.slotsByHex) return this.slotsByHex;
     const byHex = this.hex.hexes.map(() => []);
     const sp = C.SLOT_SPACING;
+    const mountains = this.mountains || new Set();
     const dy = sp * Math.sqrt(3) / 2;
     for (let r = 0; r * dy + 0.5 < this.h - 0.4; r++) {
       const y = 0.5 + r * dy;
       for (let x = 0.5 + (r % 2 ? sp / 2 : 0); x < this.w - 0.4; x += sp) {
         const h = this.hexAt(Math.floor(x), Math.floor(y));
-        if (h >= 0) byHex[h].push([x, y]);
+        if (h >= 0 && !mountains.has(h)) byHex[h].push([x, y]); // (no spots on a mountain)
       }
     }
     // no spots on a river (troops would stand in the water)
@@ -1227,6 +1228,7 @@ module.exports = {
       for (let x = 2; x < this.w - 2; x += STEP) {
         const cx = x + ((y / STEP) % 2 ? STEP / 2 : 0);
         if (!unseen(Math.floor(cx), y)) continue;
+        if (this.mountains.has(this.hex.tileHex[this.idx(Math.floor(cx), y)])) continue; // (scouts see over mountains, but can't climb them)
         if (danger.some(([dx, dy, r]) => dist(cx, y, dx, dy) < r)) continue;
         let fog = 0; // how much fog round it (a 7x7 sample, 3 tiles apart)
         for (let oy = -9; oy <= 9; oy += 3) for (let ox = -9; ox <= 9; ox += 3) if (unseen(Math.floor(cx + ox), y + oy)) fog++;

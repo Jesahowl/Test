@@ -32,6 +32,8 @@ module.exports = {
   campSpotOk(camp, x, y, strict) {
     const k = this.idx(x, y);
     if (this.grid[k] !== 0) return false;
+    const hk = this.hex.tileHex[k];
+    if (this.mountains.has(hk) || this.hex.hexes[hk].n.some((j) => this.mountains.has(j))) return false; // (not in or against the mountains)
     if (strict && this.terr[k] !== 0) return false;
     if (strict && camp.x >= 0 && dist(x, y, camp.x, camp.y) < C.CAMP_MOVE_MIN) return false;
     if (this.campGap(camp, x, y) < C.CAMP_SPACING) return false;
@@ -51,6 +53,7 @@ module.exports = {
       const x = margin + Math.floor(this.rand() * (this.w - margin * 2));
       const y = margin + Math.floor(this.rand() * (this.h - margin * 2));
       if (this.grid[this.idx(x, y)] !== 0) continue;
+      if (this.mountains.has(this.hex.tileHex[this.idx(x, y)])) continue;
       let nearCore = false;
       for (const p of this.players.values()) if (p.alive && dist(x, y, p.core.x, p.core.y) < C.CAMP_CORE_DIST) nearCore = true;
       for (const t of this.towers.values()) if (dist(x, y, t.x, t.y) < 3) nearCore = true;

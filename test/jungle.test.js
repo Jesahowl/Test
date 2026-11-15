@@ -70,7 +70,8 @@ test('a cleared camp comes back somewhere new, away from cores and other camps',
     run(g, C.CAMP_RESPAWN + 0.5);
     assert.ok(camp.alive);
     const members = [...g.creeps.values()].filter((m) => m.camp === camp.id);
-    assert.ok(members.length > 0 && members.every((m) => Math.hypot(m.hx - camp.x - 0.5, m.hy - camp.y - 0.5) < 1.5));
+    const mid = g.hex.hexes[g.hexAt(camp.x, camp.y)]; // (they gather round the middle of the camp's hex)
+    assert.ok(members.length > 0 && members.every((m) => Math.hypot(m.hx - mid.cx, m.hy - mid.cy) < 1.5));
   }
 });
 

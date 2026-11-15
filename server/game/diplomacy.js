@@ -84,6 +84,7 @@ module.exports = {
       return `At most ${C.MAX_ALLIES} allies each`;
     }
     this.alliances.add(pairKey(pid, from));
+    this.structVersion++; // (paths change: allied walls are solid, hostile ones can be broken through)
     this.callOffAttacks(pid, from);
     this.callOffAttacks(from, pid);
     this.pushFeed(`🤝 ${q.name} and ${p.name} are now allies`);
@@ -102,6 +103,7 @@ module.exports = {
   breakAlliance(pid, other, why = '') {
     if (!this.allied(pid, other)) return null;
     this.alliances.delete(pairKey(pid, other));
+    this.structVersion++; // (paths change: see acceptAlliance)
     const p = this.players.get(pid);
     const q = this.players.get(other);
     if (p && q) {
@@ -156,13 +158,17 @@ module.exports = {
       const sd = this.suddenDeath();
       if (sd) {
         this.alliances.clear();
+        this.structVersion++; // (paths change: see acceptAlliance)
         this.pushFeed('⚔ Sudden death: every alliance is over - only one core can win');
       } else {
         for (const k of [...this.alliances]) {
           const [a, b] = k.split(':').map(Number);
           const pa = this.players.get(a);
           const pb = this.players.get(b);
-          if (!pa || !pa.alive || !pb || !pb.alive) this.alliances.delete(k);
+          if (!pa || !pa.alive || !pb || !pb.alive) {
+            this.alliances.delete(k);
+            this.structVersion++;
+          }
         }
       }
     }

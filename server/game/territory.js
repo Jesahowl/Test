@@ -52,7 +52,7 @@ module.exports = {
   claimStart(p) {
     const i = this.hexAt(p.core.x, p.core.y);
     this.setHex(i, p.id);
-    for (const j of this.hex.hexes[i].n) if (!this.hexOwner[j]) this.setHex(j, p.id);
+    for (const j of this.hex.hexes[i].n) if (!this.hexOwner[j] && !this.mountains.has(j)) this.setHex(j, p.id);
   },
 
   // pid's hexes within `rings` of the hex at tile (x, y) become empty (rings = Infinity: all of
@@ -90,7 +90,7 @@ module.exports = {
   // Can pid buy hex i: empty, touching their land, and not where a barbarian camp stands?
   canBuyHex(pid, i) {
     const h = this.hex.hexes[i];
-    if (!h || this.hexOwner[i]) return false;
+    if (!h || this.hexOwner[i] || this.mountains.has(i)) return false; // (mountains belong to nobody)
     if (!h.n.some((j) => this.hexOwner[j] === pid)) return false;
     for (const c of this.camps) if (c.alive && this.hexAt(c.x, c.y) === i) return false;
     return true;

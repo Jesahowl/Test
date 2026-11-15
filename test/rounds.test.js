@@ -143,3 +143,22 @@ test('in sudden death, troops sent at a core hit it when they reach it, even wit
   g.order(a.id, atk.map((u) => u.id), { k: 'c', id: b.id });
   assert.ok(run(g, 5, () => !b.alive), 'the core falls');
 });
+
+test("time's up: a while into sudden death the round ends, and the most land wins", () => {
+  const g = new Game({ botTarget: 0, rounds: true, rand: seeded(91) });
+  const a = g.addPlayer('A');
+  const b = g.addPlayer('B');
+  b.territory += 0; // (b gets more land below)
+  g.update(0.05);
+  const core = g.hex.hexes[g.hexAt(b.core.x, b.core.y)];
+  for (const h of g.hex.hexes) if (!g.hexOwner[h.i] && Math.hypot(h.cx - core.cx, h.cy - core.cy) < 12 && !g.mountains.has(h.i)) g.setHex(h.i, b.id);
+  g.update(0.05);
+  assert.ok(b.territory > a.territory);
+  g.time = g.rules.suddenDeath + C.SUDDEN_DEATH_LIMIT - 1;
+  g.update(0.05);
+  assert.strictEqual(g.phase, 'playing', 'not yet');
+  g.time = g.rules.suddenDeath + C.SUDDEN_DEATH_LIMIT;
+  g.update(0.05);
+  assert.strictEqual(g.phase, 'over');
+  assert.strictEqual(g.winner.id, b.id, 'the most land wins');
+});

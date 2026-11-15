@@ -8,6 +8,9 @@ import { label } from './render.js';
 import { toast } from './screens.js';
 import { S, C, ctx, HEX, mouse, players, scale, terr, toScreen } from './state.js';
 
+// The map's mountains (never bought), as the server has them.
+const mountainsNow = () => (S.round && S.round.seed !== undefined ? window.TD_TERRAIN.mapTerrain(S.round.seed, HEX, C.MAP_W, C.MAP_H, { rivers: S.round.rivers !== false }).mountains : new Set());
+
 S.landDrag = null; // { list: [hex index...], set: Set } while dragging
 
 const ownerOf = (i) => terr[HEX.hexes[i].tiles[0]];
@@ -17,9 +20,9 @@ function myLand() {
   return p ? p.territory : 0;
 }
 
-// Mirrors the server's rule: empty, touching my land (or a hex in this drag), no camp in it.
+// Mirrors the server's rule: empty, not a mountain, touching my land (or a hex in this drag), no camp in it.
 function canBuy(i, pending) {
-  if (i < 0 || ownerOf(i) || (pending && pending.has(i))) return false;
+  if (i < 0 || ownerOf(i) || (pending && pending.has(i)) || mountainsNow().has(i)) return false;
   const h = HEX.hexes[i];
   if (!h.n.some((j) => ownerOf(j) === S.myId || (pending && pending.has(j)))) return false;
   for (const c of S.campsView) if (c.alive && HEX.tileHex[c.y * C.MAP_W + c.x] === i) return false;

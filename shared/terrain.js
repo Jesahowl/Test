@@ -1,4 +1,4 @@
-// The ground: which hexes are forest, and where the rivers run. Grown from the round's map seed with value noise, so the
+// The ground: biomes, rivers, mountains, forests, iron ore and gold veins. Grown from the round's map seed with value noise, so the
 // server (where workers chop wood) and every browser (which draws the trees) agree.
 (function (root) {
   'use strict';
@@ -169,16 +169,97 @@
     return rivers;
   }
 
-  // Is hex h an iron ore deposit? Rarer than forests (about one hex in thirty, in clusters), never on a forest,
-  // and only whole hexes.
-  const IRON_AT = 0.7;
-  const isIron = (seed, h) => h.full !== false && !isForest(seed, h) && fbm(seed + 77, h.cx / 7, h.cy / 7) > IRON_AT && hash(seed + 5, h.q, h.r) < 0.45;
+  // ---- the whole map's layout from its seed (server and browsers alike): rivers, mountains,
+  // forests, iron ore and gold veins. Mountains are impassable hexes in ridges, kept out of river
+  // valleys, with passes opened wherever they (and rivers) would cut some land off; iron ore and
+  // gold veins mostly lie in their foothills (the hexes next to them), a few elsewhere.
+  // Returns { rivers, mountains, forest, iron, veins, foothills } (Sets of hex indices).
+  const cache = new Map();
+  function mapTerrain(seed, hex, w, h, opts = {}) {
+    const withRivers = opts.rivers !== false;
+    const withMountains = opts.mountains !== false;
+    const key = `${seed}:${withRivers}:${withMountains}:${hex.hexes.length}`;
+    if (cache.has(key)) return cache.get(key);
+    const rivers = withRivers ? riversOf(seed, hex, w, h) : [];
+    const riverEdge = new Set();
+    const riverHex = new Set();
+    const ekey = (a, b) => (a < b ? `${a}:${b}` : `${b}:${a}`);
+    for (const r of rivers) {
+      for (const e of r.edges) {
+        riverHex.add(e.a);
+        riverHex.add(e.b);
+        if (!e.bridge) riverEdge.add(ekey(e.a, e.b));
+      }
+    }
+    // mountains: ridges of a ridged noise, where a broader mask says there's high country
+    const mountains = new Set();
+    for (const hx of hex.hexes) {
+      if (!withMountains || hx.full === false || riverHex.has(hx.i)) continue;
+      const ridge = 1 - Math.abs(fbm(seed + 60, hx.cx / 15, hx.cy / 15) * 2 - 1);
+      const mask = fbm(seed + 61, hx.cx / 32, hx.cy / 32);
+      if (ridge > 0.9 && mask > 0.55) mountains.add(hx.i);
+    }
+    // never cut land off: while the open hexes fall apart into pieces, open passes into the
+    // smallest piece (remove the mountains round it)
+    for (let guard = 0; guard < 60; guard++) {
+      const comp = new Map();
+      const sizes = [];
+      for (const hx of hex.hexes) {
+        if (mountains.has(hx.i) || comp.has(hx.i)) continue;
+        const id = sizes.length;
+        let n = 0;
+        const stack = [hx.i];
+        comp.set(hx.i, id);
+        while (stack.length) {
+          const i = stack.pop();
+          n++;
+          for (const j of hex.hexes[i].n) {
+            if (comp.has(j) || mountains.has(j) || riverEdge.has(ekey(i, j))) continue;
+            comp.set(j, id);
+            stack.push(j);
+          }
+        }
+        sizes.push(n);
+      }
+      if (sizes.length <= 1) break;
+      const small = sizes.indexOf(Math.min(...sizes));
+      let opened = false;
+      for (const [i, id] of comp) {
+        if (id !== small) continue;
+        for (const j of hex.hexes[i].n) {
+          if (mountains.delete(j)) opened = true;
+        }
+      }
+      if (!opened) break; // (cut off by rivers alone: nothing mountains can do)
+    }
+    const foothills = new Set();
+    for (const i of mountains) for (const j of hex.hexes[i].n) if (!mountains.has(j)) foothills.add(j);
+    const forest = new Set();
+    const iron = new Set();
+    const veins = new Set();
+    for (const hx of hex.hexes) {
+      if (mountains.has(hx.i)) continue;
+      if (isForest(seed, hx)) forest.add(hx.i);
+    }
+    for (const hx of hex.hexes) {
+      if (hx.full === false || mountains.has(hx.i) || forest.has(hx.i)) continue;
+      const hill = foothills.has(hx.i);
+      // iron: mostly in the foothills, a little out in the open
+      const ore = hill ? hash(seed + 5, hx.q, hx.r) < 0.25 : fbm(seed + 77, hx.cx / 7, hx.cy / 7) > 0.7 && hash(seed + 5, hx.q, hx.r) < 0.12;
+      if (ore) {
+        iron.add(hx.i);
+        continue;
+      }
+      // gold veins: rare, nearly always in the foothills
+      if (hash(seed + 913, hx.q * 7 + 3, hx.r * 11 + 5) < (hill ? 0.07 : 0.0015)) veins.add(hx.i);
+    }
+    const out = { rivers, mountains, forest, iron, veins, foothills };
+    if (cache.size > 40) cache.clear();
+    cache.set(key, out);
+    return out;
+  }
 
-  // Is hex h a gold vein? Rare (about one hex in 140: a handful a map): whole hexes only, never a
-  // forest or an ore deposit.
-  const isGoldVein = (seed, h) => h.full !== false && !isForest(seed, h) && !isIron(seed, h) && hash(seed + 913, h.q * 7 + 3, h.r * 11 + 5) < 0.007;
-
-  const api = { hash, climate, biomeOf, groundColor, isForest, isIron, isGoldVein, riversOf };
+  const api = { hash, climate, biomeOf, groundColor, isForest, mapTerrain, riversOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.TD_TERRAIN = api;
 })(typeof window !== 'undefined' ? window : globalThis);
