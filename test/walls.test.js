@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const C = require('../shared/config');
-const { duel, troops, run } = require('./helpers');
+const { Game, seeded, duel, troops, run } = require('./helpers');
 
 // Every edge of p's border that can take a wall (not along a river or a mountain), as [mine, theirs] hex pairs.
 function border(g, p) {
@@ -297,4 +297,36 @@ test('mountains: impassable ridges; every map stays connected; iron and gold sit
     return false;
   });
   assert.strictEqual(inside, 0, 'never set foot on the mountain');
+});
+
+test('mountains stay thin and spread out (no fortresses), and never near a base\'s starting land', () => {
+  for (let seed = 1; seed <= 20; seed++) {
+    const g = new Game({ botTarget: 0, rand: seeded(seed * 17), rounds: true });
+    const m = g.mountains;
+    const seen = new Set();
+    for (const i of m) {
+      if (seen.has(i)) continue;
+      let n = 0;
+      const stack = [i];
+      seen.add(i);
+      while (stack.length) {
+        const k = stack.pop();
+        n++;
+        for (const j of g.hex.hexes[k].n) if (m.has(j) && !seen.has(j)) { seen.add(j); stack.push(j); }
+      }
+      assert.ok(n <= 6, `seed ${seed}: a ridge of ${n} hexes`);
+    }
+    for (const h of g.hex.hexes) {
+      const round = h.n.filter((j) => m.has(j)).length;
+      assert.ok(round <= 2, `seed ${seed}: hex ${h.i} has ${round} mountains round it`);
+    }
+    for (let k = 0; k < 8; k++) {
+      const p = g.addPlayer(`P${k}`, true);
+      assert.ok(p, 'everyone finds a spot');
+      const core = g.hex.hexes[g.hexAt(p.core.x, p.core.y)];
+      const near = new Set([core.i, ...core.n]);
+      for (const j of core.n) for (const x of g.hex.hexes[j].n) near.add(x);
+      assert.ok(![...near].some((j) => m.has(j)), `seed ${seed}: no mountain within two rings of a base`);
+    }
+  }
 });

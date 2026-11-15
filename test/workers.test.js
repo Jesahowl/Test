@@ -99,6 +99,9 @@ test('workers chop forests and carry the wood home', () => {
 test('workers farm their land for gold, and repair damaged buildings for gold', () => {
   const { g, a } = setup(73);
   only(a, 'farm');
+  // (make sure some of a's land is open ground to farm, whatever the map put there)
+  const core = g.hex.hexes[g.hexAt(a.core.x, a.core.y)];
+  for (const j of core.n) if (g.hexOwner[j] === a.id) { g.forest.delete(j); g.ore.delete(j); g.veins.delete(j); }
   respawn(g, a);
   run(g, 25);
   assert.ok(a.earned.farm > 0, 'farming pays');

@@ -199,6 +199,40 @@
       const mask = fbm(seed + 61, hx.cx / 32, hx.cy / 32);
       if (ridge > 0.9 && mask > 0.55) mountains.add(hx.i);
     }
+    // Keep ranges thin and spread out, so nobody gets a natural fortress: (1) a mountain with three
+    // or more mountain neighbours goes (blobs become lines); (2) an open hex with three or more
+    // mountain neighbours loses some (no sheltered nooks); (3) ridges are at most MAX_RIDGE hexes,
+    // with gaps cut in longer ones.
+    const MAX_RIDGE = 6;
+    const order = [...mountains].sort((a, b) => hash(seed + 62, a, 1) - hash(seed + 62, b, 1));
+    const mNeighbours = (i) => hex.hexes[i].n.filter((j) => mountains.has(j));
+    for (const i of order) if (mountains.has(i) && mNeighbours(i).length >= 3) mountains.delete(i);
+    for (const hx of hex.hexes) {
+      if (mountains.has(hx.i)) continue;
+      const round = mNeighbours(hx.i).sort((a, b) => hash(seed + 63, a, 2) - hash(seed + 63, b, 2));
+      while (round.length > 2) mountains.delete(round.pop());
+    }
+    for (let guard = 0; guard < 50; guard++) {
+      let cut = false;
+      const seenR = new Set();
+      for (const start of [...mountains].sort((a, b) => a - b)) {
+        if (seenR.has(start)) continue;
+        const ridge = [];
+        const stack = [start];
+        seenR.add(start);
+        while (stack.length) {
+          const i = stack.shift();
+          ridge.push(i);
+          for (const j of hex.hexes[i].n) if (mountains.has(j) && !seenR.has(j)) { seenR.add(j); stack.push(j); }
+        }
+        if (ridge.length > MAX_RIDGE) {
+          for (let k = MAX_RIDGE; k < ridge.length; k += MAX_RIDGE + 1) mountains.delete(ridge[k]);
+          cut = true;
+        }
+      }
+      if (!cut) break;
+    }
+
     // never cut land off: while the open hexes fall apart into pieces, open passes into the
     // smallest piece (remove the mountains round it)
     for (let guard = 0; guard < 60; guard++) {
@@ -245,13 +279,13 @@
       if (hx.full === false || mountains.has(hx.i) || forest.has(hx.i)) continue;
       const hill = foothills.has(hx.i);
       // iron: mostly in the foothills, a little out in the open
-      const ore = hill ? hash(seed + 5, hx.q, hx.r) < 0.25 : fbm(seed + 77, hx.cx / 7, hx.cy / 7) > 0.7 && hash(seed + 5, hx.q, hx.r) < 0.12;
+      const ore = hill ? hash(seed + 5, hx.q, hx.r) < 0.18 : fbm(seed + 77, hx.cx / 7, hx.cy / 7) > 0.7 && hash(seed + 5, hx.q, hx.r) < 0.12;
       if (ore) {
         iron.add(hx.i);
         continue;
       }
       // gold veins: rare, nearly always in the foothills
-      if (hash(seed + 913, hx.q * 7 + 3, hx.r * 11 + 5) < (hill ? 0.07 : 0.0015)) veins.add(hx.i);
+      if (hash(seed + 913, hx.q * 7 + 3, hx.r * 11 + 5) < (hill ? 0.04 : 0.001)) veins.add(hx.i);
     }
     const out = { rivers, mountains, forest, iron, veins, foothills };
     if (cache.size > 40) cache.clear();
