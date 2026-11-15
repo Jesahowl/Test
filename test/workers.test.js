@@ -147,3 +147,41 @@ test('job priorities, sending a worker by hand, workshops and raids', () => {
   assert.strictEqual(b.gold, gold + C.WORKER_BOUNTY);
   assert.strictEqual(b.wood, wood + 7);
 });
+
+test('iron: workers mine ore deposits and carry it home; troop levels cost iron', () => {
+  const { g, a, b } = setup(76);
+  assert.ok(g.ore.size > 10, `the map has ore deposits (${g.ore.size})`);
+  assert.strictEqual(a.iron, C.START_IRON);
+  // troop levels need iron as well as gold
+  a.iron = 0;
+  assert.match(g.armyLevel(a.id, 'soldier'), /iron/);
+  a.iron = C.armyLevelIron('soldier', 1);
+  const gold = a.gold;
+  assert.strictEqual(g.armyLevel(a.id, 'soldier'), null);
+  assert.strictEqual(a.iron, 0, 'the iron was spent');
+  assert.strictEqual(a.gold, gold - C.armyLevelCost('soldier', 1));
+  assert.ok(C.armyLevelIron('soldier', 3) > C.armyLevelIron('soldier', 1) && C.armyLevelIron('siege', 1) > C.armyLevelIron('soldier', 1), 'more for higher levels and bigger troops');
+  // mining: a deposit near a's core
+  only(a, 'mine');
+  const core = g.hex.hexes[g.hexAt(a.core.x, a.core.y)];
+  const near = g.hex.hexes.filter((h) => !g.hexOwner[h.i] && h.full && !g.forest.has(h.i) && Math.hypot(h.cx - core.cx, h.cy - core.cy) < 14)[0];
+  g.ore.set(near.i, C.IRON_ORE);
+  const iron0 = a.iron;
+  respawn(g, a);
+  run(g, 60);
+  assert.ok(a.iron > iron0, `iron came home (${iron0} -> ${a.iron})`);
+  assert.ok([...g.ore.values()].some((v) => v < C.IRON_ORE), 'a deposit was mined');
+  // deposits build back up
+  for (const u of workers(g, a)) g.units.delete(u.id);
+  const [i, left] = [...g.ore.entries()].find(([, v]) => v < C.IRON_ORE);
+  run(g, 5);
+  assert.ok(g.ore.get(i) > left, 'and build back up');
+  // a raided miner pays its iron to the raider
+  respawn(g, a);
+  const [v] = workers(g, a);
+  v.carry = 5;
+  v.carryKind = 'iron';
+  const bi = b.iron;
+  g.damageUnit(v, 1e6, b.id);
+  assert.strictEqual(b.iron, bi + 5);
+});

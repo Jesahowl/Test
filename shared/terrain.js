@@ -120,7 +120,12 @@
     return rivers;
   }
 
-  const api = { hash, isForest, riversOf };
+  // Is hex h an iron ore deposit? Rarer than forests (about one hex in thirty, in clusters), never on a forest,
+  // and only whole hexes.
+  const IRON_AT = 0.7;
+  const isIron = (seed, h) => h.full !== false && !isForest(seed, h) && fbm(seed + 77, h.cx / 7, h.cy / 7) > IRON_AT && hash(seed + 5, h.q, h.r) < 0.45;
+
+  const api = { hash, isForest, isIron, riversOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.TD_TERRAIN = api;
 })(typeof window !== 'undefined' ? window : globalThis);

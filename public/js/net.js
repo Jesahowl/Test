@@ -278,6 +278,7 @@ function applyState(msg) {
 
   // Forest hexes that have been chopped: hex -> wood left in fifths (missing = full).
   S.forestLeft = merge(S.forestLeft, msg.forest, (a) => a[1]);
+  if (msg.ore) S.oreLeft = merge(S.oreLeft, msg.ore, (a) => a[1]);
   if (S.selWorker && !S.units.has(S.selWorker)) S.selWorker = null;
   S.campMap = merge(S.campMap, msg.camps, (a) => ({ id: a[0], x: a[1], y: a[2], type: CAMP_KEYS[a[3]], alive: !!a[4], respawn: a[5] }));
   S.camps = [...S.campMap.values()];

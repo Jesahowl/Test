@@ -1,5 +1,6 @@
-// The ground: muted plains with patches of forest (little pine trees) and rivers running along hex
-// edges (crossed only by their stone bridges), drawn under everyone's land.
+// The ground: muted plains with patches of forest (little pine trees), iron ore deposits (rust-red
+// rocks) and rivers running along hex edges (crossed only by their stone bridges), drawn under
+// everyone's land.
 // Forests don't slow or hide troops; workers chop them for wood (each hex thins to stumps as it's
 // chopped, then grows back). Where forests grow comes from the round's map seed.
 
@@ -11,8 +12,30 @@ const TREE_DARK = '#22422b';
 const TREE_LIGHT = '#346343';
 const TREE_SHADOW = 'rgba(0,0,0,0.35)';
 const STUMP = '#4a3826';
+// iron ore deposits: rust-dark ground, red-brown rocks with ore specks (rubble once mined out)
+const ORE = { ground: '#2a201c', rock: '#6b3f30', lit: '#8a5440', crack: '#40241a', speck: '#c0704a', rubble: '#3e2a22' };
 
-const { hash, isForest, riversOf } = window.TD_TERRAIN; // shared with the server (shared/terrain.js)
+// One ore rock at (x, y), size s (tile units), as paths.
+function oreRock(x, y, s) {
+  const r = { x, y, s, shadow: new Path2D(), body: new Path2D(), lit: new Path2D(), crack: new Path2D() };
+  r.shadow.ellipse(x + 0.05, y + s * 0.45, s * 1.05, s * 0.32, 0, 0, Math.PI * 2);
+  r.body.moveTo(x - s, y + s * 0.4);
+  r.body.lineTo(x - s * 0.7, y - s * 0.4);
+  r.body.lineTo(x - s * 0.1, y - s * 0.75);
+  r.body.lineTo(x + s * 0.75, y - s * 0.35);
+  r.body.lineTo(x + s, y + s * 0.4);
+  r.body.closePath();
+  r.lit.moveTo(x - s * 0.7, y - s * 0.4);
+  r.lit.lineTo(x - s * 0.1, y - s * 0.75);
+  r.lit.lineTo(x + s * 0.05, y + s * 0.4);
+  r.lit.lineTo(x - s, y + s * 0.4);
+  r.lit.closePath();
+  r.crack.moveTo(x - s * 0.1, y - s * 0.75);
+  r.crack.lineTo(x + s * 0.05, y + s * 0.4);
+  return r;
+}
+
+const { hash, isForest, isIron, riversOf } = window.TD_TERRAIN; // shared with the server (shared/terrain.js)
 
 // rivers: bank, deep water, the lighter middle (widths in tiles) and the stone of their bridges
 const RIVER = { bank: '#2b3326', deep: '#1a3440', mid: '#22495a', flow: 'rgba(200, 230, 240, 0.16)', bankW: 1.6, deepW: 1.2, midW: 0.55 };
@@ -118,6 +141,25 @@ function build(seed) {
   const rivers = buildRivers(seed);
   const fill = new Path2D();
   const forests = [];
+  const oreFill = new Path2D();
+  const ores = [];
+  for (const h of HEX.hexes) {
+    if (!isIron(seed, h)) continue;
+    const cs = HEX.corners(h);
+    oreFill.moveTo(cs[0][0], cs[0][1]);
+    for (let k = 1; k < 6; k++) oreFill.lineTo(cs[k][0], cs[k][1]);
+    oreFill.closePath();
+    // five rocks; `rank` is the order they're mined away in
+    const rocks = [[0, 0.05], [-1.0, -0.6], [0.95, -0.7], [-0.9, 0.75], [1.0, 0.7]].map(([dx, dy], k) => {
+      const r = oreRock(h.cx + dx + (hash(seed, h.i * 5 + k, 31) - 0.5) * 0.5, h.cy + dy + (hash(seed, h.i, 131 + k) - 0.5) * 0.4, 0.42 + hash(seed, k + 9, h.i) * 0.18);
+      r.cut = hash(seed, h.i, 600 + k);
+      r.specks = [0, 1].map((j) => [r.x + (hash(seed, h.i * 3 + k, 700 + j) - 0.5) * r.s, r.y + (hash(seed, h.i * 3 + k, 800 + j) - 0.6) * r.s * 0.6]);
+      return r;
+    });
+    [...rocks].sort((a, b) => a.cut - b.cut).forEach((r, n) => { r.rank = n; });
+    rocks.sort((a, b) => a.y - b.y);
+    ores.push({ i: h.i, x: h.cx, y: h.cy, rocks });
+  }
   for (const h of HEX.hexes) {
     if (!isForest(seed, h)) continue;
     const cs = HEX.corners(h);
@@ -136,7 +178,7 @@ function build(seed) {
     trees.sort((a, b) => a.y - b.y);
     forests.push({ i: h.i, x: h.cx, y: h.cy, trees });
   }
-  return { seed, fill, forests, rivers };
+  return { seed, fill, forests, rivers, oreFill, ores };
 }
 
 // Draw the ground under the map rectangle at screen (ox, oy), s pixels per tile.
@@ -155,6 +197,8 @@ function drawTerrain(ox, oy, s) {
   ctx.scale(s, s);
   ctx.fillStyle = FOREST;
   ctx.fill(built.fill);
+  ctx.fillStyle = ORE.ground;
+  ctx.fill(built.oreFill);
   drawRivers(built.rivers);
   if (s >= 5) {
     // trees on the forest hexes in view, except where a building, core or camp stands
@@ -167,6 +211,35 @@ function drawTerrain(ox, oy, s) {
     const y0 = -oy / s - 3;
     const x1 = x0 + ctx.canvas.width / s + 6;
     const y1 = y0 + ctx.canvas.height / s + 6;
+    // iron ore deposits: their rocks (mined-out ones as rubble)
+    for (const o of built.ores) {
+      if (o.x < x0 || o.x > x1 || o.y < y0 || o.y > y1 || taken.has(o.i)) continue;
+      const left = S.oreLeft.has(o.i) ? S.oreLeft.get(o.i) : 5;
+      for (const r of o.rocks) {
+        if (r.rank >= left) {
+          ctx.fillStyle = ORE.rubble;
+          ctx.beginPath();
+          ctx.ellipse(r.x, r.y + r.s * 0.3, r.s * 0.5, r.s * 0.18, 0, 0, Math.PI * 2);
+          ctx.fill();
+          continue;
+        }
+        ctx.fillStyle = TREE_SHADOW;
+        ctx.fill(r.shadow);
+        ctx.fillStyle = ORE.rock;
+        ctx.fill(r.body);
+        ctx.fillStyle = ORE.lit;
+        ctx.fill(r.lit);
+        ctx.strokeStyle = ORE.crack;
+        ctx.lineWidth = 0.04;
+        ctx.stroke(r.crack);
+        ctx.fillStyle = ORE.speck;
+        for (const [sx, sy] of r.specks) {
+          ctx.beginPath();
+          ctx.arc(sx, sy, 0.07, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
     for (const f of built.forests) {
       if (f.x < x0 || f.x > x1 || f.y < y0 || f.y > y1 || taken.has(f.i)) continue;
       const left = S.forestLeft.has(f.i) ? S.forestLeft.get(f.i) : 5; // trees still standing

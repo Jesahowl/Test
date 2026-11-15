@@ -39,6 +39,7 @@ module.exports = {
       ...this.pickColour(),
       gold: this.rules.testMode && !isBot ? C.TEST_FUNDS : this.rules.startGold,
       wood: this.rules.testMode && !isBot ? C.TEST_FUNDS : C.START_WOOD,
+      iron: this.rules.testMode && !isBot ? C.TEST_FUNDS : C.START_IRON,
       jobs: { ...C.START_JOBS }, // worker job priorities (see workers.js)
       core: { x: pos.x, y: pos.y, hp: C.CORE_HP, maxHp: C.CORE_HP, cd: 0 },
       territory: 0,
@@ -85,6 +86,7 @@ module.exports = {
       const y = (k - x) / this.w;
       if (this.grid[k] !== 0 || this.hexOwner[hx.i] || hx.n.some((j) => this.hexOwner[j])) continue;
       if (this.riverHexes.has(hx.i) || hx.n.some((j) => this.riverHexes.has(j))) continue; // no river through a new base
+      if (this.ore.has(hx.i)) continue; // nor a core on an ore deposit
       if (this.camps.some((c) => c.alive && dist(x, y, c.x, c.y) < 7)) continue;
       let score = Infinity; // distance to the nearest base (buildings count as a bit closer than they are)
       for (const o of others) score = Math.min(score, dist(x, y, o.x, o.y) - o.w);

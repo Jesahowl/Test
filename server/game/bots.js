@@ -114,6 +114,9 @@ module.exports = {
     const farm = p.wood > 300 ? 2 : 1;
     if (p.jobs.gather !== gather) this.setJobPriority(p.id, 'gather', gather);
     if (p.jobs.farm !== farm) this.setJobPriority(p.id, 'farm', farm);
+    // iron for troop levels: mine it while short
+    const mine = (p.iron || 0) < 60 ? 2 : (p.iron || 0) > 200 ? 0 : 1;
+    if (p.jobs.mine !== mine) this.setJobPriority(p.id, 'mine', mine);
     const shops = structures.filter((t) => t.kind === 'workshop').length;
     if (towers.length >= 1 && shops < Math.min(C.MAX_WORKSHOPS, 1 + Math.floor(age / 300)) && p.gold >= C.TOWERS.workshop.cost + 60
       && p.wood >= C.TOWERS.workshop.wood && roll < 0.5) {
@@ -153,7 +156,7 @@ module.exports = {
       // the troop kinds the army has most of (by slots), weighted
       const use = {};
       for (const q of p.squads) for (const k of UNIT_KEYS) use[k] = (use[k] || 0) + (q.mix[k] || 0) * C.slotsOf(k);
-      const kinds = UNIT_KEYS.filter((k) => use[k] > 0 && p.levels[k] < C.MAX_LEVEL);
+      const kinds = UNIT_KEYS.filter((k) => use[k] > 0 && p.levels[k] < C.MAX_LEVEL && (p.iron || 0) >= C.armyLevelIron(k, p.levels[k]));
       const total = kinds.reduce((t, k) => t + use[k] / (1 + p.levels[k]), 0);
       let pick = this.rand() * total;
       for (const k of kinds) {

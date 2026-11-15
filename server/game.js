@@ -147,6 +147,7 @@ class Game {
         // test mode (for development): people never run out of gold or wood (bots play normally)
         p.gold = C.TEST_FUNDS;
         p.wood = C.TEST_FUNDS;
+        p.iron = C.TEST_FUNDS;
       }
     }
 
@@ -212,7 +213,7 @@ class Game {
       c.alive ? 0 : Math.max(0, Math.ceil(c.respawnAt - this.time))]);
     const walls = [];
     for (const w of this.walls.values()) walls.push([w.id, w.a, w.b, w.owner, Math.ceil(w.hp), w.maxHp, w.gate ? 1 : 0, w.progress < 1 ? Math.floor(w.progress * 100) : 100]);
-    const snap = { players, towers, walls, units, creeps, camps, forest: this.forestRows(), fx: this.fx, feed: this.feed };
+    const snap = { players, towers, walls, units, creeps, camps, forest: this.forestRows(), ore: this.oreRows(), fx: this.fx, feed: this.feed };
     if (this.rounds) {
       snap.round = {
         n: this.round, phase: this.phase, t: Math.floor(this.time), seed: this.mapSeed, rivers: this.riversOn,
@@ -237,6 +238,7 @@ class Game {
       id: p.id,
       gold: Math.floor(p.gold),
       wood: Math.floor(p.wood),
+      iron: Math.floor(p.iron || 0),
       noFog: p.noFog || undefined, // (test mode: fog switched off for me)
       workers: [this.workerCap(p), C.WORKER_JOBS.map((j) => p.jobs[j])],
       nextWave: Math.max(0, Math.ceil(p.nextWaveAt - this.time)),

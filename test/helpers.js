@@ -20,6 +20,7 @@ function duel(seed = 1, opts = {}) {
   for (const p of [a, b]) {
     p.gold = 1e6;
     p.wood = 1e6;
+    p.iron = 1e6;
     p.spawnTime = -1000;
     p.nextWaveAt = Infinity;
   }

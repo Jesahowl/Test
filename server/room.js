@@ -19,7 +19,7 @@ const Game = require('./game');
 const SEND_EVERY = Math.max(1, Math.round(C.TICK_RATE / C.SNAPSHOT_RATE));
 // Buildings, players and camps are the same for everyone; troops, monsters and effects are
 // filtered per player by fog of war (spectators see everything).
-const COLLECTIONS = ['players', 'towers', 'walls', 'camps', 'forest'];
+const COLLECTIONS = ['players', 'towers', 'walls', 'camps', 'forest', 'ore'];
 const PRIVATE = ['units', 'creeps'];
 
 // Remembers the last rows sent for one entity list (rows are arrays whose first item is the id)

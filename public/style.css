@@ -393,7 +393,7 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 .test-fog { padding: 1px 8px; border-radius: 5px; border: 1px solid #ffb35c66; background: transparent; color: #8b949e; font-size: 11px; font-weight: 700; cursor: pointer; pointer-events: auto; }
 .test-fog.on { color: #ffb35c; background: #4a2a10; }
 .test-badge { display: inline-block; padding: 1px 7px; border-radius: 5px; background: #4a2a10; color: #ffb35c; font-size: 11px; font-weight: 800; letter-spacing: 0.5px; }
-#stats.test-mode .gold, #stats.test-mode .wood { color: #ffb35c; }
+#stats.test-mode .gold, #stats.test-mode .wood, #stats.test-mode .iron { color: #ffb35c; }
 #test-game { width: 100%; margin-top: 8px; font-size: 13.5px; padding: 8px 12px; border: 1px dashed #ffb35c66; }
 #test-game .muted { font-weight: 500; font-size: 12px; }
 .lobby-tag { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); font-weight: 700; }
@@ -467,6 +467,7 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 
 /* ---------------------------------------------------------------- wood and workers */
 #stats .wood-row { font-weight: 800; font-size: 15px; color: #e3b98a; display: flex; align-items: center; gap: 4px; }
+#stats .iron-row { font-weight: 800; font-size: 15px; color: #e09070; display: flex; align-items: center; gap: 4px; }
 .tile .cost .wd { color: #e3b98a; margin-left: 2px; }
 .tile .cost .wd.short { color: var(--bad-soft); }
 #drawer [data-dr="workers"] { width: 460px; }

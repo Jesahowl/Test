@@ -244,7 +244,15 @@ function workerFigure(T, job, carry) {
   const farming = job === 4;
   const scouting = job === 5;
   body(T, {
-    back: carry ? () => {
+    back: carry && job === 6 ? () => {
+      // a sack of iron ore
+      rr(-0.72, -0.3, 0.5, 0.55, 0.18);
+      fillOut('#7a5a3a');
+      for (const [x, y] of [[-0.6, -0.36], [-0.42, -0.4], [-0.5, -0.24]]) {
+        circ(x, y, 0.1);
+        fillOut('#8a5440');
+      }
+    } : carry ? () => {
       for (const [y, l] of [[-0.18, 0.95], [0.02, 0.85]]) {
         g.save();
         g.translate(-0.42, y);
@@ -324,6 +332,16 @@ function workerFigure(T, job, carry) {
         g.moveTo(0.58, -0.45);
         g.quadraticCurveTo(0.95, -0.42, 0.9, -0.12);
         g.lineTo(0.58, -0.18);
+        g.closePath();
+        fillOut(METAL);
+      } else if (job === 6) {
+        // pickaxe
+        outlined([[0.6, 0.5], [0.6, -0.45]], WOOD, 0.08);
+        begin();
+        g.moveTo(0.22, -0.32);
+        g.quadraticCurveTo(0.6, -0.62, 0.98, -0.32);
+        g.lineTo(0.94, -0.26);
+        g.quadraticCurveTo(0.6, -0.48, 0.26, -0.26);
         g.closePath();
         fillOut(METAL);
       } else if (job === 4) {

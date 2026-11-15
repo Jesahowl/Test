@@ -26,10 +26,11 @@ module.exports = {
     }
     const p = this.players.get(byPid);
     if (u.worker) {
-      // a raided worker: a little gold, and the wood it was carrying
+      // a raided worker: a little gold, and the wood or iron it was carrying
       if (p && p.alive && byPid !== u.owner) {
         this.award(p, C.WORKER_BOUNTY, 'troops', u.x, u.y);
-        p.wood += Math.floor(u.carry || 0);
+        if (u.carryKind === 'iron') p.iron = (p.iron || 0) + Math.floor(u.carry || 0);
+        else p.wood += Math.floor(u.carry || 0);
         p.kills++;
       }
       return;

@@ -1,6 +1,6 @@
 'use strict';
 
-// Workers and wood: building sites, repairs, chopping forests and farming.
+// Workers, wood and iron: building sites, repairs, chopping forests, mining iron ore and farming.
 // - Each player has BASE_WORKERS plus WORKSHOP_WORKERS per finished Workshop. They're units (kind
 //   'worker', no squad) that never fight; enemies can kill them for a bounty (and the wood they
 //   carried). Fallen workers respawn with the troops, at the core and workshops.
@@ -17,7 +17,7 @@
 const { C, dist, round2 } = require('./common');
 const Terrain = require('../../shared/terrain');
 
-const JOB_CODE = { build: 1, repair: 2, gather: 3, farm: 4, scout: 5 };
+const JOB_CODE = { build: 1, repair: 2, gather: 3, farm: 4, scout: 5, mine: 6 };
 
 module.exports = {
   // ---- the forest
@@ -25,6 +25,15 @@ module.exports = {
   initForest() {
     this.forest = new Map(); // hex index -> wood left
     for (const h of this.hex.hexes) if (Terrain.isForest(this.mapSeed, h)) this.forest.set(h.i, C.FOREST_WOOD);
+    this.ore = new Map(); // hex index -> iron left in an ore deposit
+    for (const h of this.hex.hexes) if (Terrain.isIron(this.mapSeed, h)) this.ore.set(h.i, C.IRON_ORE);
+  },
+
+  // Ore deposits that aren't full, as snapshot rows [hex, iron left in fifths (0-4)].
+  oreRows() {
+    const rows = [];
+    for (const [i, iron] of this.ore) if (iron < C.IRON_ORE) rows.push([i, Math.min(4, Math.floor((5 * iron) / C.IRON_ORE))]);
+    return rows;
   },
 
   // Forest hexes that aren't full, as snapshot rows [hex, wood left in fifths (0-4)].
@@ -123,6 +132,7 @@ module.exports = {
     if (k === 'h') {
       if (!Number.isInteger(id) || !this.hex.hexes[id]) return 'Invalid spot';
       if (this.forest.has(id)) return this.canChop(p, id) ? { type: 'gather', k: 'h', id } : 'That forest has been chopped bare: it\'s growing back';
+      if (this.ore.has(id)) return this.canMine(p, id) ? { type: 'mine', k: 'h', id } : 'That deposit is mined out for now: it builds back up slowly';
       return this.canFarm(p, id) ? { type: 'farm', k: 'h', id } : 'Workers farm open hexes of your own land';
     }
     return 'Invalid target';
@@ -134,9 +144,14 @@ module.exports = {
     return this.forest.has(i) && this.forest.get(i) >= 1;
   },
 
+  // Ore deposits a player's workers may mine: any with iron left, anywhere on the map.
+  canMine(p, i) {
+    return this.ore.has(i) && this.ore.get(i) >= 1 && !this.buildingHexes()[i]; // (not under a building)
+  },
+
   canFarm(p, i) {
     const h = this.hex.hexes[i];
-    return this.hexOwner[i] === p.id && !this.forest.has(i) && !this.buildingHexes()[i] && h.full && i !== this.hexAt(p.core.x, p.core.y);
+    return this.hexOwner[i] === p.id && !this.forest.has(i) && !this.ore.has(i) && !this.buildingHexes()[i] && h.full && i !== this.hexAt(p.core.x, p.core.y);
   },
 
   // ---- choosing jobs
@@ -163,6 +178,7 @@ module.exports = {
     if (job.type === 'build') return !this.finished(at.obj);
     if (job.type === 'repair') return this.finished(at.obj) && at.obj.hp < at.obj.maxHp && p.gold >= 1;
     if (job.type === 'gather') return this.canChop(p, job.id);
+    if (job.type === 'mine') return this.canMine(p, job.id);
     if (job.type === 'farm') return this.canFarm(p, job.id);
     if (job.type === 'scout') return true;
     return false;
@@ -196,6 +212,12 @@ module.exports = {
         const h = this.hex.hexes[i];
         consider({ type, k: 'h', id: i }, h.cx, h.cy, C.TREE_WORKERS);
       }
+    } else if (type === 'mine') {
+      for (const i of this.ore.keys()) {
+        if (this.ore.get(i) < 2 || !this.canMine(p, i)) continue;
+        const h = this.hex.hexes[i];
+        consider({ type, k: 'h', id: i }, h.cx, h.cy, C.MINE_WORKERS);
+      }
     } else if (type === 'scout') {
       consider({ type, k: 's', id: 0 }, u.x, u.y, C.SCOUT_WORKERS);
     } else if (type === 'farm') {
@@ -220,7 +242,7 @@ module.exports = {
       if (u.job && !this.jobLive(p, u.job)) u.job = null;
       if (this.time < u.thinkAt && u.job) return;
       u.thinkAt = this.time + 1 + this.rand() * 0.5;
-      if (u.carry > 0 && u.job && u.job.type === 'gather') return; // finish the trip first
+      if (u.carry > 0 && u.job && (u.job.type === 'gather' || u.job.type === 'mine')) return; // finish the trip first
       let pick = null;
       for (const types of levels) {
         // equal priorities: start from a different job for each worker so they share out
@@ -246,6 +268,7 @@ module.exports = {
 
   updateWorkers(dt) {
     for (const [i, wood] of this.forest) if (wood < C.FOREST_WOOD) this.forest.set(i, Math.min(C.FOREST_WOOD, wood + C.FOREST_REGROW * dt));
+    for (const [i, iron] of this.ore) if (iron < C.IRON_ORE) this.ore.set(i, Math.min(C.IRON_ORE, iron + C.IRON_REGROW * dt));
     const by = new Map();
     for (const u of this.units.values()) {
       if (!u.worker) continue;
@@ -266,12 +289,17 @@ module.exports = {
     const speed = C.UNITS.worker.speed;
     const job = u.job;
     u.working = false;
-    // carrying wood and done chopping (or the job changed): take it home
-    if (u.carry > 0 && (!job || job.type !== 'gather' || u.carry >= C.WORKER_CARRY || !this.canChop(p, job.id))) {
+    // carrying wood (or iron) and done with that job (or it changed, or the load is full): take it home
+    const iron = u.carryKind === 'iron';
+    const still = job && (iron ? job.type === 'mine' && u.carry < C.IRON_CARRY && this.canMine(p, job.id)
+      : job.type === 'gather' && u.carry < C.WORKER_CARRY && this.canChop(p, job.id));
+    if (u.carry > 0 && !still) {
       const drop = this.dropPoint(p, u);
       if (dist(u.x, u.y, drop.x, drop.y) <= 1.7) {
-        p.wood += Math.floor(u.carry);
+        if (iron) p.iron += Math.floor(u.carry);
+        else p.wood += Math.floor(u.carry);
         u.carry = 0;
+        u.carryKind = null;
       } else this.stepToward(u, drop.x, drop.y, 1.4, speed, dt);
       return;
     }
@@ -321,6 +349,13 @@ module.exports = {
       const chop = Math.min(C.CHOP_RATE * dt, left, C.WORKER_CARRY - u.carry);
       this.forest.set(job.id, left - chop);
       u.carry += chop;
+      u.carryKind = 'wood';
+    } else if (job.type === 'mine') {
+      const left = this.ore.get(job.id) || 0;
+      const dug = Math.min(C.MINE_RATE * dt, left, C.IRON_CARRY - u.carry);
+      this.ore.set(job.id, left - dug);
+      u.carry += dug;
+      u.carryKind = 'iron';
     } else if (job.type === 'farm') {
       u.farmed = (u.farmed || 0) + C.FARM_GOLD * dt;
       if (u.farmed >= 3) {
@@ -364,8 +399,8 @@ module.exports = {
     return u.worker && u.job && u.job.type === 'scout' ? C.SCOUT_SIGHT : C.UNITS[u.kind].sight || 5;
   },
 
-  // For snapshots: what a worker is doing (0 idle, 1 build, 2 repair, 3 gather, 4 farm, 5 scout), +8 when
-  // it's carrying wood, +16 while it's at work on the spot.
+  // For snapshots: what a worker is doing (0 idle, 1 build, 2 repair, 3 gather, 4 farm, 5 scout,
+  // 6 mine), +8 when it's carrying wood or iron, +16 while it's at work on the spot.
   workerCode(u) {
     return (u.job ? JOB_CODE[u.job.type] : 0) + (u.carry > 0 ? 8 : 0) + (u.working ? 16 : 0);
   },

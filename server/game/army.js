@@ -154,8 +154,11 @@ module.exports = {
     const level = p.levels[kind];
     if (level >= C.MAX_LEVEL) return 'Already max level';
     const cost = C.armyLevelCost(kind, level);
+    const iron = C.armyLevelIron(kind, level);
     if (p.gold < cost) return 'Not enough gold';
+    if ((p.iron || 0) < iron) return `Not enough iron (${iron} needed): set workers to mine it`;
     p.gold -= cost;
+    p.iron -= iron;
     p.levels[kind]++;
     return null;
   },

@@ -91,6 +91,7 @@ function buildStats() {
   $('stats').innerHTML = `
     <span class="who"><span class="dot"></span><span class="name"></span><span class="rank" data-tip="Your place on the land leaderboard"></span></span>
     <span class="wood-row" data-tip="<span class='t'>Wood</span>Your workers chop it from forests next to your land and carry it to the core or a workshop. Towers, barracks, trade posts, workshops and walls need it.">🪵 <span class="wood"></span></span>
+    <span class="iron-row" data-tip="<span class='t'>Iron</span>Your workers mine it from iron ore deposits (rust-red rocks) and carry it home. Troop level-ups need it, as well as gold.">⚒ <span class="iron"></span></span>
     <span class="gold-row" data-tip="<span class='t'>Gold</span>Earned from land (a trickle) and mostly from fighting: troop kills, jungle camps, towers and cores. Spend it on towers, barracks and troop levels.">
       <span class="coin"></span><span class="gold"></span><span class="income"></span></span>
     <span class="chip land" data-tip="Tiles you own. More land = more income and room for more troops.">🗺 <b></b> land</span>
@@ -108,6 +109,7 @@ function updateStats(p, gold, rank, n) {
   const test = !!(S.round && S.round.test); // test mode: gold and wood never run out
   el.querySelector('.gold').textContent = test ? '∞' : gold.toLocaleString();
   el.querySelector('.wood').textContent = test ? '∞' : (S.me.wood || 0).toLocaleString();
+  el.querySelector('.iron').textContent = test ? '∞' : (S.me.iron || 0).toLocaleString();
   el.classList.toggle('test-mode', test);
   el.querySelector('.income').textContent = `+${C.income(p.territory).toFixed(1)}/s`;
   el.querySelector('.chip.land b').textContent = p.territory;
@@ -212,6 +214,8 @@ function updateTowerAndArmy(gold) {
     const n = inSquads[kind] || 0;
     const lvl = S.me.levels[kind];
     const upCost = lvl < C.MAX_LEVEL ? C.armyLevelCost(kind, lvl) : 0;
+    const upIron = lvl < C.MAX_LEVEL ? C.armyLevelIron(kind, lvl) : 0;
+    const iron = S.me.iron || 0;
     card.classList.toggle('off', n === 0);
     card.classList.toggle('in', n > 0);
     card.style.setProperty('--c', C.UNITS[kind].color);
@@ -220,12 +224,12 @@ function updateTowerAndArmy(gold) {
     const countEl = card.querySelector('.count');
     if (countEl.innerHTML !== html) countEl.innerHTML = html;
     const up = card.querySelector('.up');
-    up.textContent = lvl < C.MAX_LEVEL ? `▲ Level up ${upCost}g` : 'MAX';
-    up.disabled = lvl >= C.MAX_LEVEL || gold < upCost;
+    up.textContent = lvl < C.MAX_LEVEL ? `▲ Level up ${upCost}g ⚒${upIron}` : 'MAX';
+    up.disabled = lvl >= C.MAX_LEVEL || gold < upCost || iron < upIron;
     const s1 = C.towerStats(kind, lvl);
     const s2 = lvl < C.MAX_LEVEL ? C.towerStats(kind, lvl + 1) : null;
     up.dataset.tip = s2
-      ? `<span class="t">Level ${C.UNITS[kind].name}s up to ${lvl + 1}: ${upCost}g</span>HP ${s1.hp} → <b>${s2.hp}</b>${s1.damage ? ` · damage ${Math.round(s1.damage)} → <b>${Math.round(s2.damage)}</b>` : ''}${s1.heal ? ` · healing ${Math.round(s1.heal)} → <b>${Math.round(s2.heal)}</b>` : ''}<br><span class="m">Applies to troops that respawn after.</span>`
+      ? `<span class="t">Level ${C.UNITS[kind].name}s up to ${lvl + 1}: ${upCost}g + ${upIron} iron</span>${iron < upIron ? `<span class="m">Not enough iron: set workers to ⛏ mine it (Workers drawer).</span><br>` : ''}HP ${s1.hp} → <b>${s2.hp}</b>${s1.damage ? ` · damage ${Math.round(s1.damage)} → <b>${Math.round(s2.damage)}</b>` : ''}${s1.heal ? ` · healing ${Math.round(s1.heal)} → <b>${Math.round(s2.heal)}</b>` : ''}<br><span class="m">Applies to troops that respawn after.</span>`
       : 'Max level';
   }
 }
@@ -235,15 +239,17 @@ const JOBS = [
   ['build', '🔨', 'Build', 'Put up building sites and walls you place'],
   ['repair', '🔧', 'Repair', `Fix damaged buildings, walls and your core (${C.REPAIR_GOLD_PER_HP}g per HP)`],
   ['gather', '🪓', 'Chop wood', 'Chop forests anywhere on the map (the nearest first) and carry the wood to your core or a workshop'],
+  ['mine', '⛏', 'Mine iron', 'Mine iron ore deposits (rust-red rocks) anywhere on the map, the nearest first, and carry the iron home. Troop level-ups need iron'],
   ['farm', '🌾', 'Farm', `Work open hexes of your land: +${C.FARM_GOLD}g/s each`],
   ['scout', '🔭', 'Scout', `Run off exploring the fog: fast, seeing ${C.SCOUT_SIGHT} tiles, keeping clear of enemy guns (at most ${C.SCOUT_WORKERS})`],
 ];
 const LEVELS = ['Off', 'Low', 'Med', 'High'];
+const JOB_CODES = { build: 1, repair: 2, gather: 3, farm: 4, scout: 5, mine: 6 }; // (as the server codes them)
 let jobsBound = false;
 function updateWorkersUi() {
-  const [cap, prio] = S.me.workers || [0, [0, 0, 0, 0, 0]];
+  const [cap, prio] = S.me.workers || [0, [0, 0, 0, 0, 0, 0]];
   const mine = [...S.units.values()].filter((u) => u.owner === S.myId && u.kind === 'worker');
-  const busy = [0, 0, 0, 0, 0, 0];
+  const busy = [0, 0, 0, 0, 0, 0, 0]; // by job code: idle, build, repair, gather, farm, scout, mine
   for (const u of mine) busy[u.job]++;
   $('workers-badge').textContent = busy[0] && mine.length ? String(busy[0]) : '';
   $('workers-badge').dataset.tip = 'Idle workers';
@@ -256,7 +262,7 @@ function updateWorkersUi() {
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   box.innerHTML = JOBS.map(([job, ic, name, what], i) => `<div class="job" data-tip="<span class='t'>${name}</span>${what}">
-    <span class="ic">${ic}</span><b>${name}</b><span class="n">${busy[i + 1]} working</span>
+    <span class="ic">${ic}</span><b>${name}</b><span class="n">${busy[JOB_CODES[job]]} working</span>
     <span class="lv">${LEVELS.map((l, lv) => `<button data-job="${job}" data-lv="${lv}" class="${prio[i] === lv ? 'on' : ''}">${l}</button>`).join('')}</span></div>`).join('');
   if (!jobsBound) {
     jobsBound = true;
@@ -298,7 +304,7 @@ function updateSelectionPanel(gold) {
   if (S.selWorker && S.units.has(S.selWorker)) {
     const u = S.units.get(S.selWorker);
     panel.classList.remove('hidden');
-    const job = ['Idle', 'Building', 'Repairing', 'Chopping wood', 'Farming', 'Scouting'][u.job] + (u.carry ? ' (carrying wood home)' : '');
+    const job = ['Idle', 'Building', 'Repairing', 'Chopping wood', 'Farming', 'Scouting', 'Mining iron'][u.job] + (u.carry ? (u.job === 6 ? ' (carrying iron home)' : ' (carrying wood home)') : '');
     const key = `wk:${u.id}:${job}`;
     if (panel.dataset.key !== key) {
       panel.dataset.key = key;

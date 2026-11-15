@@ -13,6 +13,13 @@
     // taking towers and cores - see the *_BOUNTY settings and each monster's bounty).
     START_GOLD: 200,
     START_WOOD: 120,
+    START_IRON: 20, // iron: mined from ore deposits, pays (with gold) for troop upgrades
+    IRON_ORE: 160, // iron in an ore deposit hex (it builds back up very slowly once mined)
+    IRON_REGROW: 0.12, // ...this much a second
+    MINE_RATE: 0.5, // iron a second one worker mines...
+    IRON_CARRY: 6, // ...until it carries this much home
+    MINE_WORKERS: 2, // at most this many mining one deposit
+    LEVEL_IRON: 15, // iron to raise a troop type a level: this x level x its slots (and the late-level markup)
 
     // ---- Workers: they build, repair, chop wood and farm. Separate from the army (no squad, no army
     // slots). You have BASE_WORKERS plus WORKSHOP_WORKERS per Workshop; fallen ones respawn with the
@@ -21,8 +28,8 @@
     BASE_WORKERS: 3,
     WORKSHOP_WORKERS: 2,
     MAX_WORKSHOPS: 3,
-    WORKER_JOBS: ['build', 'repair', 'gather', 'farm', 'scout'],
-    START_JOBS: { build: 3, repair: 3, gather: 2, farm: 1, scout: 1 }, // (with nothing to build or repair, they chop wood)
+    WORKER_JOBS: ['build', 'repair', 'gather', 'mine', 'farm', 'scout'],
+    START_JOBS: { build: 3, repair: 3, gather: 2, mine: 2, farm: 1, scout: 1 }, // (with nothing to build or repair, they chop wood and mine iron)
     SCOUT_WORKERS: 2, // at most this many workers out scouting
     SCOUT_SPEED: 4.2, // scouting workers run fast...
     SCOUT_SIGHT: 11, // ...and see far (they never fight: they explore, staying clear of enemy guns)
@@ -416,6 +423,11 @@
   // Price of raising a troop type from `level` to `level + 1` (applies to troops spawned after).
   CONFIG.armyLevelCost = function (kind, level) {
     return Math.round(CONFIG.UNITS[kind].cost * 2 * level * CONFIG.latePrice(level));
+  };
+
+  // ...and the iron it takes too.
+  CONFIG.armyLevelIron = function (kind, level) {
+    return Math.round(CONFIG.LEVEL_IRON * level * (CONFIG.UNITS[kind].slots || 1) * CONFIG.latePrice(level));
   };
 
   // Troop slots a barracks of this level gives its squad.
