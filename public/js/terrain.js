@@ -240,6 +240,35 @@ function veinsView() {
   return built.veins;
 }
 
+// Slivers of hexes along the map's edge too thin to hold a tile's centre aren't in the grid, so
+// nothing would paint them: these "ghost" hexes fill them in, looking like their neighbours
+// ({ cx, cy, n: neighbouring real hex indices }). (Drawing only: no one can stand there.)
+let ghostList = null;
+function ghostHexes() {
+  if (ghostList) return ghostList;
+  ghostList = [];
+  const r = C.HEX_R;
+  const SQ3 = Math.sqrt(3);
+  const centre = (q, rr) => [r + r * SQ3 * (q + rr / 2), r + r * 1.5 * rr];
+  for (let rr = -2; rr <= Math.ceil(C.MAP_H / (1.5 * r)) + 2; rr++) {
+    for (let q = Math.floor(-rr / 2) - 3; q <= Math.ceil(C.MAP_W / (r * SQ3) - rr / 2) + 3; q++) {
+      const [cx, cy] = centre(q, rr);
+      if (cx < -r || cy < -r || cx > C.MAP_W + r || cy > C.MAP_H + r) continue; // (wholly off the map)
+      if (HEX.at(cx, cy) >= 0) continue; // a real hex
+      const n = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]].map(([dq, dr]) => HEX.at(...centre(q + dq, rr + dr))).filter((j) => j >= 0);
+      if (n.length) ghostList.push({ cx, cy, n });
+    }
+  }
+  return ghostList;
+}
+const hexOutline = (path, h) => {
+  const cs = HEX.corners(h);
+  path.moveTo(cs[0][0], cs[0][1]);
+  for (let k = 1; k < 6; k++) path.lineTo(cs[k][0], cs[k][1]);
+  path.closePath();
+};
+const ghostIsSea = (L, g) => g.n.filter((j) => L.ocean.has(j)).length * 2 >= g.n.length && g.n.some((j) => L.ocean.has(j));
+
 // The ground colour of every hex (stepped: one colour per hex, from the climate at its centre),
 // gathered into one path per colour so a frame fills each colour once; and each open hex's props.
 function buildGround(seed) {
@@ -283,6 +312,16 @@ function buildGround(seed) {
       list.push({ kind, x, y });
     }
     if (list.length) props.push({ i: h.i, x: h.cx, y: h.cy, list });
+  }
+  // the edge slivers on land take a neighbour's ground
+  for (const g of ghostHexes()) {
+    if (ghostIsSea(L, g)) continue;
+    const j = g.n.find((k) => !L.ocean.has(k) && tint.has(k));
+    if (j === undefined) continue;
+    const c = tint.get(j);
+    const key = `rgb(${c[0]},${c[1]},${c[2]})`;
+    if (!byColour.has(key)) byColour.set(key, new Path2D());
+    hexOutline(byColour.get(key), g);
   }
   return { ground: [...byColour], props, tint };
 }
@@ -410,6 +449,12 @@ function buildSea(seed) {
     bands[d].closePath();
     const c = SEA.depth[d];
     tint.set(i, [1, 3, 5].map((k) => parseInt(c.slice(k, k + 2), 16) + 8));
+  }
+  // the edge slivers out at sea take their neighbours' depth
+  for (const g of ghostHexes()) {
+    if (!ghostIsSea(L, g)) continue;
+    const d = Math.min(...g.n.filter((j) => L.ocean.has(j)).map((j) => depth.get(j) || SEA.depth.length));
+    hexOutline(bands[Math.min(SEA.depth.length, d) - 1], g);
   }
   const coast = new Path2D(); // the shoreline itself
   const cliffs = new Path2D(); // the rock below the land: a cliff face where the sea lies south of it (we see it from the
