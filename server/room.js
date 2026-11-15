@@ -356,6 +356,8 @@ class Room {
         p.noFog = !msg.on;
         return null;
       }
+      case 'ping':
+        return this.ping(client, msg);
       case 'squad':
         if (msg.op === 'mix') return game.squadMix(client.pid, Number(msg.sq), String(msg.kind), msg.d === -1 ? -1 : 1);
         if (msg.op === 'stance') return game.squadStance(client.pid, Number(msg.sq), String(msg.stance));
@@ -364,6 +366,27 @@ class Room {
       default:
         return null;
     }
+  }
+
+  // A ping on the map (attack / defend / danger / look): seen by the pinger and their allies only.
+  // At most PING_BURST every PING_WINDOW seconds a player.
+  ping(client, msg) {
+    const game = this.game;
+    const p = client.pid && game.players.get(client.pid);
+    if (!p || !p.alive) return null;
+    const kind = String(msg.kind);
+    const x = Number(msg.x);
+    const y = Number(msg.y);
+    if (!C.PING_KINDS.includes(kind) || !(x >= 0 && y >= 0 && x < game.w && y < game.h)) return 'Invalid ping';
+    const now = Date.now();
+    client.pings = (client.pings || []).filter((t) => now - t < C.PING_WINDOW * 1000);
+    if (client.pings.length >= C.PING_BURST) return 'Too many pings: wait a moment';
+    client.pings.push(now);
+    const out = { t: 'ping', kind, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, from: p.id, name: p.name };
+    for (const c of this.clients) {
+      if (c.pid && (c.pid === p.id || game.allied(c.pid, p.id))) send(c, out);
+    }
+    return null;
   }
 
   // ---------------------------------------------------------------- tick

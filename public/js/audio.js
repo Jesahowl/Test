@@ -196,6 +196,11 @@ const SFX = {
     SFX.boom(o, t + 0.3, { r: 1.5 });
     [110, 131, 165].forEach((f) => tone(o, t + 0.4, { type: 'sawtooth', f, a: 0.1, d: 2, peak: 0.05 }));
   },
+  ping: (o, t, f) => {
+    // an ally's ping: a different call for each kind
+    const notes = { attack: [660, 880, 660], defend: [523, 659, 784], danger: [880, 587, 880], look: [784, 988] }[f.kind] || [784];
+    notes.forEach((n, i) => tone(o, t + i * 0.09, { type: f.kind === 'danger' ? 'square' : 'triangle', f: n, d: 0.16, peak: f.kind === 'danger' ? 0.06 : 0.1 }));
+  },
   // interface
   click: (o, t) => tone(o, t, { type: 'triangle', f: 1400, f2: 900, d: 0.04, peak: 0.05 }),
   order: (o, t) => {
@@ -215,7 +220,7 @@ const SFX = {
 };
 
 // Fewest milliseconds between two sounds of a kind, and how many may play at once at most.
-const GAP = { click: 40, ok: 80, err: 120, place: 60, order: 120, arrow: 45, slash: 40, tshot: 60, hit: 90, boom: 70, heal: 350, gold: 120, raid: 200, built: 150, wave: 300, campSpawn: 500, buff: 300, trade: 150, capture: 300, coreDown: 300 };
+const GAP = { ping: 150, click: 40, ok: 80, err: 120, place: 60, order: 120, arrow: 45, slash: 40, tshot: 60, hit: 90, boom: 70, heal: 350, gold: 120, raid: 200, built: 150, wave: 300, campSpawn: 500, buff: 300, trade: 150, capture: 300, coreDown: 300 };
 const lastAt = new Map();
 let voices = 0;
 const MAX_VOICES = 18;

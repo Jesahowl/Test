@@ -2,6 +2,7 @@
 
 import { placeWall, wallsBuilt } from './walls.js';
 import { onFx, play } from './audio.js';
+import { onPing } from './pings.js';
 import { resetFog, setExplored, updateFog } from './fog.js';
 import { newOffers } from './diplomacy.js';
 import { formError, onLeft, onPublicList, onRoom } from './lobby.js';
@@ -89,6 +90,9 @@ function handle(msg) {
       break;
     case 'list':
       onPublicList(msg);
+      break;
+    case 'ping':
+      onPing(msg);
       break;
     case 'hello':
       // (the test-mode fog switch in the round bar: one listener, the bar is redrawn often)

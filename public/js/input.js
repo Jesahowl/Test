@@ -2,6 +2,7 @@
 
 import { closePause, openPause, pauseOpen, syncSound } from './pause.js';
 import { toggleMute } from './audio.js';
+import { closePingWheel, openPingWheel, pingWheelClick } from './pings.js';
 import { edgeNear, pickWall, wallAtEdge, wallDown, wallMove, wallUp } from './walls.js';
 import { closeConfirm, confirmOpen, isAlly } from './diplomacy.js';
 import { expandAll, landDown, landMove, landUp } from './land.js';
@@ -49,6 +50,12 @@ canvas.addEventListener('mousedown', (e) => {
   }
   if (e.button !== 0 || !S.myId) return;
   updateMouseWorld();
+  // pings: a click picks from the open wheel; Alt+click opens one here
+  if (pingWheelClick(mouse.sx, mouse.sy)) return;
+  if (e.altKey) {
+    openPingWheel(mouse.wx, mouse.wy);
+    return;
+  }
   const tx = Math.floor(mouse.wx);
   const ty = Math.floor(mouse.wy);
 
@@ -205,6 +212,12 @@ function moveCamFromMinimap(e) {
 }
 
 mini.addEventListener('mousedown', (e) => {
+  if (e.altKey && S.myId) {
+    // Alt+click the minimap: a quick 'look here' ping there
+    const rect = mini.getBoundingClientRect();
+    sendMsg({ t: 'ping', kind: 'look', x: ((e.clientX - rect.left) / rect.width) * C.MAP_W, y: ((e.clientY - rect.top) / rect.height) * C.MAP_H });
+    return;
+  }
   moveCamFromMinimap(e);
   const move = (ev) => moveCamFromMinimap(ev);
   window.addEventListener('mousemove', move);
@@ -235,6 +248,10 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   const helpOpen = !$('help').classList.contains('hidden');
+  if (S.pingWheel && k === 'escape') {
+    closePingWheel();
+    return;
+  }
   keys.add(k);
   if (S.spectating) {
     if (k === 'escape' && !helpOpen) openPause();
@@ -276,6 +293,10 @@ window.addEventListener('keydown', (e) => {
   if (k === 'h') orderAt({ k: 'c', id: S.myId }, { everyone: true });
   if (k === 'g') cycleStance();
   if (k === 'f') toggleFormation();
+  if (k === 'y' && S.myId) {
+    updateMouseWorld();
+    openPingWheel(mouse.wx, mouse.wy); // (pick a ping for your allies)
+  }
   if (k === 'm') {
     const muted = toggleMute();
     syncSound();

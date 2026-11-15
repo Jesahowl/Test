@@ -150,6 +150,7 @@ and get a turning gold rune ring at level 4 and a radiant aura at level 5.
 | `1`–`4` | Pick that squad (press twice to find it) |
 | `Q` | Orders go to all squads |
 | `G` | Next stance for the picked squads (aggressive / defensive / hold / pillage) |
+| `Alt`+click / `Y` | **Ping** for yourself and your allies: a little wheel to pick ⚔ attack here, 🛡 defend here, ⚠ danger or 👁 look here. Allies see it on the map (with an arrow at the screen's edge when it's out of view) and the minimap, hear it, and get a line in the feed. Alt+click the minimap for a quick 'look here'. At most 3 every 4 seconds |
 | `M` | Mute / unmute sound. **Esc** opens the menu with Master, Music and Effects volume (saved in your browser) |
 | `F` | Rectangle formation for the picked squads (or all): standing troops line up in an evenly spaced rectangle facing out, melee in front; press again to spread out. Also on each squad card |
 | Left-click a tower | Select it |

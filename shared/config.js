@@ -205,6 +205,11 @@
       normal: { think: [0.8, 0.8], income: 1, orders: [8, 6], attackAt: 0.75, retreatAt: 0.35 },
       hard: { think: [0.5, 0.4], income: 1.3, orders: [5, 4], attackAt: 0.6, retreatAt: 0.25 },
     },
+    // Pings: map markers players send their allies (and see themselves).
+    PING_KINDS: ['attack', 'defend', 'danger', 'look'],
+    PING_BURST: 3, // at most this many pings...
+    PING_WINDOW: 4, // ...every this many seconds
+    PING_LIFE: 6, // seconds a ping stays on the map
     // Public lobbies (see server/room.js): players gather, then the game starts on its own.
     LOBBY_MAX: 8, // people in a public game (bots fill the rest up to BOT_TARGET)
     LOBBY_WAIT_SOLO: 45, // seconds after the first player arrives

@@ -319,3 +319,53 @@ test('test mode: switching your own fog off shows you the whole map', async () =
     srv.close();
   }
 });
+
+test('pings: your allies see them (and you do), others don\'t; rate-limited', async () => {
+  const srv = createServer({ port: 0, botTarget: 0 });
+  await new Promise((r) => srv.server.once('listening', r));
+  const port = srv.server.address().port;
+  const open = async () => {
+    const ws = new WebSocket(`ws://localhost:${port}`);
+    ws.msgs = [];
+    ws.on('message', (d) => ws.msgs.push(JSON.parse(d)));
+    await new Promise((r) => ws.once('open', r));
+    return ws;
+  };
+  const waitFor = async (ws, pred, ms = 8000) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const m = ws.msgs.find(pred);
+      if (m) return m;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    throw new Error('timeout');
+  };
+  try {
+    const [a, b, c] = [await open(), await open(), await open()];
+    a.send(JSON.stringify({ t: 'create', name: 'A' }));
+    const room = await waitFor(a, (m) => m.t === 'room');
+    for (const [ws, n] of [[b, 'B'], [c, 'C']]) ws.send(JSON.stringify({ t: 'join', name: n, room: room.code }));
+    await waitFor(a, (m) => m.t === 'room' && m.members.length === 3);
+    a.send(JSON.stringify({ t: 'bots', n: 0 }));
+    a.send(JSON.stringify({ t: 'start' }));
+    const [wa, wb] = [await waitFor(a, (m) => m.t === 'welcome'), await waitFor(b, (m) => m.t === 'welcome')];
+    await waitFor(c, (m) => m.t === 'welcome');
+    const g = srv.rooms.get(room.code).game;
+    g.proposeAlliance(wa.id, wb.id);
+    g.acceptAlliance(wb.id, wa.id);
+    assert.ok(g.allied(wa.id, wb.id));
+    a.send(JSON.stringify({ t: 'ping', kind: 'attack', x: 40.5, y: 30.25 }));
+    const pb = await waitFor(b, (m) => m.t === 'ping');
+    assert.deepStrictEqual([pb.kind, pb.x, pb.y, pb.from, pb.name], ['attack', 40.5, 30.3, wa.id, 'A'], 'the ally sees it');
+    await waitFor(a, (m) => m.t === 'ping'); // and the pinger
+    await new Promise((r) => setTimeout(r, 300));
+    assert.ok(!c.msgs.some((m) => m.t === 'ping'), 'a non-ally does not');
+    a.send(JSON.stringify({ t: 'ping', kind: 'dance', x: 1, y: 1 }));
+    await waitFor(a, (m) => m.t === 'err' && /Invalid ping/.test(m.m));
+    for (let i = 0; i < 3; i++) a.send(JSON.stringify({ t: 'ping', kind: 'look', x: 5, y: 5 }));
+    await waitFor(a, (m) => m.t === 'err' && /Too many/.test(m.m));
+    for (const ws of [a, b, c]) ws.close();
+  } finally {
+    srv.close();
+  }
+});

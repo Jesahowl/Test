@@ -9,6 +9,7 @@ import { S, C, HEX, canvas, colorOf, ctx, explored, FOG_PAD, fogSoft, grid, mctx
 import { campVerb, isMineTarget, orderTargetAt, targetName, targetPos } from './targets.js';
 import { drawLandMode, hexPath } from './land.js';
 import { groundCanvas, riverView, veinsView } from './terrain.js';
+import { drawMiniPings, drawPings, drawPingWheel } from './pings.js';
 
 // ---- building preview. Buildings stand at the centre of one of my hexes, one per hex.
 // The hex under (x, y), and why a building can't go there (null if it can).
@@ -182,6 +183,8 @@ function drawSquadTag(q, s, obs, placed) {
 
 function drawOverlay() {
   const s = scale();
+  drawPings();
+  drawPingWheel();
   if (S.selectedId) {
     const t = S.towers.get(S.selectedId);
     if (t && t.owner) {
@@ -454,6 +457,7 @@ function drawMinimap() {
   mctx.strokeStyle = 'rgba(255,255,255,0.7)';
   mctx.lineWidth = 1;
   mctx.strokeRect(x0 * sx, y0 * sy, (x1 - x0) * sx, (y1 - y0) * sy);
+  drawMiniPings(sx, sy); // (allies' pings, on top)
 }
 
 export { clearSelection, drawMinimap, drawOverlay };
