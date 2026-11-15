@@ -24,7 +24,7 @@ module.exports = {
 
   // Rivers (see shared/terrain.js) run along hex edges: each river edge without a bridge is a
   // permanent barrier in wallAt that nobody can pass or break ({ river: true }, not in this.walls).
-  // Mountains are impassable hexes: every edge round one is a barrier the same way ({ river: true,
+  // Mountains and the sea are impassable hexes (this.mountains holds both): every edge round one is a barrier the same way ({ river: true,
   // mountain: true }), so nothing ever enters them.
   // this.riverHexes: the hexes a river runs along (no one starts their base there).
   initRivers() {
@@ -42,6 +42,7 @@ module.exports = {
     }
     for (const m of this.mountains || []) {
       for (const j of this.hex.hexes[m].n) {
+        if (this.mountains.has(j)) continue; // (between two mountains or sea hexes: nobody gets there anyway)
         const k = this.edgeKey(m, j);
         if (this.wallAt.has(k)) continue;
         this.wallAt.set(k, { river: true, mountain: true, id: 0, owner: 0, a: m, b: j, gate: false, progress: 1, hp: Infinity, maxHp: Infinity });

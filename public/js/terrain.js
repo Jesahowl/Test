@@ -58,6 +58,9 @@ const PLAINS_RGB = [24, 33, 29]; // (the old plains colour, which the ground lea
 
 // rivers: bank, deep water, the lighter middle (widths in tiles) and the stone of their bridges
 const RIVER = { bank: '#2b3326', deep: '#1a3440', mid: '#22495a', flow: 'rgba(200, 230, 240, 0.16)', bankW: 1.6, deepW: 1.2, midW: 0.55 };
+// the sea (style: cliffs and rocks): water darkening with depth (hexes out from the shore), a rocky
+// cliff face where the land drops into it, a line of surf at the cliff's foot, rocks in the shallows
+const SEA = { depth: ['#24505c', '#1c3d50', '#173248', '#13293f', '#112437'], cliff: '#4a4740', cliffLit: '#57534a', surf: '230, 240, 240', shadow: 'rgba(0, 0, 0, 0.2)', rock: '#5b5e62', rockLit: '#6c7075', cliffH: 0.9, ledge: 0.4 };
 const STONE = { base: '#6f7378', block: '#7f848a', rail: '#9aa0a6', post: '#b4bac0', shadow: 'rgba(0,0,0,0.4)' };
 
 // ---- the forest, built once per map (in tile units)
@@ -97,9 +100,21 @@ function buildRivers(seed) {
   const list = layoutOf(seed).rivers;
   const paths = [];
   const bridges = [];
+  const L = layoutOf(seed);
   for (const r of list) {
     const p = new Path2D();
     r.pts.forEach(([x, y], k) => (k ? p.lineTo(x, y) : p.moveTo(x, y)));
+    // a river that reaches the coast pours on over the cliff into the sea
+    const [ex, ey] = r.pts[r.pts.length - 1];
+    let sea = null;
+    for (const i of L.ocean) {
+      const h = HEX.hexes[i];
+      if (Math.hypot(h.cx - ex, h.cy - ey) < C.HEX_R + 0.05 && (!sea || Math.hypot(h.cx - ex, h.cy - ey) < Math.hypot(sea.cx - ex, sea.cy - ey))) sea = h;
+    }
+    if (sea) {
+      const d = Math.hypot(sea.cx - ex, sea.cy - ey) || 1;
+      p.lineTo(ex + ((sea.cx - ex) / d) * 1.3, ey + ((sea.cy - ey) / d) * 1.3);
+    }
     paths.push({ p, len: r.edges.length * C.HEX_R });
     for (const e of r.edges) if (e.bridge) bridges.push({ x: (e.x1 + e.x2) / 2, y: (e.y1 + e.y2) / 2, ang: Math.atan2(e.y2 - e.y1, e.x2 - e.x1) });
   }
@@ -210,6 +225,7 @@ function buildGround(seed) {
     // (a calm ground: the biome colour, drawn a little toward the old plains, barely varying hex to hex)
     const jitter = 0.985 + hash(seed, h.i, 1717) * 0.03;
     let c = mixRgb(groundColor(cl), PLAINS_RGB, 0.18).map((v) => v * jitter);
+    if (L.ocean.has(h.i)) continue; // (the sea: see buildSea)
     const forest = L.forest.has(h.i);
     const mountain = L.mountains.has(h.i);
     if (forest) c = mixRgb(c, FOREST_RGB, 0.45);
@@ -345,6 +361,103 @@ function peak(x, y, s, snow) {
   return p;
 }
 
+// The sea of map `seed`, built once: one path per depth band, the coast edges (land-hex edges facing
+// the sea) for the cliffs, surf and shadow, and the rocks in the shallows.
+function buildSea(seed) {
+  const L = layoutOf(seed);
+  const depth = new Map();
+  let front = [];
+  for (const i of L.ocean) if (HEX.hexes[i].n.some((j) => !L.ocean.has(j))) { depth.set(i, 1); front.push(i); }
+  for (let d = 2; front.length; d++) {
+    const next = [];
+    for (const i of front) for (const j of HEX.hexes[i].n) if (L.ocean.has(j) && !depth.has(j)) { depth.set(j, d); next.push(j); }
+    front = next;
+  }
+  const bands = SEA.depth.map(() => new Path2D());
+  const tint = new Map();
+  for (const i of L.ocean) {
+    const d = Math.min(SEA.depth.length, depth.get(i) || SEA.depth.length) - 1;
+    const cs = HEX.corners(HEX.hexes[i]);
+    bands[d].moveTo(cs[0][0], cs[0][1]);
+    for (let k = 1; k < 6; k++) bands[d].lineTo(cs[k][0], cs[k][1]);
+    bands[d].closePath();
+    const c = SEA.depth[d];
+    tint.set(i, [1, 3, 5].map((k) => parseInt(c.slice(k, k + 2), 16) + 8));
+  }
+  const coast = new Path2D(); // the shoreline itself
+  const cliffs = new Path2D(); // the rock below the land: a cliff face where the sea lies south of it (we see it from the
+  //                              south), a narrow rocky ledge along the water elsewhere
+  const foot = new Path2D(); // the foot of the cliffs and ledges, where the surf breaks
+  for (const h of HEX.hexes) {
+    if (L.ocean.has(h.i)) continue;
+    const cs = HEX.corners(h);
+    for (let k = 0; k < 6; k++) {
+      const j = HEX.across(h, k);
+      if (j < 0 || !L.ocean.has(j)) continue;
+      const [a, b] = [cs[k], cs[(k + 1) % 6]];
+      coast.moveTo(a[0], a[1]);
+      coast.lineTo(b[0], b[1]);
+      const sh = HEX.hexes[j];
+      const len = Math.hypot(sh.cx - h.cx, sh.cy - h.cy) || 1;
+      const [nx, ny] = [(sh.cx - h.cx) / len, (sh.cy - h.cy) / len]; // out to sea
+      const [dx, dy] = ny > 0.2 ? [0, SEA.cliffH] : [nx * SEA.ledge, ny * SEA.ledge];
+      cliffs.moveTo(a[0], a[1]);
+      cliffs.lineTo(b[0], b[1]);
+      cliffs.lineTo(b[0] + dx, b[1] + dy);
+      cliffs.lineTo(a[0] + dx, a[1] + dy);
+      cliffs.closePath();
+      foot.moveTo(a[0] + dx, a[1] + dy);
+      foot.lineTo(b[0] + dx, b[1] + dy);
+    }
+  }
+  const rocks = [];
+  for (const i of L.ocean) {
+    if (depth.get(i) !== 1 || hash(seed, i, 5100) > 0.4) continue;
+    const h = HEX.hexes[i];
+    for (let k = 0; k < 2; k++) rocks.push({ x: h.cx + (hash(seed, i, 5200 + k) - 0.5) * 2.2, y: h.cy + (hash(seed, i, 5300 + k) - 0.5) * 1.6, s: 0.38 + hash(seed, i, 5400 + k) * 0.18 });
+  }
+  return { bands, coast, cliffs, foot, rocks, tint };
+}
+
+// The sea, under the land: water by depth, the shadow the land throws on it, rocks in the shallows,
+// then the cliff faces with surf at their foot (the land is drawn over them afterwards, so only the
+// faces that drop toward the viewer show).
+function drawSea(sea) {
+  SEA.depth.forEach((c, d) => {
+    ctx.fillStyle = c;
+    ctx.fill(sea.bands[d]);
+  });
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = SEA.shadow;
+  for (const w of [3.2, 1.8]) {
+    ctx.lineWidth = w;
+    ctx.stroke(sea.coast);
+  }
+  const t = performance.now() / 1000;
+  for (const r of sea.rocks) {
+    ctx.fillStyle = SEA.rock;
+    ctx.beginPath();
+    ctx.ellipse(r.x, r.y, r.s, r.s * 0.75, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = SEA.rockLit;
+    ctx.beginPath();
+    ctx.ellipse(r.x - r.s * 0.25, r.y - r.s * 0.2, r.s * 0.45, r.s * 0.32, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(${SEA.surf}, ${0.28 + 0.12 * Math.sin(t * 1.3 + r.x)})`;
+    ctx.lineWidth = 0.13;
+    ctx.beginPath();
+    ctx.ellipse(r.x, r.y + 0.12, r.s * 1.5, r.s * 1.0, 0, 0, Math.PI);
+    ctx.stroke();
+  }
+  ctx.fillStyle = SEA.cliff;
+  ctx.fill(sea.cliffs);
+  ctx.strokeStyle = `rgba(${SEA.surf}, ${0.38 + 0.12 * Math.sin(t * 0.9)})`; // (the surf rises and falls)
+  ctx.lineWidth = 0.18;
+  ctx.stroke(sea.foot);
+  ctx.lineCap = 'butt';
+}
+
 function build(seed) {
   const L = layoutOf(seed);
   const rivers = buildRivers(seed);
@@ -434,7 +547,9 @@ function build(seed) {
     trees.sort((a, b) => a.y - b.y);
     forests.push({ i: h.i, x: h.cx, y: h.cy, trees });
   }
-  return { seed, fill, forests, rivers, oreFill, ores, veinFill, veins, peaks, hillOverlay, ...groundInfo };
+  const sea = buildSea(seed);
+  for (const [i, c] of sea.tint) groundInfo.tint.set(i, c);
+  return { seed, fill, forests, rivers, oreFill, ores, veinFill, veins, peaks, hillOverlay, sea, ...groundInfo };
 }
 
 // Draw the ground under the map rectangle at screen (ox, oy), s pixels per tile.
@@ -451,6 +566,7 @@ function drawTerrain(ox, oy, s) {
   ctx.clip();
   ctx.translate(ox, oy);
   ctx.scale(s, s);
+  drawSea(built.sea);
   // each hex's biome ground (forest hexes a darker shade of theirs)
   for (const [colour, path] of built.ground) {
     ctx.fillStyle = colour;
@@ -462,6 +578,10 @@ function drawTerrain(ox, oy, s) {
   ctx.fill(built.veinFill);
   ctx.fillStyle = 'rgba(58, 62, 67, 0.4)';
   ctx.fill(built.hillOverlay);
+  // the dark lip of the land along the coast
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+  ctx.lineWidth = 0.26;
+  ctx.stroke(built.sea.coast);
   drawRivers(built.rivers);
   // mountain peaks (at every zoom: they matter for where troops can go)
   {

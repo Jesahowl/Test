@@ -8,8 +8,8 @@ import { label } from './render.js';
 import { toast } from './screens.js';
 import { S, C, ctx, HEX, mouse, players, scale, terr, toScreen } from './state.js';
 
-// The map's mountains (never bought), as the server has them.
-const mountainsNow = () => (S.round && S.round.seed !== undefined ? window.TD_TERRAIN.mapTerrain(S.round.seed, HEX, C.MAP_W, C.MAP_H, { rivers: S.round.rivers !== false }).mountains : new Set());
+// The map's mountains and sea (never bought), as the server has them.
+const mountainsNow = () => (S.round && S.round.seed !== undefined ? window.TD_TERRAIN.mapTerrain(S.round.seed, HEX, C.MAP_W, C.MAP_H, { rivers: S.round.rivers !== false }).blocked : new Set()); // (and the sea)
 
 S.landDrag = null; // { list: [hex index...], set: Set } while dragging
 

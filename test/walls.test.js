@@ -302,7 +302,7 @@ test('mountains: impassable ridges; every map stays connected; iron and gold sit
 test('mountains stay thin and spread out (no fortresses), and never near a base\'s starting land', () => {
   for (let seed = 1; seed <= 20; seed++) {
     const g = new Game({ botTarget: 0, rand: seeded(seed * 17), rounds: true });
-    const m = g.mountains;
+    const m = g.layout.mountains; // (g.mountains also has the sea)
     const seen = new Set();
     for (const i of m) {
       if (seen.has(i)) continue;
@@ -326,7 +326,34 @@ test('mountains stay thin and spread out (no fortresses), and never near a base\
       const core = g.hex.hexes[g.hexAt(p.core.x, p.core.y)];
       const near = new Set([core.i, ...core.n]);
       for (const j of core.n) for (const x of g.hex.hexes[j].n) near.add(x);
-      assert.ok(![...near].some((j) => m.has(j)), `seed ${seed}: no mountain within two rings of a base`);
+      assert.ok(![...near].some((j) => g.mountains.has(j)), `seed ${seed}: no mountain (or sea) within two rings of a base`);
     }
+  }
+});
+
+test('the sea: about a tenth of the map at most, rivers flow into it, and nobody builds, buys or walks there', () => {
+  const Terrain = require('../shared/terrain');
+  for (let seed = 1; seed <= 12; seed++) {
+    const g = new Game({ botTarget: 0, rand: seeded(seed * 31), rounds: true });
+    const L = g.layout;
+    const tiles = [...L.ocean].reduce((n, i) => n + g.hex.hexes[i].tiles.length, 0) / (g.w * g.h);
+    assert.ok(tiles > 0.05 && tiles <= 0.11, `seed ${seed}: the sea is ${(tiles * 100).toFixed(1)}% of the map`);
+    // every river ends at the coast, or in another river
+    const k = (p) => `${Math.round(p[0] * 100)},${Math.round(p[1] * 100)}`;
+    const coast = new Set();
+    for (const i of L.ocean) for (const c of g.hex.corners(g.hex.hexes[i])) coast.add(k(c));
+    for (const r of L.rivers) {
+      const end = k(r.pts[r.pts.length - 1]);
+      const into = L.rivers.some((o) => o !== r && o.pts.some((p) => k(p) === end));
+      assert.ok(coast.has(end) || into, `seed ${seed}: a river that doesn't reach the sea`);
+    }
+    // the sea is impassable, and never anyone's
+    const sea = [...L.ocean].find((i) => g.hex.hexes[i].full);
+    assert.ok(g.mountains.has(sea));
+    const p = g.addPlayer('P', false);
+    assert.ok(!g.canBuyHex(p.id, sea));
+    const sh = g.hex.hexes[sea];
+    assert.match(g.makeOrder(p.id, { k: 'p', id: sh.centre }), /swim/);
+    assert.ok(!Terrain.mapTerrain(g.mapSeed, g.hex, g.w, g.h, { rivers: true }).forest.has(sea));
   }
 });
