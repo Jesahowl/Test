@@ -416,6 +416,14 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 /* ---------------------------------------------------------------- menu (pause) */
 #menu-toggle { font-size: 13px; }
 .pause-card { width: min(340px, 92vw); }
+.sound-set { margin: 4px 0 14px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--raise); }
+.sound-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.sound-head .mute { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.sound-head kbd { font-size: 10px; }
+.sound-set .sl { display: grid; grid-template-columns: 58px 1fr 38px; align-items: center; gap: 8px; margin: 0; padding: 3px 0; font-size: 12.5px; }
+.sound-set .sl input { width: 100%; accent-color: var(--gold); }
+.sound-set .sl i { font-style: normal; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+#pause.muted .sound-set .sl { opacity: 0.45; }
 .pause-btns { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
 .pause-btns button { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; }
 .pause-btns kbd { font-size: 10px; }

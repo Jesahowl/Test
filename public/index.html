@@ -86,6 +86,12 @@
     <div class="card pause-card" role="dialog" aria-labelledby="pause-title">
       <h2 id="pause-title">Menu</h2>
       <p class="tag">The game keeps running while this is open.</p>
+      <div class="sound-set">
+        <div class="sound-head"><b>Sound</b><label class="mute"><input type="checkbox" id="snd-mute"> Mute all <kbd>M</kbd></label></div>
+        <label class="sl"><span>Master</span><input type="range" id="snd-master" min="0" max="100"><i id="snd-master-v"></i></label>
+        <label class="sl"><span>Music</span><input type="range" id="snd-music" min="0" max="100"><i id="snd-music-v"></i></label>
+        <label class="sl"><span>Effects</span><input type="range" id="snd-sfx" min="0" max="100"><i id="snd-sfx-v"></i></label>
+      </div>
       <div class="pause-btns">
         <button id="pause-resume">Resume <kbd>Esc</kbd></button>
         <button id="pause-help" class="secondary">How to play</button>
@@ -110,6 +116,7 @@
         <div><kbd>Q</kbd><span>Orders go to all squads</span></div>
         <div><kbd>Right-click</kbd><span>Send the picked squads at a target, or to hold a spot</span></div>
         <div><kbd>G</kbd><span>Next stance for the picked squads</span></div>
+        <div><kbd>M</kbd><span>Mute / unmute sound (volumes in the Esc menu)</span></div>
         <div><kbd>F</kbd><span>Rectangle formation / spread out for the picked squads</span></div>
         <div><kbd>H</kbd><span>Every squad home</span></div>
         <div><kbd>L</kbd><span>Buy land: click or drag along your border</span></div>

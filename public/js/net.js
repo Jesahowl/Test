@@ -1,6 +1,7 @@
 // Network: the WebSocket connection, incoming messages, and smooth (interpolated) movement.
 
 import { placeWall, wallsBuilt } from './walls.js';
+import { onFx, play } from './audio.js';
 import { resetFog, setExplored, updateFog } from './fog.js';
 import { newOffers } from './diplomacy.js';
 import { formError, onLeft, onRoom } from './lobby.js';
@@ -30,8 +31,14 @@ function connect() {
   S.ws.onmessage = (ev) => handle(JSON.parse(ev.data));
 }
 
+// The sound an action makes as it's sent.
+const SEND_SOUND = { build: 'place', walls: 'place', land: 'place', upgrade: 'ok', sell: 'gold', order: 'order', work: 'order' };
+
 function sendMsg(obj) {
-  if (S.ws && S.ws.readyState === WebSocket.OPEN) S.ws.send(JSON.stringify(obj));
+  if (S.ws && S.ws.readyState === WebSocket.OPEN) {
+    S.ws.send(JSON.stringify(obj));
+    if (SEND_SOUND[obj.t]) play(SEND_SOUND[obj.t]);
+  }
 }
 
 function handle(msg) {
@@ -246,6 +253,7 @@ function applyState(msg) {
   for (const f of msg.fx) {
     const fx = { ...f, born: now + INTERP_DELAY }; // shown in step with the delayed troops
     S.effects.push(fx);
+    onFx(f, INTERP_DELAY / 1000); // its sound, in step too
     if (f.k === 'wave') {
       const t = S.towers.get(grid.get(`${Math.floor(f.x)},${Math.floor(f.y)}`));
       if (t) t.waveAt = now + INTERP_DELAY;

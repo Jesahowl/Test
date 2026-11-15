@@ -1,12 +1,14 @@
 // Screens and overlays: toasts, menu, death screen, round banner and scoreboard, spectating.
 
 import { sendMsg } from './net.js';
+import { play } from './audio.js';
 import { clearSelection } from './overlay.js';
 import { S, $, C, hslOf, players } from './state.js';
 
 let toastTimer = null;
 
 function toast(text, good = false) {
+  play(good ? 'ok' : 'err');
   const el = $('toast');
   el.textContent = text;
   el.classList.toggle('good', good);

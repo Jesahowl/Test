@@ -1,6 +1,7 @@
 // Input: mouse, keyboard, minimap and help window.
 
-import { closePause, openPause, pauseOpen } from './pause.js';
+import { closePause, openPause, pauseOpen, syncSound } from './pause.js';
+import { toggleMute } from './audio.js';
 import { edgeNear, pickWall, wallAtEdge, wallDown, wallMove, wallUp } from './walls.js';
 import { closeConfirm, confirmOpen, isAlly } from './diplomacy.js';
 import { expandAll, landDown, landMove, landUp } from './land.js';
@@ -8,7 +9,7 @@ import { cycleStance, orderAt, pickSquadOf, selectAllSquads, squadKey, toggleBui
 import { sendMsg } from './net.js';
 import { clearSelection } from './overlay.js';
 import { resize } from './render.js';
-import { join, specNext, startSpectating } from './screens.js';
+import { join, specNext, startSpectating, toast } from './screens.js';
 import { S, $, C, cam, canvas, HEX, keys, towerInHex, mini, mouse, players, scale, selUnits, terr, toWorld } from './state.js';
 import { orderTargetAt } from './targets.js';
 import { hideTip } from './ui.js';
@@ -210,8 +211,15 @@ mini.addEventListener('mousedown', (e) => {
   window.addEventListener('mouseup', () => window.removeEventListener('mousemove', move), { once: true });
 });
 
+// Typing in a text box (your name, a room code): keys go there, not to the game. Sliders and
+// checkboxes (the sound settings) don't count.
+const typing = () => {
+  const el = document.activeElement;
+  return !!el && el.tagName === 'INPUT' && !['range', 'checkbox'].includes(el.type);
+};
+
 window.addEventListener('keydown', (e) => {
-  if (document.activeElement && document.activeElement.tagName === 'INPUT') {
+  if (typing()) {
     if (e.key === 'Enter') join();
     return;
   }
@@ -268,6 +276,11 @@ window.addEventListener('keydown', (e) => {
   if (k === 'h') orderAt({ k: 'c', id: S.myId }, { everyone: true });
   if (k === 'g') cycleStance();
   if (k === 'f') toggleFormation();
+  if (k === 'm') {
+    const muted = toggleMute();
+    syncSound();
+    toast(muted ? 'Sound off (M to turn it back on)' : 'Sound on', true);
+  }
   if (k === ' ') {
     e.preventDefault();
     const p = players.get(S.myId);
@@ -319,7 +332,7 @@ $('tips-reset').onclick = () => {
 };
 
 window.addEventListener('keydown', (e) => {
-  if (document.activeElement?.tagName === 'INPUT') return;
+  if (typing()) return;
   if (e.key === '?') setHelp($('help').classList.contains('hidden'));
   else if (e.key === 'Escape') setHelp(false);
 });
