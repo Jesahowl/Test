@@ -332,9 +332,15 @@ class Room {
       case 'jobs':
         return game.setJobPriority(client.pid, String(msg.job), Number(msg.level));
       case 'work': {
+        // one worker (id) or several (ids); queue: after what they've already been given (Shift)
         const target = msg.target && typeof msg.target === 'object' ? { k: String(msg.target.k), id: Number(msg.target.id) } : null;
-        return game.sendWorker(client.pid, Number(msg.id), target);
+        const ids = Array.isArray(msg.ids) ? msg.ids.slice(0, 60).map(Number) : [Number(msg.id)];
+        return game.sendWorkers(client.pid, ids, target, !!msg.queue);
       }
+      case 'wplan':
+        return game.setWorkerPlan(client.pid, { flee: msg.flee, keepForest: msg.keepForest });
+      case 'buildq':
+        return game.setBuildOrder(client.pid, Array.isArray(msg.ids) ? msg.ids : null);
       case 'trade':
         return game.setTradePartner(client.pid, Number(msg.id), Number(msg.partner));
       case 'walls': {

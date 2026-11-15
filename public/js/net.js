@@ -10,6 +10,7 @@ import { clearSelection } from './overlay.js';
 import { showDeath, showMenu, showRoundOver, startSpectating, stopSpectating, toast } from './screens.js';
 import { S, $, C, ALL_UNIT_KEYS, baseLift, cam, CAMP_KEYS, hexSpot, CREEP_KEYS, feed, grid, KIND_KEYS, players, selUnits, terr } from './state.js';
 import { tipDone } from './tips.js';
+import { onFlee } from './workforce.js';
 
 // ------------------------------------------------------------------ network
 // If the connection drops mid-game, the client reconnects on its own (retrying for up to
@@ -320,12 +321,13 @@ function applyState(msg) {
     const kind = ALL_UNIT_KEYS[a[1]];
     const x = a[2] / 10;
     const y = a[3] / 10;
-    const wc = a[11] || 0; // workers: job (0 idle, 1 build, 2 repair, 3 gather, 4 farm), +8 carrying wood, +16 at work
+    const wc = a[11] || 0; // workers: job (0 idle, 1 build, 2 repair, 3 gather, 4 farm, 5 scout, 6 mine), +8 carrying, +16 at work, +32 running from raiders
     return { id: a[0], kind, x, y, owner: a[4], level: a[5], hp: a[6], maxHp: C.towerStats(kind, a[5]).hp, anchor: a[7], attack: a[8] || '', sq: a[9] || 0, from: a[10] || 0,
-      job: wc & 7, carry: !!(wc & 8), working: !!(wc & 16), rx: old ? old.rx : x, ry: old ? old.ry : y, samples: addSample(old, x, y) };
+      job: wc & 7, carry: !!(wc & 8), working: !!(wc & 16), flee: !!(wc & 32), rx: old ? old.rx : x, ry: old ? old.ry : y, samples: addSample(old, x, y) };
   });
   for (const u of S.units.values()) if (!moved.has(u.id)) addSample(u, u.x, u.y);
   for (const id of selUnits) if (!S.units.has(id)) selUnits.delete(id);
+  for (const id of S.selWorkers) if (!S.units.has(id)) S.selWorkers.delete(id);
 
   moved.clear();
   S.creeps = merge(S.creeps, msg.creeps, (a, old) => {
@@ -350,6 +352,7 @@ function applyState(msg) {
     const fx = { ...f, born: now + INTERP_DELAY }; // shown in step with the delayed troops
     S.effects.push(fx);
     onFx(f, INTERP_DELAY / 1000); // its sound, in step too
+    if (f.k === 'flee') onFlee(f);
     if (f.k === 'wave') {
       const t = S.towers.get(grid.get(`${Math.floor(f.x)},${Math.floor(f.y)}`));
       if (t) t.waveAt = now + INTERP_DELAY;

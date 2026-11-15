@@ -12,6 +12,7 @@ import { tipDone, updateTips } from './tips.js';
 import { iconURL, refreshTip } from './ui.js';
 import { updateDock } from './dock.js';
 import { allSquads } from './squads.js';
+import { updateWorkersPanel } from './workforce.js';
 
 S.hudTimer = 0;
 
@@ -234,44 +235,8 @@ function updateTowerAndArmy(gold) {
   }
 }
 
-// ---- the Workers drawer: how many workers, and each job's priority (off / low / high).
-const JOBS = [
-  ['build', '🔨', 'Build', 'Put up building sites and walls you place'],
-  ['repair', '🔧', 'Repair', `Fix damaged buildings, walls and your core (${C.REPAIR_GOLD_PER_HP}g per HP)`],
-  ['gather', '🪓', 'Chop wood', 'Chop forests anywhere on the map (the nearest first) and carry the wood to your core or a workshop'],
-  ['mine', '⛏', 'Mine iron', 'Mine iron ore deposits (rust-red rocks) anywhere on the map, the nearest first, and carry the iron home. Troop level-ups need iron'],
-  ['farm', '🌾', 'Farm', `Work open hexes of your land: +${C.FARM_GOLD}g/s each, or a gold vein on your land (glowing rocks round a mine mouth, rare): +${C.VEIN_GOLD}g/s each, up to ${C.VEIN_WORKERS} at once (veins first)`],
-  ['scout', '🔭', 'Scout', `Run off exploring the fog: fast, seeing ${C.SCOUT_SIGHT} tiles, keeping clear of enemy guns (at most ${C.SCOUT_WORKERS})`],
-];
-const LEVELS = ['Off', 'Low', 'Med', 'High'];
-const JOB_CODES = { build: 1, repair: 2, gather: 3, farm: 4, scout: 5, mine: 6 }; // (as the server codes them)
-let jobsBound = false;
-function updateWorkersUi() {
-  const [cap, prio] = S.me.workers || [0, [0, 0, 0, 0, 0, 0]];
-  const mine = [...S.units.values()].filter((u) => u.owner === S.myId && u.kind === 'worker');
-  const busy = [0, 0, 0, 0, 0, 0, 0]; // by job code: idle, build, repair, gather, farm, scout, mine
-  for (const u of mine) busy[u.job]++;
-  $('workers-badge').textContent = busy[0] && mine.length ? String(busy[0]) : '';
-  $('workers-badge').dataset.tip = 'Idle workers';
-  if (S.drawer !== 'workers') return;
-  tipDone('workers');
-  const hint = `${mine.length} / ${cap} workers · ${busy[0]} idle · +${C.WORKSHOP_WORKERS} per workshop`;
-  if ($('workers-hint').textContent !== hint) $('workers-hint').textContent = hint;
-  const box = $('jobs');
-  const key = `${prio.join(',')}|${busy.join(',')}`;
-  if (box.dataset.key === key) return;
-  box.dataset.key = key;
-  box.innerHTML = JOBS.map(([job, ic, name, what], i) => `<div class="job" data-tip="<span class='t'>${name}</span>${what}">
-    <span class="ic">${ic}</span><b>${name}</b><span class="n">${busy[JOB_CODES[job]]} working</span>
-    <span class="lv">${LEVELS.map((l, lv) => `<button data-job="${job}" data-lv="${lv}" class="${prio[i] === lv ? 'on' : ''}">${l}</button>`).join('')}</span></div>`).join('');
-  if (!jobsBound) {
-    jobsBound = true;
-    box.addEventListener('click', (e) => {
-      const b = e.target.closest('button[data-job]');
-      if (b) sendMsg({ t: 'jobs', job: b.dataset.job, level: Number(b.dataset.lv) });
-    });
-  }
-}
+// (the Workers drawer: see workforce.js)
+const updateWorkersUi = updateWorkersPanel;
 
 function updateSelectionPanel(gold) {
   const panel = $('selection');
@@ -302,14 +267,22 @@ function updateSelectionPanel(gold) {
     return;
   }
   if (S.selWorker && S.units.has(S.selWorker)) {
+    const list = [...S.selWorkers].map((id) => S.units.get(id)).filter(Boolean);
     const u = S.units.get(S.selWorker);
     panel.classList.remove('hidden');
-    const job = ['Idle', 'Building', 'Repairing', 'Chopping wood', 'Farming', 'Scouting', 'Mining iron'][u.job] + (u.carry ? (u.job === 6 ? ' (carrying iron home)' : ' (carrying wood home)') : '');
-    const key = `wk:${u.id}:${job}`;
+    const NAMES = ['Idle', 'Building', 'Repairing', 'Chopping wood', 'Farming', 'Scouting', 'Mining iron'];
+    const what = (w) => (w.flee ? 'Running from raiders' : NAMES[w.job] + (w.carry ? (w.job === 6 ? ' (carrying iron home)' : ' (carrying wood home)') : ''));
+    let job = what(u);
+    if (list.length > 1) {
+      const by = new Map();
+      for (const w of list) by.set(what(w), (by.get(what(w)) || 0) + 1);
+      job = [...by].map(([k, n]) => `${n} ${k.toLowerCase()}`).join(' · ');
+    }
+    const key = `wk:${list.map((w) => w.id).join(',')}:${job}`;
     if (panel.dataset.key !== key) {
       panel.dataset.key = key;
-      panel.innerHTML = `<h4><img src="${iconURL('worker')}" alt="">Your worker</h4><div class="stats"><div style="grid-column:span 2">${job}</div></div>
-        <div class="muted">Right-click a building site, a damaged building or wall, a forest, or an open hex of your land to send it there. <kbd>Esc</kbd> to let it choose.</div>`;
+      panel.innerHTML = `<h4><img src="${iconURL('worker')}" alt="">${list.length > 1 ? `${list.length} workers` : 'Your worker'}</h4><div class="stats"><div style="grid-column:span 2">${job}</div></div>
+        <div class="muted">Right-click a building site, a damaged building or wall, a forest, an ore deposit or an open hex of your land to send ${list.length > 1 ? 'them' : 'it'} there (<kbd>Shift</kbd>: after what ${list.length > 1 ? 'they\'re' : 'it\'s'} doing). <kbd>Esc</kbd> to let ${list.length > 1 ? 'them' : 'it'} choose.</div>`;
     }
     return;
   }

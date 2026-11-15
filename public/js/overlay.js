@@ -52,6 +52,7 @@ function clearSelection() {
   S.selCaravan = null;
   S.selWall = null;
   S.selWorker = null;
+  S.selWorkers.clear();
   selUnits.clear();
 }
 
@@ -283,12 +284,13 @@ function drawOverlay() {
     const w = S.units.get(S.selWorker);
     if (w) {
       const [wx, wy] = toScreen(w.rx, w.ry);
-      label('Right-click: send this worker there', wx, wy - s * 1.1, 11, '#f2c14e');
+      const n = S.selWorkers.size;
+      label(n > 1 ? `Right-click: send these ${n} workers there (Shift: queue it)` : 'Right-click: send this worker there (Shift: queue it)', wx, wy - s * 1.1, 11, '#f2c14e');
     }
   }
 
   // Hover feedback for right-click orders.
-  if (S.myId && !S.buildKind && !S.selWorker) {
+  if (S.myId && !S.buildKind && !S.selWorker && !(S.workerBox && S.workerBox.on)) {
     const tg = orderTargetAt(mouse.wx, mouse.wy);
     if (tg) {
       const pos = targetPos(`${tg.k}:${tg.id}`);

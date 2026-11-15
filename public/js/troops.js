@@ -58,7 +58,7 @@ function drawUnits(dt) {
     const onBuilding = !selUnits.has(u.id) && overBuilding(u.rx, u.ry);
     if (onBuilding) ctx.globalAlpha = 0.6;
     // picked single troops: white ring; troops of the picked squads (when not all): gold ring
-    const picked = selUnits.has(u.id) || S.selWorker === u.id;
+    const picked = selUnits.has(u.id) || S.selWorkers.has(u.id) || S.selWorker === u.id;
     const inSquad = mine && !selUnits.size && squadPicked(u.sq);
     if (picked || inSquad) {
       // a ring on the ground round its feet

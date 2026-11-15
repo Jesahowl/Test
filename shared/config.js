@@ -25,13 +25,19 @@
 
     // ---- Workers: they build, repair, chop wood and farm. Separate from the army (no squad, no army
     // slots). You have BASE_WORKERS plus WORKSHOP_WORKERS per Workshop; fallen ones respawn with the
-    // troops. Each job has a priority (0 off, 1 low, 2 medium, 3 high): workers take the highest-priority job
-    // that has work, sharing out jobs of equal priority.
+    // troops. Building and repairing are on or off (on: every free worker builds, then repairs);
+    // chop / mine / farm / scout each want a number of workers; spare workers chop wood (with
+    // chopping off: share out whichever of those are on).
     BASE_WORKERS: 3,
     WORKSHOP_WORKERS: 2,
     MAX_WORKSHOPS: 3,
     WORKER_JOBS: ['build', 'repair', 'gather', 'mine', 'farm', 'scout'],
-    START_JOBS: { build: 3, repair: 3, gather: 2, mine: 2, farm: 1, scout: 1 }, // (with nothing to build or repair, they chop wood and mine iron)
+    START_JOBS: { build: 1, repair: 1, gather: 2, mine: 1, farm: 0, scout: 0 }, // (with nothing to build or repair, they chop wood and mine iron)
+    WORKER_COUNT_MAX: 20, // the most workers one job can ask for
+    FLEE_RANGE: 5, // workers (with fleeing on) run home from enemy troops this close...
+    FLEE_TIME: 4, // ...for this long after the last one was seen
+    REPAIR_AFTER: 5, // repairs wait until a building (or wall) hasn't been hit for this long
+    KEEP_FOREST_RANGE: 12, // with 'keep forests' on, workers leave forests this near the core standing
     SCOUT_WORKERS: 2, // at most this many workers out scouting
     SCOUT_SPEED: 4.2, // scouting workers run fast...
     SCOUT_SIGHT: 11, // ...and see far (they never fight: they explore, staying clear of enemy guns)

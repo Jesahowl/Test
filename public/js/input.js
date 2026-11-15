@@ -12,6 +12,7 @@ import { clearSelection } from './overlay.js';
 import { resize } from './render.js';
 import { join, specNext, startSpectating, toast } from './screens.js';
 import { S, $, C, cam, canvas, HEX, keys, towerInHex, mini, mouse, players, scale, selUnits, terr, toWorld } from './state.js';
+import { endBox, jumpIdle, moveBox, startBox } from './workforce.js';
 import { orderTargetAt } from './targets.js';
 import { hideTip } from './ui.js';
 import { setDrawer } from './dock.js';
@@ -35,6 +36,7 @@ canvas.addEventListener('mousemove', (e) => {
     mouse.lastX = e.clientX;
     mouse.lastY = e.clientY;
   }
+  if (S.workerBox && e.buttons & 1) moveBox(e.clientX, e.clientY);
   updateMouseWorld();
   landMove();
   wallMove();
@@ -84,11 +86,17 @@ canvas.addEventListener('mousedown', (e) => {
     }
   }
   if (wk) {
+    // (Shift: add it to the workers picked)
+    const keep = e.shiftKey && S.selWorkers.size ? new Set(S.selWorkers) : null;
     clearSelection();
-    S.selWorker = wk.id;
+    if (keep) for (const id of keep) S.selWorkers.add(id);
+    if (keep && keep.has(wk.id)) S.selWorkers.delete(wk.id);
+    else S.selWorkers.add(wk.id);
+    S.selWorker = S.selWorkers.size ? (S.selWorkers.has(wk.id) ? wk.id : [...S.selWorkers][0]) : null;
     return;
   }
   S.selWorker = null;
+  S.selWorkers.clear();
 
   // Left-click a troop: pick its squad (Shift: add its squad). Otherwise select a tower or ruin.
   let hit = null;
@@ -132,6 +140,8 @@ canvas.addEventListener('mousedown', (e) => {
     S.buildKind = null;
     return;
   }
+  // (from here, a drag draws a box round workers to pick them)
+  startBox(e.clientX, e.clientY);
   const ht = towerInHex(mouse.wx, mouse.wy);
   const tid = ht ? ht.id : 0;
   selUnits.clear();
@@ -140,6 +150,11 @@ canvas.addEventListener('mousedown', (e) => {
 });
 
 window.addEventListener('mouseup', (e) => {
+  if (e.button === 0 && S.workerBox && endBox(e.shiftKey)) {
+    // a box was dragged: it picked workers (not the building the drag started on)
+    S.selectedId = null;
+    selUnits.clear();
+  }
   if (e.button === 0 && S.landDrag) landUp();
   if (e.button === 0 && S.wallDrag) wallUp();
   if ((e.button === 2 || e.button === 1) && mouse.rightDown) {
@@ -152,7 +167,7 @@ window.addEventListener('mouseup', (e) => {
     }
     updateMouseWorld();
     if (S.selWorker) {
-      sendWorkerAt(mouse.wx, mouse.wy);
+      sendWorkerAt(mouse.wx, mouse.wy, e.shiftKey);
       return;
     }
     const tg = orderTargetAt(mouse.wx, mouse.wy);
@@ -168,7 +183,7 @@ canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 // Right-click with a worker picked: put it to work on what's there (a building or wall of mine, my
 // core, a forest, or an open hex of my land). The server says if it can't.
-function sendWorkerAt(wx, wy) {
+function sendWorkerAt(wx, wy, queue = false) {
   if (wx < 0 || wy < 0 || wx >= C.MAP_W || wy >= C.MAP_H) return;
   let target = null;
   const t = towerInHex(wx, wy);
@@ -179,9 +194,10 @@ function sendWorkerAt(wx, wy) {
   else if (t && t.owner === S.myId) target = { k: 't', id: t.id };
   else if (me && HEX.tileHex[Math.floor(wy) * C.MAP_W + Math.floor(wx)] === HEX.tileHex[me.y * C.MAP_W + me.x]) target = { k: 'c', id: S.myId };
   else target = { k: 'h', id: HEX.tileHex[Math.floor(wy) * C.MAP_W + Math.floor(wx)] };
-  sendMsg({ t: 'work', id: S.selWorker, target });
+  const ids = S.selWorkers.size ? [...S.selWorkers] : [S.selWorker];
+  sendMsg({ t: 'work', ids, target, queue });
   S.effects.push({ k: 'ping', x: wx, y: wy, born: performance.now() });
-  S.workerSent.set(S.selWorker, { x: wx, y: wy, at: performance.now() });
+  for (const id of ids) S.workerSent.set(id, { x: wx, y: wy, at: performance.now() });
 }
 
 // Double-click outside your land: expand your land outward all round (buying the border ring).
@@ -273,6 +289,7 @@ window.addEventListener('keydown', (e) => {
   if (k === 't') toggleBuild('trade');
   if (k === 'k') toggleBuild('workshop');
   if (k === 'j') setDrawer('workers');
+  if (k === '.') jumpIdle(); // the next idle worker
   if (k === 'v') toggleBuild('wall');
   if (k === 'l') toggleBuild('land');
   // the dock's drawers

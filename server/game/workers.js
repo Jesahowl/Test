@@ -4,9 +4,14 @@
 // - Each player has BASE_WORKERS plus WORKSHOP_WORKERS per finished Workshop. They're units (kind
 //   'worker', no squad) that never fight; enemies can kill them for a bounty (and the wood they
 //   carried). Fallen workers respawn with the troops, at the core and workshops.
-// - Jobs have priorities (p.jobs: 0 off, 1 low, 2 medium, 3 high). About once a second each worker without a
-//   manual job takes the highest-priority job that has work, workers sharing out jobs of equal
-//   priority. A worker sent somewhere by hand (sendWorker) sticks to that until it's done.
+// - p.jobs: build and repair are on (1) or off (0); gather, mine, farm and scout are how many workers
+//   each wants. About once a second the free workers are shared out: every one builds while
+//   there are sites, then repairs (once a building hasn't been hit for REPAIR_AFTER), then each
+//   counted job gets its workers (those already at it first), and any spare workers chop wood (with
+//   chopping off: share out the counted jobs that are on). A worker sent somewhere by hand (sendWorkers) sticks to that until
+//   it's done, then takes the next target it was given (Shift: a queue), then goes back to the plan.
+// - p.workerFlee: workers run home from enemy troops (and go back to work after). p.keepForest:
+//   forests near the core are left standing. p.buildOrder: building sites in the order to build them.
 // - build: buildings and walls are sites that rise as workers work on them (BUILD_TIME worker-
 //   seconds); unfinished ones don't shoot, train, trade or block. repair: damaged buildings, walls
 //   and the core, for a little gold. gather: chop forest hexes anywhere (nearest first) and carry
@@ -88,28 +93,74 @@ module.exports = {
 
   // ---- player controls
 
+  // How many workers a job wants (build and repair: 0 off, 1 on).
   setJobPriority(pid, job, level) {
     const p = this.players.get(pid);
     if (!p || !p.alive) return 'Invalid order';
     if (!C.WORKER_JOBS.includes(job)) return 'Invalid job';
-    if (![0, 1, 2, 3].includes(level)) return 'Invalid priority';
+    const max = job === 'build' || job === 'repair' ? 1 : C.WORKER_COUNT_MAX;
+    if (!Number.isInteger(level) || level < 0 || level > max) return 'Invalid number of workers';
     p.jobs[job] = level;
-    for (const u of this.workersOf(p)) if (!u.manual) u.thinkAt = 0; // rethink now
+    p.assignAt = 0; // rethink now
+    return null;
+  },
+
+  // The worker switches: flee (run home from raiders), keepForest (leave forests near the core).
+  setWorkerPlan(pid, plan) {
+    const p = this.players.get(pid);
+    if (!p || !p.alive || !plan || typeof plan !== 'object') return 'Invalid order';
+    if (plan.flee !== undefined) p.workerFlee = !!plan.flee;
+    if (plan.keepForest !== undefined) p.keepForest = !!plan.keepForest;
+    p.assignAt = 0;
+    return null;
+  },
+
+  // The order to put up p's building sites in (ids of its unfinished buildings, first first).
+  setBuildOrder(pid, ids) {
+    const p = this.players.get(pid);
+    if (!p || !p.alive || !Array.isArray(ids)) return 'Invalid order';
+    p.buildOrder = ids.slice(0, 40).map(Number).filter((id) => {
+      const t = this.towers.get(id);
+      return t && t.owner === pid && !this.finished(t);
+    });
+    p.assignAt = 0;
     return null;
   },
 
   // Send worker `id` to a job: target { k: 't' building | 'w' wall | 'c' my core | 'h' hex, id }.
-  sendWorker(pid, id, target) {
+  sendWorker(pid, id, target, queue = false) {
+    return this.sendWorkers(pid, [id], target, queue);
+  },
+
+  // Send several workers to a job. Where one target can't take them all (a forest takes
+  // TREE_WORKERS, a site SITE_WORKERS...), the rest take the nearest work of the same kind.
+  // queue (Shift): it's done after the ones they've already been given.
+  sendWorkers(pid, ids, target, queue = false) {
     const p = this.players.get(pid);
-    const u = this.units.get(id);
-    if (!p || !p.alive || !u || !u.worker || u.owner !== pid) return 'Pick one of your workers';
+    if (!p || !p.alive || !Array.isArray(ids) || !ids.length) return 'Pick one of your workers';
+    const list = ids.slice(0, 60).map((id) => this.units.get(Number(id))).filter((u) => u && u.worker && u.owner === pid);
+    if (!list.length) return 'Pick one of your workers';
     if (!target || typeof target !== 'object') return 'Invalid target';
     const job = this.jobFor(p, target);
     if (typeof job === 'string') return job;
-    u.job = job;
-    u.manual = true;
-    u.path = [];
-    u.dest = null;
+    const cap = { build: C.SITE_WORKERS, repair: C.REPAIR_WORKERS, gather: C.TREE_WORKERS, mine: C.MINE_WORKERS, farm: this.veins.has(job.id) ? C.VEIN_WORKERS : 1 }[job.type] || 99;
+    const taken = new Map();
+    for (const u of this.workersOf(p)) if (u.job && !list.includes(u)) taken.set(`${u.job.k}:${u.job.id}`, (taken.get(`${u.job.k}:${u.job.id}`) || 0) + 1);
+    const key = `${job.k}:${job.id}`;
+    list.forEach((u) => {
+      let j = job;
+      if ((taken.get(key) || 0) >= cap) j = this.findTask(p, { x: this.jobPos(p, job).x, y: this.jobPos(p, job).y }, job.type, taken) || job;
+      taken.set(`${j.k}:${j.id}`, (taken.get(`${j.k}:${j.id}`) || 0) + 1);
+      if (queue && u.manual && u.job) {
+        u.queue = (u.queue || []).concat([j]).slice(-8);
+        return;
+      }
+      u.queue = [];
+      u.job = j;
+      u.manual = true;
+      u.path = [];
+      u.dest = null;
+    });
     return null;
   },
 
@@ -206,18 +257,27 @@ module.exports = {
       }
     };
     if (type === 'build') {
-      for (const t of this.towers.values()) if (t.owner === p.id && !this.finished(t)) consider({ type, k: 't', id: t.id }, t.x + 0.5, t.y + 0.5, C.SITE_WORKERS);
+      // (sites in the player's build order come first, in that order)
+      const order = p.buildOrder || [];
+      for (const t of this.towers.values()) {
+        if (t.owner !== p.id || this.finished(t)) continue;
+        const q = order.indexOf(t.id);
+        consider({ type, k: 't', id: t.id }, t.x + 0.5, t.y + 0.5, C.SITE_WORKERS, q < 0 ? 0 : 1e4 * (order.length - q));
+      }
       for (const w of this.walls.values()) if (w.owner === p.id && !this.finished(w)) consider({ type, k: 'w', id: w.id }, w.x, w.y, 1);
     } else if (type === 'repair') {
       if (p.gold < 1) return null;
-      for (const t of this.towers.values()) if (t.owner === p.id && this.finished(t) && t.hp < t.maxHp) consider({ type, k: 't', id: t.id }, t.x + 0.5, t.y + 0.5, C.REPAIR_WORKERS);
-      for (const w of this.walls.values()) if (w.owner === p.id && this.finished(w) && w.hp < w.maxHp) consider({ type, k: 'w', id: w.id }, w.x, w.y, 1);
+      // (only once the fighting's over there: nothing hit in the last REPAIR_AFTER seconds)
+      const calm = (o) => o.hitAt === undefined || this.time - o.hitAt >= C.REPAIR_AFTER;
+      for (const t of this.towers.values()) if (t.owner === p.id && this.finished(t) && t.hp < t.maxHp && calm(t)) consider({ type, k: 't', id: t.id }, t.x + 0.5, t.y + 0.5, C.REPAIR_WORKERS);
+      for (const w of this.walls.values()) if (w.owner === p.id && this.finished(w) && w.hp < w.maxHp && calm(w)) consider({ type, k: 'w', id: w.id }, w.x, w.y, 1);
       // (in sudden death cores crumble, and can't be patched back up: every round ends)
-      if (p.core.hp < p.core.maxHp && !this.suddenDeath()) consider({ type, k: 'c', id: p.id }, p.core.x + 0.5, p.core.y + 0.5, C.REPAIR_WORKERS);
+      if (p.core.hp < p.core.maxHp && !this.suddenDeath() && calm(p.core)) consider({ type, k: 'c', id: p.id }, p.core.x + 0.5, p.core.y + 0.5, C.REPAIR_WORKERS);
     } else if (type === 'gather') {
       for (const i of this.forest.keys()) {
         if (this.forest.get(i) < 3 || !this.canChop(p, i)) continue;
         const h = this.hex.hexes[i];
+        if (p.keepForest && dist(h.cx, h.cy, p.core.x + 0.5, p.core.y + 0.5) < C.KEEP_FOREST_RANGE) continue; // (kept standing)
         consider({ type, k: 'h', id: i }, h.cx, h.cy, C.TREE_WORKERS);
       }
     } else if (type === 'mine') {
@@ -239,44 +299,94 @@ module.exports = {
     return best;
   },
 
-  // Give each of p's workers that's free to choose the job it should do.
+  // Share p's workers out (see the top of this file). Runs about once a second per player.
   assignWorkers(p, workers) {
-    const taken = new Map();
-    for (const u of workers) if (u.job) taken.set(`${u.job.k}:${u.job.id}`, (taken.get(`${u.job.k}:${u.job.id}`) || 0) + 1);
-    // job types by priority (high first); ties share workers out
-    const levels = [3, 2, 1].map((lv) => C.WORKER_JOBS.filter((j) => p.jobs[j] === lv)).filter((l) => l.length);
-    const sorted = [...workers].sort((a, b) => a.id - b.id);
-    sorted.forEach((u, n) => {
-      if (u.manual) {
-        if (this.jobLive(p, u.job)) return;
-        u.manual = false;
-        u.job = null;
-      }
-      if (u.job && !this.jobLive(p, u.job)) u.job = null;
-      if (this.time < u.thinkAt && u.job) return;
-      u.thinkAt = this.time + 1 + this.rand() * 0.5;
-      if (u.carry > 0 && u.job && (u.job.type === 'gather' || u.job.type === 'mine')) return; // finish the trip first
-      let pick = null;
-      for (const types of levels) {
-        // equal priorities: start from a different job for each worker so they share out
-        for (let k = 0; k < types.length && !pick; k++) {
-          const type = types[(n + k) % types.length];
-          if (u.job && u.job.type === type) {
-            pick = u.job;
-            break;
-          }
-          pick = this.findTask(p, u, type, taken);
+    // hand-sent workers: on to their next queued target when one is done, then back to the plan
+    for (const u of workers) {
+      if (!u.manual || this.jobLive(p, u.job)) continue;
+      u.job = null;
+      u.manual = false;
+      while (u.queue && u.queue.length) {
+        const next = u.queue.shift();
+        if (this.jobLive(p, next)) {
+          u.job = next;
+          u.manual = true;
+          break;
         }
-        if (pick) break;
       }
-      if (pick !== u.job) {
-        if (u.job) taken.set(`${u.job.k}:${u.job.id}`, (taken.get(`${u.job.k}:${u.job.id}`) || 1) - 1);
-        if (pick) taken.set(`${pick.k}:${pick.id}`, (taken.get(`${pick.k}:${pick.id}`) || 0) + 1);
-        u.job = pick;
-        u.path = [];
-        u.dest = null;
+    }
+    for (const u of workers) if (!u.manual && u.job && !this.jobLive(p, u.job)) u.job = null;
+    if (this.time < (p.assignAt || 0)) return;
+    p.assignAt = this.time + 1;
+    const taken = new Map();
+    const count = (j) => taken.set(`${j.k}:${j.id}`, (taken.get(`${j.k}:${j.id}`) || 0) + 1);
+    const uncount = (j) => taken.set(`${j.k}:${j.id}`, (taken.get(`${j.k}:${j.id}`) || 1) - 1);
+    for (const u of workers) if (u.job) count(u.job);
+    // the free ones (a worker carrying a load home finishes that trip first)
+    const busy = (u) => u.manual || (u.carry > 0 && u.job && (u.job.type === 'gather' || u.job.type === 'mine'));
+    let pool = workers.filter((u) => !busy(u)).sort((a, b) => a.id - b.id);
+    const give = (u, job) => {
+      if (u.job === job) return;
+      if (u.job) uncount(u.job);
+      count(job);
+      u.job = job;
+      u.path = [];
+      u.dest = null;
+    };
+    // Fill `type` with up to n of the pool (those already at it first). Returns how many it took.
+    const fill = (type, n) => {
+      let got = 0;
+      const order = [...pool].sort((a, b) => (b.job && b.job.type === type) - (a.job && a.job.type === type));
+      for (const u of order) {
+        if (got >= n) break;
+        const job = u.job && u.job.type === type ? u.job : this.findTask(p, u, type, taken);
+        if (!job) break;
+        give(u, job);
+        pool = pool.filter((v) => v !== u);
+        got++;
       }
-    });
+      return got;
+    };
+    // (workers already carrying a load count toward their job)
+    const carrying = (type) => workers.filter((u) => !u.manual && busy(u) && u.job && u.job.type === type).length;
+    if (p.jobs.build > 0) fill('build', Infinity);
+    if (p.jobs.repair > 0) fill('repair', Infinity);
+    const counted = ['mine', 'gather', 'farm', 'scout'];
+    for (const type of counted) fill(type, Math.max(0, (p.jobs[type] || 0) - carrying(type)));
+    // spare hands chop wood (or, with chopping off, share out the counted jobs that are on)
+    const on = p.jobs.gather > 0 ? ['gather'] : counted.filter((t) => p.jobs[t] > 0);
+    for (let k = 0, most = pool.length + 1; pool.length && on.length && k < most; k++) {
+      const before = pool.length;
+      for (const t of on) if (pool.length) fill(t, 1);
+      if (pool.length === before) break; // no more work anywhere
+    }
+    for (const u of pool) if (u.job) {
+      uncount(u.job);
+      u.job = null;
+    }
+  },
+
+  // Workers (with fleeing on) that have enemy troops close run home for FLEE_TIME, then go back
+  // to work. Tells the owner when a group starts to run.
+  checkFlee(p, workers) {
+    if (p.workerFlee === false) return;
+    let started = 0;
+    let at = null;
+    for (const u of workers) {
+      let near = false;
+      for (const v of this.nearUnits(u.x, u.y, C.FLEE_RANGE)) {
+        if (v.worker || v.trade || !this.hostile(u.owner, v.owner)) continue;
+        near = true;
+        break;
+      }
+      if (!near) continue;
+      if (!(u.fleeUntil > this.time)) {
+        started++;
+        at = at || u;
+      }
+      u.fleeUntil = this.time + C.FLEE_TIME;
+    }
+    if (started) this.fx.push({ k: 'flee', o: p.id, n: started, x: round2(at.x), y: round2(at.y) });
   },
 
   updateWorkers(dt) {
@@ -290,7 +400,12 @@ module.exports = {
     }
     for (const [pid, list] of by) {
       const p = this.players.get(pid);
-      if (p && p.alive) this.assignWorkers(p, list);
+      if (!p || !p.alive) continue;
+      this.assignWorkers(p, list);
+      if (this.time >= (p.fleeCheckAt || 0)) {
+        p.fleeCheckAt = this.time + 0.25;
+        this.checkFlee(p, list);
+      }
     }
   },
 
@@ -302,6 +417,12 @@ module.exports = {
     const speed = C.UNITS.worker.speed;
     const job = u.job;
     u.working = false;
+    if (u.fleeUntil > this.time) {
+      // running home from raiders (the job waits)
+      const d = dist(u.x, u.y, p.core.x + 0.5, p.core.y + 0.5);
+      if (d > 2) this.stepToward(u, p.core.x + 0.5, p.core.y + 0.5, 1.5, speed * 1.15, dt);
+      return;
+    }
     // carrying wood (or iron) and done with that job (or it changed, or the load is full): take it home
     const iron = u.carryKind === 'iron';
     const still = job && (iron ? job.type === 'mine' && u.carry < C.IRON_CARRY && this.canMine(p, job.id)
@@ -413,8 +534,9 @@ module.exports = {
   },
 
   // For snapshots: what a worker is doing (0 idle, 1 build, 2 repair, 3 gather, 4 farm, 5 scout,
-  // 6 mine), +8 when it's carrying wood or iron, +16 while it's at work on the spot.
+  // 6 mine), +8 when it's carrying wood or iron, +16 while it's at work on the spot, +32 while
+  // it's running from raiders.
   workerCode(u) {
-    return (u.job ? JOB_CODE[u.job.type] : 0) + (u.carry > 0 ? 8 : 0) + (u.working ? 16 : 0);
+    return (u.job ? JOB_CODE[u.job.type] : 0) + (u.carry > 0 ? 8 : 0) + (u.working ? 16 : 0) + (u.fleeUntil > this.time ? 32 : 0);
   },
 };

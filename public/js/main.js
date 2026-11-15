@@ -20,6 +20,7 @@ import { S, $, C, BASE_SCALE, cam, canvas, keys, mouse, players, scale } from '.
 import { drawTowers } from './structures.js';
 import { drawTradeRoads } from './trade.js';
 import { drawUnits } from './troops.js';
+import { drawBox, drawWorkerIcons, drawWorkHover } from './workforce.js';
 
 // ------------------------------------------------------------------ main loop
 let last = performance.now();
@@ -73,10 +74,13 @@ function frame(now) {
   drawWalls();
   drawCreeps(dt);
   drawUnits(dt);
+  drawWorkerIcons();
   drawCores(dt);
   drawEffects(now);
   drawFog();
   drawOverlay();
+  drawWorkHover();
+  drawBox();
   if (S.myId || S.spectating) drawMinimap();
 
   S.hudTimer -= dt;

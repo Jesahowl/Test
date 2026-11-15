@@ -40,7 +40,7 @@ module.exports = {
       gold: this.rules.testMode && !isBot ? C.TEST_FUNDS : this.rules.startGold,
       wood: this.rules.testMode && !isBot ? C.TEST_FUNDS : C.START_WOOD,
       iron: this.rules.testMode && !isBot ? C.TEST_FUNDS : C.START_IRON,
-      jobs: { ...C.START_JOBS }, // worker job priorities (see workers.js)
+      jobs: { ...C.START_JOBS }, // how many workers each job wants (see workers.js)
       core: { x: pos.x, y: pos.y, hp: C.CORE_HP, maxHp: C.CORE_HP, cd: 0 },
       territory: 0,
       peakTerritory: 0,

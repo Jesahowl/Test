@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const C = require('../shared/config');
-const { Game, seeded, run } = require('./helpers');
+const { Game, seeded, run, troops } = require('./helpers');
 
 // Two players, rich in gold, with buildings that need workers to go up (unlike duel()).
 function setup(seed) {
@@ -121,11 +121,13 @@ test('workers farm their land for gold, and repair damaged buildings for gold', 
   assert.ok(Math.abs(spent - (t.maxHp / 2) * C.REPAIR_GOLD_PER_HP) < 1, `for a little gold (${spent.toFixed(1)}g)`);
 });
 
-test('job priorities, sending a worker by hand, workshops and raids', () => {
+test('job settings, sending a worker by hand, workshops and raids', () => {
   const { g, a, b } = setup(74);
   for (const j of C.WORKER_JOBS) assert.strictEqual(g.setJobPriority(a.id, j, 0), null);
   assert.match(g.setJobPriority(a.id, 'dance', 1), /Invalid/);
-  assert.match(g.setJobPriority(a.id, 'farm', 5), /Invalid/);
+  assert.match(g.setJobPriority(a.id, 'farm', 99), /Invalid/);
+  assert.match(g.setJobPriority(a.id, 'build', 2), /Invalid/, 'building is on or off');
+  assert.match(g.setJobPriority(a.id, 'farm', 1.5), /Invalid/);
   const [x, y] = spot(g, a, 2);
   g.build(a.id, x, y, 'workshop');
   const shop = [...g.towers.values()].find((o) => o.owner === a.id && o.kind === 'workshop');
@@ -226,4 +228,100 @@ test('gold veins: rare; farming one on your land pays four times as much, and ve
   assert.ok(rate > onVein * C.VEIN_GOLD * 0.7, `vein pays well (${rate.toFixed(2)}g/s)`);
   assert.ok(C.VEIN_GOLD >= 4 * C.FARM_GOLD);
   assert.ok(plain !== undefined);
+});
+
+test('worker counts: exact numbers per job, spares share out, group orders, queues, build order, repairs wait, fleeing', () => {
+  const { g, a, b } = setup(77);
+  g.creeps.clear();
+  for (const c of g.camps) {
+    c.alive = false;
+    c.respawnAt = Infinity;
+  }
+  // five workers (a workshop), two forests and an ore deposit near the core
+  const [sx, sy] = spot(g, a, 2);
+  g.build(a.id, sx, sy, 'workshop');
+  const shop = [...g.towers.values()].find((o) => o.owner === a.id && o.kind === 'workshop');
+  shop.progress = 1;
+  respawn(g, a);
+  const ws = workers(g, a);
+  assert.strictEqual(ws.length, 5);
+  const core = g.hex.hexes[g.hexAt(a.core.x, a.core.y)];
+  const nearby = g.hex.hexes.filter((h) => h.full && !g.hexOwner[h.i] && !g.mountains.has(h.i) && Math.hypot(h.cx - core.cx, h.cy - core.cy) < 20)
+    .sort((p, q) => Math.hypot(p.cx - core.cx, p.cy - core.cy) - Math.hypot(q.cx - core.cx, q.cy - core.cy));
+  for (const h of nearby.slice(0, 3)) g.forest.set(h.i, C.FOREST_WOOD);
+  g.ore.set(nearby[3].i, C.IRON_ORE);
+  const doing = (type) => workers(g, a).filter((u) => u.job && u.job.type === type).length;
+  // exact counts: 1 miner, 0 farmers; the 4 spares chop wood (the only other job on)
+  for (const [j, n] of Object.entries({ build: 1, repair: 0, gather: 1, mine: 1, farm: 0, scout: 0 })) g.setJobPriority(a.id, j, n);
+  run(g, 3);
+  assert.strictEqual(doing('mine'), 1, 'one miner');
+  assert.strictEqual(doing('gather'), 4, 'the spares chop wood');
+  // two miners now, nothing else: all five share mining out (the deposit takes MINE_WORKERS)
+  for (const u of workers(g, a)) u.carry = 0; // (a worker carrying a load home finishes that trip first)
+  g.setJobPriority(a.id, 'gather', 0);
+  g.setJobPriority(a.id, 'mine', 2);
+  run(g, 3);
+  assert.strictEqual(doing('gather'), 0);
+  assert.ok(doing('mine') >= 2, 'at least the two miners');
+  // send three workers at once to a forest that takes TREE_WORKERS: the rest take the nearest other forest
+  const three = workers(g, a).slice(0, 3);
+  assert.strictEqual(g.sendWorkers(a.id, three.map((u) => u.id), { k: 'h', id: nearby[0].i }), null);
+  const targets = three.map((u) => u.job.id);
+  assert.strictEqual(targets.filter((i) => i === nearby[0].i).length, Math.min(3, C.TREE_WORKERS));
+  assert.ok(three.every((u) => u.manual && u.job.type === 'gather'));
+  // a queued order is taken once the first is done
+  const w = three[0];
+  assert.strictEqual(g.sendWorker(a.id, w.id, { k: 'h', id: nearby[3].i }, true), null);
+  assert.strictEqual(w.job.type, 'gather', 'still on its first job');
+  g.forest.set(w.job.id, 0);
+  run(g, 1.2);
+  assert.ok(w.job && w.job.type === 'mine' && w.manual, 'then on to the queued one');
+  // build order: of two sites, the one put first gets the builders first
+  for (const u of workers(g, a)) {
+    u.manual = false;
+    u.queue = [];
+  }
+  const [x1, y1] = spot(g, a, 0);
+  const [x2, y2] = spot(g, a, 4);
+  const inst = g.instantBuild;
+  g.instantBuild = false;
+  g.build(a.id, x1, y1, 'tower');
+  g.build(a.id, x2, y2, 'tower');
+  g.instantBuild = inst;
+  const sites = [...g.towers.values()].filter((t) => t.owner === a.id && t.progress < 1);
+  assert.strictEqual(sites.length, 2);
+  assert.strictEqual(g.setBuildOrder(a.id, [sites[1].id, sites[0].id]), null);
+  run(g, 2);
+  const on = (t) => workers(g, a).filter((u) => u.job && u.job.type === 'build' && u.job.id === t.id).length;
+  assert.strictEqual(on(sites[1]), C.SITE_WORKERS, 'the first in the order is fully manned');
+  // repairs wait until the fighting's over
+  g.setJobPriority(a.id, 'repair', 1);
+  for (const t of sites) {
+    t.progress = 1;
+    t.hp = t.maxHp / 2;
+    t.hitAt = g.time;
+  }
+  g.structVersion++;
+  run(g, 2);
+  const fixing = () => workers(g, a).filter((u) => u.job && u.job.type === 'repair' && sites.some((t) => t.id === u.job.id)).length;
+  assert.strictEqual(fixing(), 0, 'no repairs under fire');
+  run(g, C.REPAIR_AFTER);
+  assert.ok(fixing() > 0, 'repairs once it is quiet');
+  // raiders near a worker: it runs home (and tells its owner), then goes back to work
+  const v = workers(g, a).find((u) => u.job && u.job.type === 'repair') || workers(g, a)[0];
+  const [foe] = troops(g, b, 'soldier', 1, v.x + 2, v.y);
+  foe.attack = { k: 'p', id: g.idx(Math.floor(v.x + 2), Math.floor(v.y)) };
+  g.fx = [];
+  run(g, 0.5);
+  assert.ok(v.fleeUntil > g.time, 'running home');
+  assert.ok(g.fx.some((f) => f.k === 'flee' && f.o === a.id), 'the owner is told');
+  g.units.delete(foe.id);
+  g.buildUnitGrid();
+  assert.ok(run(g, C.FLEE_TIME + 2, () => !(v.fleeUntil > g.time)), 'back to work once they are gone');
+  // fleeing can be switched off
+  assert.strictEqual(g.setWorkerPlan(a.id, { flee: false }), null);
+  const [foe2] = troops(g, b, 'soldier', 1, v.x + 2, v.y);
+  foe2.attack = { k: 'p', id: g.idx(Math.floor(v.x + 2), Math.floor(v.y)) };
+  run(g, 0.5);
+  assert.ok(!(v.fleeUntil > g.time), 'stays put with fleeing off');
 });
