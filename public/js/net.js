@@ -91,6 +91,13 @@ function handle(msg) {
       onPublicList(msg);
       break;
     case 'hello':
+      // (the test-mode fog switch in the round bar: one listener, the bar is redrawn often)
+      if (!S.fogClick) {
+        S.fogClick = true;
+        $('round').addEventListener('pointerdown', (e) => {
+          if (e.target.closest('.test-fog')) sendMsg({ t: 'fog', on: !!(S.me && S.me.noFog) });
+        });
+      }
       // a dev server: test mode is on offer
       S.dev = !!msg.dev;
       $('test-game').classList.toggle('hidden', !S.dev);

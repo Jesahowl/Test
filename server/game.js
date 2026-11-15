@@ -237,6 +237,7 @@ class Game {
       id: p.id,
       gold: Math.floor(p.gold),
       wood: Math.floor(p.wood),
+      noFog: p.noFog || undefined, // (test mode: fog switched off for me)
       workers: [this.workerCap(p), C.WORKER_JOBS.map((j) => p.jobs[j])],
       nextWave: Math.max(0, Math.ceil(p.nextWaveAt - this.time)),
       armySize: this.armySize(p),

@@ -19,7 +19,7 @@ function setExplored(runs) {
 }
 
 function updateFog(terrChanged) {
-  S.fogOn = !!(S.myId && players.has(S.myId) && !S.spectating) && !(S.round && S.round.fog === false); // (a private room can turn fog off)
+  S.fogOn = !!(S.myId && players.has(S.myId) && !S.spectating) && !(S.round && S.round.fog === false) && !(S.me && S.me.noFog); // (a private room can turn fog off; so can you, in test mode)
   let redraw = terrChanged || S.fogOn !== S.fogWasOn;
   S.fogWasOn = S.fogOn;
   if (!S.fogOn) {

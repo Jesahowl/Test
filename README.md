@@ -55,7 +55,7 @@ git reset --hard origin/claude/determined-johnson-hion2w
 
 Start the server with **`npm run dev`** (or `DEV=1 node server/index.js`) and the menu gets a
 **🛠 Test game** button: it starts a private game straight away (with two bots) in **test mode**,
-where your gold and wood never run out (they show as ∞; bots play normally). On a dev server, test
+where your gold and wood never run out (they show as ∞; bots play normally). A **🌫 Fog** switch next to the TEST badge in the round bar shows or hides the fog of war for you. On a dev server, test
 mode is also a setting in private rooms, so you can test with friends. A normal server (`npm start`)
 never offers it.
 

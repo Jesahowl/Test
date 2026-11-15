@@ -278,3 +278,44 @@ test('test mode: dev servers only; gold and wood never run out', async () => {
     dev.close();
   }
 });
+
+test('test mode: switching your own fog off shows you the whole map', async () => {
+  const srv = createServer({ port: 0, botTarget: 0, dev: true });
+  await new Promise((r) => srv.server.once('listening', r));
+  const ws = new WebSocket(`ws://localhost:${srv.server.address().port}`);
+  ws.msgs = [];
+  ws.on('message', (d) => ws.msgs.push(JSON.parse(d)));
+  await new Promise((r) => ws.once('open', r));
+  const waitFor = async (pred, ms = 8000) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const m = ws.msgs.find(pred);
+      if (m) return m;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    throw new Error('timeout');
+  };
+  try {
+    ws.send(JSON.stringify({ t: 'test', name: 'Dev' }));
+    const w = await waitFor((m) => m.t === 'welcome');
+    const room = srv.rooms.get(w.room);
+    const g = room.game;
+    // an enemy troop far away, in my fog
+    const foe = g.addPlayer('Far', true);
+    const me = g.players.get(w.id);
+    const u = g.spawnTroop(foe, 'soldier');
+    u.x = me.core.x > g.w / 2 ? 3 : g.w - 4;
+    u.y = me.core.y > g.h / 2 ? 3 : g.h - 4;
+    u.hp = u.maxHp = 1e6;
+    const seesIt = () => ws.msgs.some((m) => m.t === 's' && m.units && m.units.c.some((r) => r[0] === u.id));
+    await new Promise((r) => setTimeout(r, 400));
+    assert.ok(!seesIt(), 'hidden in the fog');
+    ws.send(JSON.stringify({ t: 'fog', on: false }));
+    await waitFor((m) => m.t === 's' && m.me && m.me.noFog);
+    await waitFor(() => seesIt());
+    assert.ok(seesIt(), 'fog off: I see it');
+    ws.close();
+  } finally {
+    srv.close();
+  }
+});

@@ -75,7 +75,9 @@ function updateRound() {
   else if (S.round.t >= (S.round.fort ?? C.SIEGE_RAMP_START) && S.round.sd > 120) sub = `<div class="sub">⚔ Siege power ×${(1 + (S.round.t - (S.round.fort ?? C.SIEGE_RAMP_START)) / 60 * C.SIEGE_RAMP_PER_MIN).toFixed(1)} · sudden death in ${fmtTime(S.round.sd)}</div>`;
   else if (S.round.sd <= 0) sub = '<div class="sd">☠ Sudden death: cores crumble · troops hit buildings ×2 · no home turf</div>';
   else if (S.round.sd <= 120) sub = `<div class="sd">Sudden death in ${fmtTime(S.round.sd)}</div>`;
-  el.innerHTML = `${S.round.test ? '<span class="test-badge" data-tip="Test mode (dev server): your gold and wood never run out">🛠 TEST</span> ' : ''}${S.round.code ? `🔒 Room <b>${S.round.code}</b> · ` : S.round.pub ? '🌐 Public game · ' : ''}Round <b>${S.round.n}</b> · <b>${players.size}</b> core${players.size === 1 ? '' : 's'} left · ${fmtTime(S.round.t)}${sub}`;
+  const fogChip = S.round.test && S.round.fog !== false && S.myId
+    ? `<button class="test-fog${S.me && S.me.noFog ? '' : ' on'}" data-tip="Test mode: show or hide the fog of war (for you only)">🌫 Fog ${S.me && S.me.noFog ? 'off' : 'on'}</button> ` : '';
+  el.innerHTML = `${S.round.test ? '<span class="test-badge" data-tip="Test mode (dev server): your gold and wood never run out">🛠 TEST</span> ' : ''}${fogChip}${S.round.code ? `🔒 Room <b>${S.round.code}</b> · ` : S.round.pub ? '🌐 Public game · ' : ''}Round <b>${S.round.n}</b> · <b>${players.size}</b> core${players.size === 1 ? '' : 's'} left · ${fmtTime(S.round.t)}${sub}`;
 }
 
 let roundTimer = null;

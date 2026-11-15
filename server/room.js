@@ -348,6 +348,14 @@ class Room {
         if (msg.op === 'gate') return game.toggleGate(client.pid, Number(msg.id));
         if (msg.op === 'down') return game.demolishWall(client.pid, Number(msg.id));
         return null;
+      case 'fog': {
+        // test mode: switch fog of war off (or back on) for yourself
+        const p = game.players.get(client.pid);
+        if (!game.rules.testMode) return 'Only in test mode';
+        if (!p) return null;
+        p.noFog = !msg.on;
+        return null;
+      }
       case 'squad':
         if (msg.op === 'mix') return game.squadMix(client.pid, Number(msg.sq), String(msg.kind), msg.d === -1 ? -1 : 1);
         if (msg.op === 'stance') return game.squadStance(client.pid, Number(msg.sq), String(msg.stance));
@@ -425,7 +433,7 @@ class Room {
         client.expView = null;
       }
       const p = client.pid ? game.players.get(client.pid) : null;
-      const fog = p && p.alive && p.vis && game.rules.fog ? p : null; // (fog of war can be turned off in a private room)
+      const fog = p && p.alive && p.vis && game.rules.fog && !p.noFog ? p : null; // (fog of war can be turned off in a private room, or for yourself in test mode)
       let expPart = '';
       // Where this player has explored (run lengths, starting with unexplored): the client draws its
       // fog from exactly this, so it always matches what the server sends them.
