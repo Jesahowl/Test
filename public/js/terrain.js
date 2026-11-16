@@ -21,10 +21,12 @@ const TREE_LIGHT = '#346343';
 const TREE_SHADOW = 'rgba(0,0,0,0.35)';
 const STUMP = '#4a3826';
 // iron ore deposits: rust-dark ground, red-brown rocks with ore specks (rubble once mined out)
-const ORE = { ground: '#2a201c', rock: '#6b3f30', lit: '#8a5440', crack: '#40241a', speck: '#c0704a', rubble: '#3e2a22' };
+// (rocky outcrops on the biome's own ground: a ragged gravel patch, rust-streaked boulders; rubble once mined out)
+const ORE = { patch: [74, 68, 62], patchA: 0.5, pebbles: ['rgba(110,104,98,0.85)', 'rgba(150,85,60,0.8)'], rock: '#6a5a50', lit: '#7d6c61', crack: '#3e332c', speck: '#c0704a', rubble: '#4a403a' };
 
 // gold veins: dark rock shot with gold round a timber mine mouth, with a soft glow
-const VEIN = { ground: '#26221b', rock: '#4a4136', lit: '#5e5344', crack: '#2e2820', gold: '#f2c14e', beam: '#7a5a36', mouth: '#120f0b' };
+// gold veins: a pale gravel patch with gold pebbles, grey boulders flecked with twinkling gold, a soft glow
+const VEIN = { patch: [96, 92, 84], patchA: 0.5, pebbles: ['rgba(130,124,112,0.85)', 'rgba(150,145,132,0.8)', 'rgba(230,180,70,0.9)'], rock: '#5e564a', lit: '#72695b', crack: '#3a342c', gold: '#ffd76e' };
 
 // One ore rock at (x, y), size s (tile units), as paths.
 function oreRock(x, y, s) {
@@ -787,6 +789,51 @@ function drawLakeProp(p) {
   }
 }
 
+// The gravel patch of an ore deposit or gold vein (hex h): painted once into a small picture with a
+// ragged, rounded edge (no hexagon) and pebbles, on top of the biome's ground.
+const PATCH_PX = 12;
+function buildPatch(seed, h, style) {
+  const r = C.HEX_R;
+  const x0 = h.cx - r - 0.5;
+  const y0 = h.cy - r - 0.5;
+  const W = Math.ceil((2 * r + 1) * PATCH_PX);
+  const H = W;
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const g = cv.getContext('2d');
+  const img = g.createImageData(W, H);
+  const noise = (x, y, s) => { const a = Math.floor(x), b = Math.floor(y), fx = x - a, fy = y - b; const v = (i, j) => hash(seed + s, a + i + h.i * 31, b + j); const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy); return v(0, 0) + (v(1, 0) - v(0, 0)) * sx + (v(0, 1) - v(0, 0)) * sy + (v(0, 0) - v(1, 0) - v(0, 1) + v(1, 1)) * sx * sy; };
+  for (let py = 0; py < H; py++) {
+    for (let px = 0; px < W; px++) {
+      const x = x0 + px / PATCH_PX;
+      const y = y0 + py / PATCH_PX;
+      const d = Math.hypot(x - h.cx, (y - h.cy) * 1.15) / r; // (a little wider than tall)
+      const n = noise(x / 0.75, y / 0.75, 7100) * 0.6 + noise(x / 0.3, y / 0.3, 7200) * 0.4;
+      const edge = 0.62 + n * 0.35;
+      if (d > edge) continue;
+      const t = Math.min(1, (edge - d) / 0.15);
+      const o = (py * W + px) * 4;
+      img.data[o] = style.patch[0];
+      img.data[o + 1] = style.patch[1];
+      img.data[o + 2] = style.patch[2];
+      img.data[o + 3] = Math.round(255 * style.patchA * t);
+    }
+  }
+  g.putImageData(img, 0, 0);
+  g.scale(PATCH_PX, PATCH_PX);
+  g.translate(-x0, -y0);
+  for (let k = 0; k < 64; k++) {
+    const a = hash(seed, h.i * 64 + k, 7300) * Math.PI * 2;
+    const rr = Math.sqrt(hash(seed, h.i * 64 + k, 7400)) * r * 0.6;
+    g.fillStyle = style.pebbles[Math.floor(hash(seed, h.i * 64 + k, 7500) * style.pebbles.length)];
+    g.beginPath();
+    g.ellipse(h.cx + Math.cos(a) * rr, h.cy + Math.sin(a) * rr * 0.8, 0.06 + hash(seed, k, 7600 + h.i) * 0.07, 0.045 + hash(seed, k, 7700 + h.i) * 0.04, hash(seed, k, 7800) * 3, 0, Math.PI * 2);
+    g.fill();
+  }
+  return { canvas: cv, x: x0, y: y0, w: W / PATCH_PX, h: H / PATCH_PX };
+}
+
 function build(seed) {
   const L = layoutOf(seed);
   const sea = buildSea(seed);
@@ -807,48 +854,35 @@ function build(seed) {
     });
   }
   peaks.sort((a, b) => a.y - b.y);
-  // ore and veins in the foothills blend toward the rock
-  const hillOverlay = new Path2D();
-  for (const i of [...L.iron, ...L.veins]) {
-    if (!L.foothills.has(i)) continue;
-    const cs = HEX.corners(HEX.hexes[i]);
-    hillOverlay.moveTo(cs[0][0], cs[0][1]);
-    for (let k = 1; k < 6; k++) hillOverlay.lineTo(cs[k][0], cs[k][1]);
-    hillOverlay.closePath();
-  }
   const groundInfo = buildGround(seed);
   const fill = new Path2D();
   const forests = [];
-  const oreFill = new Path2D();
+  const patches = []; // the gravel patches (in the cached terrain)
   const ores = [];
+  // (boulder spots round a deposit's middle, in tiles: [dx, dy, size])
+  const SPOTS = [[-1.05, -0.5, 0.47], [0.83, -0.83, 0.41], [0.06, 0.61, 0.52], [1.21, 0.72, 0.36], [-1.27, 0.83, 0.33]];
   for (const h of HEX.hexes) {
     if (!L.iron.has(h.i)) continue;
-    const cs = HEX.corners(h);
-    oreFill.moveTo(cs[0][0], cs[0][1]);
-    for (let k = 1; k < 6; k++) oreFill.lineTo(cs[k][0], cs[k][1]);
-    oreFill.closePath();
-    // five rocks; `rank` is the order they're mined away in
-    const rocks = [[0, 0.05], [-1.0, -0.6], [0.95, -0.7], [-0.9, 0.75], [1.0, 0.7]].map(([dx, dy]) => [dx * HK, dy * HK]).map(([dx, dy], k) => {
-      const r = oreRock(h.cx + dx + (hash(seed, h.i * 5 + k, 31) - 0.5) * 0.5, h.cy + dy + (hash(seed, h.i, 131 + k) - 0.5) * 0.4, 0.42 + hash(seed, k + 9, h.i) * 0.18);
+    patches.push(buildPatch(seed, h, ORE));
+    // five boulders; `rank` is the order they're mined away in
+    const rocks = SPOTS.map(([dx, dy, sz], k) => {
+      const r = oreRock(h.cx + dx + (hash(seed, h.i * 5 + k, 31) - 0.5) * 0.3, h.cy + dy + (hash(seed, h.i, 131 + k) - 0.5) * 0.25, sz * (0.9 + hash(seed, k + 9, h.i) * 0.2));
       r.cut = hash(seed, h.i, 600 + k);
-      r.specks = [0, 1].map((j) => [r.x + (hash(seed, h.i * 3 + k, 700 + j) - 0.5) * r.s, r.y + (hash(seed, h.i * 3 + k, 800 + j) - 0.6) * r.s * 0.6]);
+      r.specks = [0, 1, 2].map((j) => [r.x + (hash(seed, h.i * 3 + k, 700 + j) - 0.5) * r.s, r.y + (hash(seed, h.i * 3 + k, 800 + j) - 0.6) * r.s * 0.6]);
       return r;
     });
     [...rocks].sort((a, b) => a.cut - b.cut).forEach((r, n) => { r.rank = n; });
     rocks.sort((a, b) => a.y - b.y);
     ores.push({ i: h.i, x: h.cx, y: h.cy, rocks });
   }
-  const veinFill = new Path2D();
   const veins = [];
   for (const h of HEX.hexes) {
     if (!L.veins.has(h.i)) continue;
-    const cs = HEX.corners(h);
-    veinFill.moveTo(cs[0][0], cs[0][1]);
-    for (let k = 1; k < 6; k++) veinFill.lineTo(cs[k][0], cs[k][1]);
-    veinFill.closePath();
-    const rocks = [[-1.05, -0.75, 0.55], [1.0, -0.6, 0.48], [0.95, 0.85, 0.52], [-0.95, 0.9, 0.42]].map(([dx, dy, s]) => [dx * HK, dy * HK, s * 1.15]).map(([dx, dy, s]) => {
-      const r = oreRock(h.cx + dx, h.cy + dy, s);
-      r.flecks = [0, 1, 2].map((j) => [r.x + (hash(seed, h.i * 4 + j, 950) - 0.5) * r.s * 1.2, r.y + (hash(seed, h.i * 4 + j, 960) - 0.65) * r.s * 0.7]);
+    patches.push(buildPatch(seed, h, VEIN));
+    // five boulders flecked with gold (each fleck twinkles in its own time)
+    const rocks = SPOTS.map(([dx, dy, sz], k) => {
+      const r = oreRock(h.cx + dx, h.cy + dy, sz);
+      r.flecks = [0, 1, 2].map((j) => [r.x + (hash(seed, h.i * 4 + j + k * 7, 950) - 0.5) * r.s * 1.2, r.y - hash(seed, h.i * 4 + j + k * 7, 960) * r.s * 0.5, 0.07 + hash(seed, j + k * 3, 970 + h.i) * 0.07, hash(seed, j, 980 + h.i + k) * 6.28]);
       return r;
     });
     veins.push({ i: h.i, x: h.cx, y: h.cy, rocks });
@@ -883,7 +917,7 @@ function build(seed) {
   }
   for (const [i, c] of sea.tint) groundInfo.tint.set(i, c);
   for (const lk of lakes) for (const i of lk.cells) groundInfo.tint.set(i, lk.tint);
-  return { seed, fill, forests, rivers, oreFill, ores, veinFill, veins, peaks, hillOverlay, sea, lakes, ...groundInfo };
+  return { seed, fill, forests, rivers, patches, ores, veins, peaks, sea, lakes, ...groundInfo };
 }
 
 // ---- the terrain cache: everything about the ground that never changes (biome colours, the sea
@@ -918,12 +952,11 @@ function paintStatic(g, x0, y0, x1, y1, s) {
     g.fillStyle = colour;
     g.fill(path);
   }
-  g.fillStyle = ORE.ground;
-  g.fill(built.oreFill);
-  g.fillStyle = VEIN.ground;
-  g.fill(built.veinFill);
-  g.fillStyle = 'rgba(58, 62, 67, 0.4)';
-  g.fill(built.hillOverlay);
+  // the gravel patches of ore deposits and gold veins
+  for (const pt of built.patches) {
+    if (pt.x > x1 || pt.y > y1 || pt.x + pt.w < x0 || pt.y + pt.h < y0) continue;
+    g.drawImage(pt.canvas, pt.x, pt.y, pt.w, pt.h);
+  }
   // lakes, with their reeds, lily pads, stones or palms
   for (const lk of built.lakes) {
     if (lk.x > x1 || lk.y > y1 || lk.x + lk.w < x0 || lk.y + lk.h < y0) continue;
@@ -1065,16 +1098,18 @@ function drawTerrain(ox, oy, s) {
       if (pr.x < x0 || pr.x > x1 || pr.y < y0 || pr.y > y1 || taken.has(pr.i)) continue;
       for (const p of pr.list) drawProp(p);
     }
-    // gold veins: glowing rocks with gold flecks round a mine mouth
-    const glint = 0.75 + 0.25 * Math.sin(performance.now() / 600);
+    // gold veins: a soft glow, and grey boulders with gold flecks that twinkle
+    const now = performance.now() / 1000;
+    const glint = 0.75 + 0.25 * Math.sin(now * 1.7);
     for (const v of built.veins) {
       if (v.x < x0 || v.x > x1 || v.y < y0 || v.y > y1 || taken.has(v.i)) continue;
-      const glow = ctx.createRadialGradient(v.x, v.y, 0.2, v.x, v.y, 1.9);
-      glow.addColorStop(0, `rgba(242, 193, 78, ${0.28 * glint})`);
+      const R = C.HEX_R * 0.83;
+      const glow = ctx.createRadialGradient(v.x, v.y, 0.2, v.x, v.y, R);
+      glow.addColorStop(0, `rgba(242, 193, 78, ${0.22 * glint})`);
       glow.addColorStop(1, 'rgba(242, 193, 78, 0)');
       ctx.fillStyle = glow;
       ctx.beginPath();
-      ctx.arc(v.x, v.y, 1.9, 0, Math.PI * 2);
+      ctx.arc(v.x, v.y, R, 0, Math.PI * 2);
       ctx.fill();
       for (const r of v.rocks) {
         ctx.fillStyle = TREE_SHADOW;
@@ -1086,37 +1121,24 @@ function drawTerrain(ox, oy, s) {
         ctx.strokeStyle = VEIN.crack;
         ctx.lineWidth = 0.04;
         ctx.stroke(r.crack);
-        ctx.fillStyle = VEIN.gold;
-        for (const [fx, fy] of r.flecks) {
+        for (const [fx, fy, fs, ph] of r.flecks) {
+          // a four-pointed star, catching the light now and then
+          const tw = 0.55 + 0.45 * Math.max(0, Math.sin(now * 2.2 + ph));
+          const k = fs * (0.7 + 0.5 * tw);
+          ctx.fillStyle = `rgba(255, 215, 110, ${0.5 + 0.5 * tw})`;
           ctx.beginPath();
-          ctx.moveTo(fx, fy - 0.12);
-          ctx.lineTo(fx + 0.06, fy);
-          ctx.lineTo(fx, fy + 0.12);
-          ctx.lineTo(fx - 0.06, fy);
+          ctx.moveTo(fx, fy - k);
+          ctx.lineTo(fx + k * 0.25, fy - k * 0.25);
+          ctx.lineTo(fx + k, fy);
+          ctx.lineTo(fx + k * 0.25, fy + k * 0.25);
+          ctx.lineTo(fx, fy + k);
+          ctx.lineTo(fx - k * 0.25, fy + k * 0.25);
+          ctx.lineTo(fx - k, fy);
+          ctx.lineTo(fx - k * 0.25, fy - k * 0.25);
           ctx.closePath();
           ctx.fill();
         }
       }
-      // the mine mouth in its timber frame
-      ctx.fillStyle = VEIN.mouth;
-      ctx.beginPath();
-      ctx.arc(v.x, v.y + 0.12, 0.42, Math.PI, 0);
-      ctx.lineTo(v.x + 0.42, v.y + 0.38);
-      ctx.lineTo(v.x - 0.42, v.y + 0.38);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = VEIN.beam;
-      ctx.lineWidth = 0.12;
-      ctx.beginPath();
-      ctx.moveTo(v.x - 0.5, v.y + 0.4);
-      ctx.lineTo(v.x - 0.5, v.y - 0.38);
-      ctx.lineTo(v.x + 0.5, v.y - 0.38);
-      ctx.lineTo(v.x + 0.5, v.y + 0.4);
-      ctx.stroke();
-      ctx.fillStyle = VEIN.gold;
-      ctx.beginPath();
-      ctx.arc(v.x, v.y + 0.2, 0.08 * glint + 0.04, 0, Math.PI * 2);
-      ctx.fill();
     }
     // iron ore deposits: their rocks (mined-out ones as rubble)
     for (const o of built.ores) {
