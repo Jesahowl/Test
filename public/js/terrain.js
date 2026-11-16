@@ -12,21 +12,42 @@ import { hexGridPath } from './render.js';
 // What the drawing helpers below draw on: the screen, or (while filling the terrain cache) a cached chunk.
 let dc = ctx;
 
-const PLAINS = '#18211d';
+// The palette is lifted a little (brighter, more colourful, a touch more contrast) so biomes, forests
+// and resources read at a glance: every terrain colour below goes through lift() once.
+const LIFT = { bright: 1.14, sat: 1.28, contrast: 1.06 };
+function lift(c) {
+  const l = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  return c.map((v) => Math.max(0, Math.min(255, Math.round(((l + (v - l) * LIFT.sat) * LIFT.bright - 128) * LIFT.contrast + 128))));
+}
+const liftStr = (str) => str
+  .replace(/#([0-9a-f]{6})\b/gi, (_, h) => '#' + lift([0, 2, 4].map((k) => parseInt(h.slice(k, k + 2), 16))).map((v) => v.toString(16).padStart(2, '0')).join(''))
+  .replace(/rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)/g, (m, r, g, b) => m.slice(0, m.indexOf('(') + 1) + lift([+r, +g, +b]).join(', '));
+// (lifts every colour in a table of them, in place: strings, and [r, g, b, ...] arrays)
+function liftAll(o) {
+  for (const k of Object.keys(o)) {
+    const v = o[k];
+    if (typeof v === 'string') o[k] = liftStr(v);
+    else if (Array.isArray(v) && v.length >= 3 && v.slice(0, 3).every((n) => typeof n === 'number')) o[k] = [...lift(v.slice(0, 3)), ...v.slice(3)];
+    else if (v && typeof v === 'object') liftAll(v);
+  }
+  return o;
+}
+
+const PLAINS = liftStr('#18211d');
 // things placed round a hex (trees, rocks, peaks) were laid out for hexes 2.5 tiles across: spread
 // them to fit the real size
 const HK = C.HEX_R / 2.5;
-const TREE_DARK = '#22422b';
-const TREE_LIGHT = '#346343';
+const TREE_DARK = liftStr('#21482a');
+const TREE_LIGHT = liftStr('#336a40');
 const TREE_SHADOW = 'rgba(0,0,0,0.35)';
-const STUMP = '#4a3826';
+const STUMP = liftStr('#4a3826');
 // iron ore deposits: rust-dark ground, red-brown rocks with ore specks (rubble once mined out)
 // (rocky outcrops on the biome's own ground: a ragged gravel patch, rust-streaked boulders; rubble once mined out)
-const ORE = { patch: [74, 68, 62], patchA: 0.5, pebbles: ['rgba(110,104,98,0.85)', 'rgba(150,85,60,0.8)'], rock: '#6a5a50', lit: '#7d6c61', crack: '#3e332c', speck: '#c0704a', rubble: '#4a403a' };
+const ORE = liftAll({ patch: [74, 68, 62], patchA: 0.5, pebbles: ['rgba(110,104,98,0.85)', 'rgba(150,85,60,0.8)'], rock: '#6a5a50', lit: '#7d6c61', crack: '#3e332c', speck: '#c0704a', rubble: '#4a403a' });
 
 // gold veins: dark rock shot with gold round a timber mine mouth, with a soft glow
 // gold veins: a pale gravel patch with gold pebbles, grey boulders flecked with twinkling gold, a soft glow
-const VEIN = { patch: [96, 92, 84], patchA: 0.5, pebbles: ['rgba(130,124,112,0.85)', 'rgba(150,145,132,0.8)', 'rgba(230,180,70,0.9)'], rock: '#5e564a', lit: '#72695b', crack: '#3a342c', gold: '#ffd76e' };
+const VEIN = liftAll({ patch: [96, 92, 84], patchA: 0.5, pebbles: ['rgba(130,124,112,0.85)', 'rgba(150,145,132,0.8)', 'rgba(230,180,70,0.9)'], rock: '#5e564a', lit: '#72695b', crack: '#3a342c', gold: '#ffd76e' });
 
 // One ore rock at (x, y), size s (tile units), as paths.
 function oreRock(x, y, s) {
@@ -56,21 +77,21 @@ const mapSeed = () => (S.round && S.round.seed != null ? S.round.seed : S.menuSe
 const layoutOf = (seed) => mapTerrain(seed, HEX, C.MAP_W, C.MAP_H, { rivers: !(S.round && S.round.rivers === false) });
 // mountains: grey rock hexes with snow-capped peaks; the hexes round them (foothills) lean grey too
 const ROCK_RGB = [58, 62, 67];
-const PEAK = { body: '#4a5058', lit: '#5d646d', snow: '#d8e0e4', shadow: 'rgba(0,0,0,0.35)' };
+const PEAK = liftAll({ body: '#4a5058', lit: '#5d646d', snow: '#d8e0e4', shadow: 'rgba(0,0,0,0.35)' });
 const FOREST_RGB = [19, 40, 27];
 const mixRgb = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
-const SNOW_PINE = { dark: '#2d4a40', light: '#cfd9dc' };
-const AUTUMN = ['#5e5030', '#64452c', '#545a30']; // (muted)
+const SNOW_PINE = liftAll({ dark: '#2d4a40', light: '#cfd9dc' });
+const AUTUMN = liftAll(['#5e5030', '#64452c', '#545a30']); // (muted)
 // biome props on open hexes (tile units)
-const PROP = { meadow: 'rgba(79, 110, 58, 0.55)', steppe: 'rgba(138, 122, 69, 0.5)', snow: 'rgba(220, 232, 236, 0.1)', pool: 'rgba(30, 70, 72, 0.45)', reed: 'rgba(92, 125, 72, 0.6)', dune: 'rgba(255, 230, 180, 0.08)', cactus: '#465e36', rock: '#50555b', rockLit: '#60656c' };
+const PROP = liftAll({ meadow: 'rgba(79, 110, 58, 0.55)', steppe: 'rgba(138, 122, 69, 0.5)', snow: 'rgba(220, 232, 236, 0.1)', pool: 'rgba(30, 70, 72, 0.45)', reed: 'rgba(92, 125, 72, 0.6)', dune: 'rgba(255, 230, 180, 0.08)', cactus: '#465e36', rock: '#50555b', rockLit: '#60656c' });
 const PLAINS_RGB = [24, 33, 29]; // (the old plains colour, which the ground leans toward a little)
 
 // rivers: bank, deep water, the lighter middle (widths in tiles) and the stone of their bridges
-const RIVER = { bank: '#2b3326', deep: '#1a3440', mid: '#22495a', flow: 'rgba(200, 230, 240, 0.16)', bankW: 1.6, deepW: 1.2, midW: 0.55 };
+const RIVER = liftAll({ bank: '#2b3326', deep: '#1a3440', mid: '#22495a', flow: 'rgba(200, 230, 240, 0.16)', bankW: 1.6, deepW: 1.2, midW: 0.55 });
 // the sea (style: cliffs and rocks): water darkening with depth (hexes out from the shore), a rocky
 // cliff face where the land drops into it, a line of surf at the cliff's foot, rocks in the shallows
-const SEA = { depth: ['#24505c', '#1c3d50', '#173248', '#13293f', '#112437'], cliff: '#4a4740', cliffLit: '#57534a', surf: '230, 240, 240', shadow: 'rgba(0, 0, 0, 0.2)', rock: '#5b5e62', rockLit: '#6c7075', cliffH: 0.9, ledge: 0.4 };
-const STONE = { base: '#6f7378', block: '#7f848a', rail: '#9aa0a6', post: '#b4bac0', shadow: 'rgba(0,0,0,0.4)' };
+const SEA = liftAll({ depth: ['#24505c', '#1c3d50', '#173248', '#13293f', '#112437'], cliff: '#4a4740', cliffLit: '#57534a', surf: '230, 240, 240', shadow: 'rgba(0, 0, 0, 0.2)', rock: '#5b5e62', rockLit: '#6c7075', cliffH: 0.9, ledge: 0.4 });
+const STONE = liftAll({ base: '#6f7378', block: '#7f848a', rail: '#9aa0a6', post: '#b4bac0', shadow: 'rgba(0,0,0,0.4)' });
 
 // ---- the forest, built once per map (in tile units)
 let built = null;
@@ -299,66 +320,202 @@ const hexOutline = (path, h) => {
 };
 const ghostIsSea = (L, g) => g.n.filter((j) => L.ocean.has(j)).length * 2 >= g.n.length && g.n.some((j) => L.ocean.has(j));
 
-// The ground colour of every hex (stepped: one colour per hex, from the climate at its centre),
-// gathered into one path per colour so a frame fills each colour once; and each open hex's props.
+// The ground of the whole map, painted once into one picture (GROUND_PX pixels a tile, drawn smoothed):
+// each hex's biome colour (from the climate at its centre; forest hexes a darker shade) fading into
+// its neighbours' near its edges, a gentle mottling, and ragged rocky ground round the mountains.
+// Plus each open hex's props (a few small biome details: grass, flowers, stones, dunes, reeds...).
+const GROUND_PX = 4;
+const SCREE_RGB = [66, 69, 72];
 function buildGround(seed) {
   const L = layoutOf(seed);
-  const byColour = new Map();
   const props = [];
   const tint = new Map(); // hex -> [r, g, b] (the minimap uses these too)
+  const R = C.HEX_R;
+  const col = new Float32Array(HEX.hexes.length * 3);
+  const water = (i) => L.ocean.has(i) || L.lakes.has(i);
   for (const h of HEX.hexes) {
     const cl = climate(seed, h.cx, h.cy, C.MAP_W, C.MAP_H);
     // (a calm ground: the biome colour, drawn a little toward the old plains, barely varying hex to hex)
     const jitter = 0.985 + hash(seed, h.i, 1717) * 0.03;
     let c = mixRgb(groundColor(cl), PLAINS_RGB, 0.18).map((v) => v * jitter);
-    if (L.ocean.has(h.i)) continue; // (the sea: see buildSea)
     const forest = L.forest.has(h.i);
     const mountain = L.mountains.has(h.i);
     if (forest) c = mixRgb(c, FOREST_RGB, 0.45);
-    if (mountain) c = mixRgb(c, ROCK_RGB, 0.8);
-    else if (L.foothills.has(h.i)) c = mixRgb(c, ROCK_RGB, 0.3); // (foothills: the range fades into the land)
-    c = c.map((v) => Math.round(v / 3) * 3);
-    tint.set(h.i, mountain ? [88, 93, 100] : c); // (the minimap shows ranges a lighter grey)
-    const key = `rgb(${c[0]},${c[1]},${c[2]})`;
-    if (!byColour.has(key)) byColour.set(key, new Path2D());
-    const path = byColour.get(key);
-    const cs = HEX.corners(h);
-    path.moveTo(cs[0][0], cs[0][1]);
-    for (let k = 1; k < 6; k++) path.lineTo(cs[k][0], cs[k][1]);
-    path.closePath();
+    col.set(c, h.i * 3);
+    if (L.ocean.has(h.i)) continue; // (the sea: see buildSea)
+    tint.set(h.i, lift(mountain ? [88, 93, 100] : L.foothills.has(h.i) ? mixRgb(c, ROCK_RGB, 0.3) : c)); // (the minimap shows ranges a lighter grey)
     if (forest || mountain || L.lakes.has(h.i) || L.iron.has(h.i) || L.veins.has(h.i)) continue;
-    // now and then a single small prop for the biome (most open hexes stay plain)
+    // a few small details for the biome, scattered over the hex
     const b = biomeOf(cl);
-    if (hash(seed, h.i, 2100) > 0.25) continue;
-    const spots = [[0, 0.3], [-1.05, -0.6], [1.05, -0.5], [-0.85, 0.95], [0.95, 1.0]].map(([x, y]) => [x * HK, y * HK]);
-    const n = 1;
     const list = [];
-    for (let k = 0; k < n; k++) {
-      const [dx, dy] = spots[k];
-      const x = h.cx + dx + (hash(seed, h.i, 2300 + k) - 0.5) * 0.6;
-      const y = h.cy + dy + (hash(seed, h.i, 2400 + k) - 0.5) * 0.4;
-      const kind = b === 'meadow' || b === 'woods' ? 'tuft' : b === 'steppe' ? 'dry' : b === 'tundra' ? (k === 0 ? 'rock' : 'snow')
-        : b === 'taiga' ? 'snow' : b === 'desert' ? (k === 0 && hash(seed, h.i, 2500) < 0.5 ? 'cactus' : 'dune') : b === 'swamp' ? 'reed' : 'rock';
-      list.push({ kind, x, y });
+    for (let k = 0; k < 4; k++) {
+      const x = h.cx + (hash(seed, h.i * 4 + k, 2300) - 0.5) * R * 1.4;
+      const y = h.cy + (hash(seed, h.i * 4 + k, 2400) - 0.5) * R * 1.2;
+      const r = hash(seed, h.i * 4 + k, 2500);
+      let kind = null;
+      if (b === 'meadow' || b === 'woods') kind = r < 0.55 ? 'tuft' : r < 0.63 ? 'flower' : null;
+      else if (b === 'steppe') kind = r < 0.5 ? 'dry' : r < 0.75 ? 'pebble' : null;
+      else if (b === 'desert') kind = r < 0.55 ? 'dune' : r < 0.62 && k === 0 ? 'cactus' : null;
+      else if (b === 'swamp') kind = r < 0.45 ? 'reed' : r < 0.8 ? 'tuft' : null;
+      else if (b === 'tundra') kind = r < 0.35 ? 'rock' : r < 0.6 ? 'pebble' : r < 0.8 ? 'snow' : null;
+      else if (b === 'taiga') kind = r < 0.4 ? 'snow' : r < 0.7 ? 'tuft' : null;
+      else kind = r < 0.35 ? 'rock' : r < 0.7 ? 'pebble' : null; // (highlands)
+      if (kind) list.push({ kind, x, y, hue: Math.floor(hash(seed, h.i, 2600 + k) * FLOWERS.length) });
     }
+    list.sort((a, c2) => a.y - c2.y);
     if (list.length) props.push({ i: h.i, x: h.cx, y: h.cy, list });
   }
-  // the edge slivers on land take a neighbour's ground
-  for (const g of ghostHexes()) {
-    if (ghostIsSea(L, g)) continue;
-    const j = g.n.find((k) => !L.ocean.has(k) && tint.has(k));
-    if (j === undefined) continue;
-    const c = tint.get(j);
-    const key = `rgb(${c[0]},${c[1]},${c[2]})`;
-    if (!byColour.has(key)) byColour.set(key, new Path2D());
-    hexOutline(byColour.get(key), g);
+  // the picture
+  const W = C.MAP_W * GROUND_PX;
+  const H = C.MAP_H * GROUND_PX;
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const g = cv.getContext('2d');
+  const img = g.createImageData(W, H);
+  const d = img.data;
+  const noise = (x, y, k) => {
+    const a = Math.floor(x);
+    const b = Math.floor(y);
+    let fx = x - a;
+    let fy = y - b;
+    fx = fx * fx * (3 - 2 * fx);
+    fy = fy * fy * (3 - 2 * fy);
+    const v00 = hash(seed + k, a, b);
+    const v10 = hash(seed + k, a + 1, b);
+    const v01 = hash(seed + k, a, b + 1);
+    const v11 = hash(seed + k, a + 1, b + 1);
+    return v00 + (v10 - v00) * fx + (v01 - v00) * fy + (v00 - v10 - v01 + v11) * fx * fy;
+  };
+  const { bright, sat, contrast } = LIFT;
+  const rockReach = R * 1.05 + 1.6;
+  for (let py = 0; py < H; py++) {
+    const y = (py + 0.5) / GROUND_PX;
+    const row = Math.floor(y) * C.MAP_W;
+    for (let px = 0; px < W; px++) {
+      const x = (px + 0.5) / GROUND_PX;
+      const i = HEX.tileHex[row + Math.floor(x)];
+      const h = HEX.hexes[i];
+      let r = col[i * 3];
+      let gg = col[i * 3 + 1];
+      let b = col[i * 3 + 2];
+      // fade toward the nearest neighbour (of land) near the edge between them
+      const dh = Math.hypot(h.cx - x, h.cy - y);
+      let bj = -1;
+      let bd = 1e9;
+      let dm = L.mountains.has(i) ? Math.hypot(h.cx - x, (h.cy - y) * 1.1) : 1e9;
+      for (const j of h.n) {
+        const q = HEX.hexes[j];
+        if (L.mountains.has(j)) dm = Math.min(dm, Math.hypot(q.cx - x, (q.cy - y) * 1.1));
+        if (water(j)) continue;
+        const dd = (q.cx - x) * (q.cx - x) + (q.cy - y) * (q.cy - y);
+        if (dd < bd) {
+          bd = dd;
+          bj = j;
+        }
+      }
+      if (bj >= 0) {
+        const t = Math.max(0, 1 - (Math.sqrt(bd) - dh) / (R * 0.55));
+        const w = 0.5 * t * t;
+        r += (col[bj * 3] - r) * w;
+        gg += (col[bj * 3 + 1] - gg) * w;
+        b += (col[bj * 3 + 2] - b) * w;
+      }
+      // rocky ground under and round the mountains, with a ragged edge
+      if (dm < rockReach) {
+        const e = R * 1.05 + (noise(x / 1.4, y / 1.4, 8100) - 0.5) * 1.6;
+        const t = Math.min(1, Math.max(0, (e + 0.8 - dm) / 1.4)) * 0.8;
+        const rn = (noise(x / 0.5, y / 0.5, 8200) - 0.5) * 10 * t;
+        r += (SCREE_RGB[0] + rn - r) * t;
+        gg += (SCREE_RGB[1] + rn - gg) * t;
+        b += (SCREE_RGB[2] + rn - b) * t;
+      }
+      // mottling
+      const m = (noise(x / 0.7, y / 0.7, 8300) - 0.5) * 11; // (finer grain: grainPattern)
+      r += m;
+      gg += m;
+      b += m;
+      // the lifted palette (as lift(), inline: this runs for every pixel)
+      const l = 0.2126 * r + 0.7152 * gg + 0.0722 * b;
+      const o = (py * W + px) * 4;
+      d[o] = ((l + (r - l) * sat) * bright - 128) * contrast + 128;
+      d[o + 1] = ((l + (gg - l) * sat) * bright - 128) * contrast + 128;
+      d[o + 2] = ((l + (b - l) * sat) * bright - 128) * contrast + 128;
+      d[o + 3] = 255;
+    }
   }
-  return { ground: [...byColour], props, tint };
+  g.putImageData(img, 0, 0);
+  return { groundImg: cv, props, tint };
 }
 
+// A fine grain over the ground (a tiling picture: periodic value noise), seen close up.
+let grain = null;
+function grainPattern(g) {
+  if (grain) return grain;
+  const N = 256;
+  const cell = 4;
+  const P = N / cell;
+  const cv = document.createElement('canvas');
+  cv.width = N;
+  cv.height = N;
+  const cg = cv.getContext('2d');
+  const img = cg.createImageData(N, N);
+  const v = (a, b) => hash(77, ((a % P) + P) % P, ((b % P) + P) % P);
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const a = Math.floor(x / cell);
+      const b = Math.floor(y / cell);
+      let fx = x / cell - a;
+      let fy = y / cell - b;
+      fx = fx * fx * (3 - 2 * fx);
+      fy = fy * fy * (3 - 2 * fy);
+      const n = v(a, b) + (v(a + 1, b) - v(a, b)) * fx + (v(a, b + 1) - v(a, b)) * fy + (v(a, b) - v(a + 1, b) - v(a, b + 1) + v(a + 1, b + 1)) * fx * fy;
+      const k = n * 0.9 + hash(78, x, y) * 0.1 - 0.5;
+      const o = (y * N + x) * 4;
+      const c = k > 0 ? 255 : 0;
+      img.data[o] = c;
+      img.data[o + 1] = c;
+      img.data[o + 2] = c;
+      img.data[o + 3] = Math.abs(k) * 34;
+    }
+  }
+  cg.putImageData(img, 0, 0);
+  grain = g.createPattern(cv, 'repeat');
+  grain.setTransform(new DOMMatrix().scale(1 / 20)); // (20 pixels a tile: one repeat is about 13 tiles)
+  return grain;
+}
+
+// A small stone (scree round the mountains) at (x, y), size s, onto g.
+function screeStone(g, x, y, s) {
+  g.fillStyle = TREE_SHADOW;
+  g.beginPath();
+  g.ellipse(x + 0.04, y + s * 0.5, s * 1.05, s * 0.35, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = PROP.rock;
+  g.beginPath();
+  g.ellipse(x, y, s, s * 0.7, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = PROP.rockLit;
+  g.beginPath();
+  g.ellipse(x - s * 0.3, y - s * 0.25, s * 0.5, s * 0.35, 0, 0, Math.PI * 2);
+  g.fill();
+}
+
+const FLOWERS = ['rgba(200, 170, 190, 0.6)', 'rgba(210, 200, 150, 0.6)', 'rgba(200, 140, 140, 0.6)'].map(liftStr);
 function drawProp(p) {
   const { x, y } = p;
   switch (p.kind) {
+    case 'flower':
+      ctx.fillStyle = FLOWERS[p.hue];
+      for (let k = 0; k < 4; k++) {
+        ctx.beginPath();
+        ctx.arc(x + Math.cos(k * 1.57) * 0.13, y + Math.sin(k * 1.57) * 0.13, 0.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    case 'pebble':
+      screeStone(ctx, x, y, 0.16 + (p.hue % 3) * 0.04);
+      break;
     case 'tuft':
     case 'dry':
       ctx.strokeStyle = p.kind === 'tuft' ? PROP.meadow : PROP.steppe;
@@ -594,13 +751,13 @@ function drawSea(sea, animate = true) {
 // ---- lakes: each painted once into a small picture (PX pixels a tile) with a shore along its hex edges,
 // in the style of the biome it lies in, plus a few props round it drawn as shapes.
 const LAKE_PX = 12;
-const LAKE_STYLE = {
+const LAKE_STYLE = liftAll({
   // shore: [r, g, b, alpha, width in tiles]; water: shallow, deep, depth (tiles) to go from one to the other
   meadow: { shore: [78, 96, 58, 0.9, 0.3], shallow: '#2f6f78', deep: '#1d4a5e', depth: 3, edge: 0.45, tint: [40, 92, 104] },
   tarn: { shore: [88, 92, 96, 0.95, 0.4], shallow: '#2a4e60', deep: '#0f2235', depth: 1.4, edge: 0, ice: true, tint: [30, 60, 80] },
   marsh: { shore: [58, 52, 38, 0.9, 0.6], shallow: '#2e5552', deep: '#1c3433', depth: 2.5, edge: 0, weed: true, tint: [58, 84, 66] },
   oasis: { shore: [196, 176, 120, 0.95, 0.7], shallow: '#4fb3a8', deep: '#227a83', depth: 2, edge: 0.5, green: true, tint: [70, 160, 150] },
-};
+});
 // (cold or high: a tarn; warm and dry: an oasis, rare; the very wettest ground: a marsh pond; else a meadow lake)
 const lakeStyleOf = ({ temp, wet, high }) => (high > 0.45 || temp < 0.3 ? 'tarn' : temp > 0.5 && wet < 0.55 ? 'oasis' : wet > 0.97 ? 'marsh' : 'meadow');
 const rgbOf = (hx) => [1, 3, 5].map((k) => parseInt(hx.slice(k, k + 2), 16));
@@ -854,6 +1011,19 @@ function build(seed) {
     });
   }
   peaks.sort((a, b) => a.y - b.y);
+  // loose stones scattered round each mountain (on land, not in the water)
+  const scree = [];
+  for (const i of L.mountains) {
+    const h = HEX.hexes[i];
+    for (let k = 0; k < 5; k++) {
+      const x = h.cx + (hash(seed, i * 5 + k, 3500) - 0.5) * C.HEX_R * 2.3;
+      const y = h.cy + (hash(seed, i * 5 + k, 3600) - 0.5) * C.HEX_R * 2;
+      const j = HEX.at(x, y);
+      if (j < 0 || L.ocean.has(j) || L.lakes.has(j)) continue;
+      scree.push([x, y, 0.2 + hash(seed, i * 5 + k, 3700) * 0.25]);
+    }
+  }
+  scree.sort((a, b) => a[1] - b[1]);
   const groundInfo = buildGround(seed);
   const fill = new Path2D();
   const forests = [];
@@ -898,12 +1068,13 @@ function build(seed) {
     const cl = climate(seed, h.cx, h.cy, C.MAP_W, C.MAP_H);
     const snowy = cl.temp < 0.3;
     const autumn = !snowy && cl.temp > 0.45 && biomeOf(cl) !== 'taiga';
-    // ten trees, two to each of the five steps the hex is chopped down in
-    const trees = [[0, 0], [-1.05, -0.65], [1.05, -0.6], [-0.95, 0.8], [1.0, 0.85], [0.05, -1.25], [-0.05, 1.3], [-1.75, 0.05], [1.75, 0.1], [-0.5, -0.05]]
+    // fifteen trees, three to each of the five steps the hex is chopped down in (a full stand)
+    const trees = [[0, 0], [-1.05, -0.65], [1.05, -0.6], [-0.95, 0.8], [1.0, 0.85], [0.05, -1.25], [-0.05, 1.3], [-1.75, 0.05], [1.75, 0.1], [-0.5, -0.05],
+      [0.55, 0.35], [-0.6, -1.2], [0.65, -1.15], [-0.55, 1.25], [0.6, 1.3]]
       .map(([dx, dy]) => [dx * HK, dy * HK]).map(([dx, dy], k) => {
       const tx = h.cx + dx + (hash(seed, h.i * 7 + k, 11) - 0.5) * 0.6;
       const ty = h.cy + dy + (hash(seed, h.i, 91 + k) - 0.5) * 0.5 + 0.2;
-      const ts = 0.38 + hash(seed, k, h.i) * 0.14;
+      const ts = 0.42 + hash(seed, k, h.i) * 0.16;
       // (warm woods mix in round autumn trees; the cold has snowy pines)
       const t = autumn && hash(seed, h.i, 1900 + k) < 0.25 ? roundTree(tx, ty, ts * 1.15, AUTUMN[Math.floor(hash(seed, h.i, 1950 + k) * AUTUMN.length)]) : pine(tx, ty, ts);
       t.snowy = snowy;
@@ -917,7 +1088,7 @@ function build(seed) {
   }
   for (const [i, c] of sea.tint) groundInfo.tint.set(i, c);
   for (const lk of lakes) for (const i of lk.cells) groundInfo.tint.set(i, lk.tint);
-  return { seed, fill, forests, rivers, patches, ores, veins, peaks, sea, lakes, ...groundInfo };
+  return { seed, fill, forests, rivers, patches, ores, veins, peaks, scree, sea, lakes, ...groundInfo };
 }
 
 // ---- the terrain cache: everything about the ground that never changes (biome colours, the sea
@@ -947,11 +1118,22 @@ function paintStatic(g, x0, y0, x1, y1, s) {
   g.fillStyle = PLAINS;
   g.fillRect(x0, y0, x1 - x0, y1 - y0);
   drawSea(built.sea, false);
-  // each hex's biome ground (forest hexes a darker shade of theirs)
-  for (const [colour, path] of built.ground) {
-    g.fillStyle = colour;
-    g.fill(path);
+  // the ground picture (all but the sea), with a fine grain over it close up
+  if (!built.noSea) {
+    built.noSea = new Path2D();
+    built.noSea.rect(-10, -10, C.MAP_W + 20, C.MAP_H + 20);
+    built.noSea.addPath(built.sea.all);
   }
+  g.save();
+  g.clip(built.noSea, 'evenodd');
+  g.imageSmoothingEnabled = true;
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(built.groundImg, 0, 0, C.MAP_W, C.MAP_H);
+  if (s >= 6) {
+    g.fillStyle = grainPattern(g);
+    g.fillRect(x0, y0, x1 - x0, y1 - y0);
+  }
+  g.restore();
   // the gravel patches of ore deposits and gold veins
   for (const pt of built.patches) {
     if (pt.x > x1 || pt.y > y1 || pt.x + pt.w < x0 || pt.y + pt.h < y0) continue;
@@ -972,10 +1154,17 @@ function paintStatic(g, x0, y0, x1, y1, s) {
   if (s >= 6) {
     g.save();
     g.clip(landOnly(), 'evenodd');
-    g.strokeStyle = 'rgba(255,255,255,0.045)';
+    g.strokeStyle = 'rgba(255,255,255,0.07)';
     g.lineWidth = 1 / s;
     g.stroke(hexGridPath());
     g.restore();
+  }
+  // loose stones round the mountains
+  if (s >= 4) {
+    for (const [x, y, z] of built.scree) {
+      if (x < x0 - 1 || x > x1 + 1 || y < y0 - 1 || y > y1 + 1) continue;
+      screeStone(g, x, y, z);
+    }
   }
   // mountain peaks (at every zoom: they matter for where troops can go)
   for (const p of built.peaks) {

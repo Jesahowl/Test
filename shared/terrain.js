@@ -41,7 +41,7 @@
   function biomeOf({ temp, wet, high }) {
     if (high > 0.45) return 'high';
     if (temp < 0.3) return wet > 0.5 ? 'taiga' : 'tundra';
-    if (wet > 0.68) return 'swamp';
+    if (wet > 0.72) return 'swamp'; // (kept fairly rare: a muddy map reads badly)
     if (temp > 0.68 && wet < 0.38) return 'desert';
     if (temp > 0.55 && wet < 0.5) return 'steppe';
     return wet > 0.52 ? 'woods' : 'meadow';
@@ -347,6 +347,26 @@
     const order = [...mountains].sort((a, b) => hash(seed + 62, a, 1) - hash(seed + 62, b, 1));
     const mNeighbours = (i) => hex.hexes[i].n.filter((j) => mountains.has(j));
     for (const i of order) if (mountains.has(i) && mNeighbours(i).length >= 3) mountains.delete(i);
+    // Lone peaks look like a rash of dots: about half go, and the rest grow into a short ridge of
+    // three (one hex on each side, in a line), where there's room for it.
+    const SQ3 = Math.sqrt(3);
+    const R = hex.r;
+    for (const i of order) {
+      if (!mountains.has(i) || mNeighbours(i).length) continue;
+      if (hash(seed + 64, i, 1) < 0.5) {
+        mountains.delete(i);
+        continue;
+      }
+      const d = Math.floor(hash(seed + 64, i, 2) * 3);
+      const h0 = hex.hexes[i];
+      for (const dir of [d, d + 3]) {
+        const a = (Math.PI / 3) * dir;
+        const j = hex.at(h0.cx + R * SQ3 * Math.cos(a), h0.cy + R * SQ3 * Math.sin(a));
+        if (j < 0 || mountains.has(j) || water.has(j) || riverHex.has(j) || hex.hexes[j].full === false) continue;
+        if (mNeighbours(j).length > 1) continue; // (only the peak it grows from: never joined into a blob)
+        mountains.add(j);
+      }
+    }
     for (const hx of hex.hexes) {
       if (mountains.has(hx.i)) continue;
       const round = mNeighbours(hx.i).sort((a, b) => hash(seed + 63, a, 2) - hash(seed + 63, b, 2));
@@ -407,6 +427,8 @@
       }
       if (!opened) break; // (cut off by rivers alone: nothing mountains can do)
     }
+    // (the gaps and passes cut above leave some lone peaks again: most of those go too)
+    for (const i of [...mountains]) if (!mNeighbours(i).length && hash(seed + 64, i, 3) < 0.65) mountains.delete(i);
     const foothills = new Set();
     for (const i of mountains) for (const j of hex.hexes[i].n) if (!mountains.has(j) && !water.has(j)) foothills.add(j);
     const forest = new Set();
