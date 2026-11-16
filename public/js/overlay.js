@@ -5,6 +5,7 @@ import { isAlly } from './diplomacy.js';
 import { squadsLabel } from './bar.js';
 import { mySquads, squadPicked } from './squads.js';
 import { drawShape, label } from './render.js';
+import { play } from './audio.js';
 import { S, C, HEX, canvas, colorOf, ctx, explored, FOG_PAD, fogSoft, grid, mctx, mini, mouse, players, scale, selUnits, terr, terrCanvas, toScreen, toWorld } from './state.js';
 import { campVerb, isMineTarget, orderTargetAt, targetName, targetPos } from './targets.js';
 import { drawLandMode, hexPath } from './land.js';
@@ -123,6 +124,8 @@ const rectHitsCircle = (r, c) => {
 };
 const rectsHit = (p, q) => p.x < q.x + q.w && q.x < p.x + p.w && p.y < q.y + q.h && q.y < p.y + p.h;
 
+const squadFighting = new Map(); // squad id -> fighting last frame
+const squadClashAt = new Map(); // squad id -> when its war drum last sounded
 // What a squad is doing, as [icon, colour, words] for its tag: fighting right now, attacking,
 // raiding a camp, pillaging, holding a spot, escorting, defending a tower, guarding home or
 // heading home.
@@ -157,6 +160,13 @@ function drawSquadTag(q, s, obs, placed) {
   const txt = String(q.num);
   // (its activity icon on the left of the number)
   const [icon, col, , fighting] = squadActivity(q);
+  // (a squad that's just got into a fight: a war drum, wherever it is, at most every few seconds)
+  const was = squadFighting.get(q.id);
+  if (fighting && !was && performance.now() - (squadClashAt.get(q.id) || 0) > 4000) {
+    squadClashAt.set(q.id, performance.now());
+    play('clash');
+  }
+  squadFighting.set(q.id, !!fighting);
   const iw = fs * 1.25;
   const w = Math.max(fs * 1.35, ctx.measureText(txt).width + fs * 0.7) + iw;
   const h = fs * 1.3;

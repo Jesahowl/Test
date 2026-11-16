@@ -198,6 +198,29 @@ const SFX = {
     const notes = { attack: [660, 880, 660], defend: [523, 659, 784], danger: [880, 587, 880], look: [784, 988] }[f.kind] || [784];
     notes.forEach((n, i) => tone(o, t + i * 0.09, { type: f.kind === 'danger' ? 'square' : 'triangle', f: n, d: 0.16, peak: f.kind === 'danger' ? 0.06 : 0.1 }));
   },
+  // workers running from raiders: a quick two-note alarm
+  flee: (o, t) => {
+    for (const [f, dt] of [[988, 0], [740, 0.13], [988, 0.32], [740, 0.45]]) tone(o, t + dt, { type: 'square', f, d: 0.1, peak: 0.045 });
+  },
+  // one of my squads has just got into a fight: a war drum and a short horn
+  clash: (o, t) => {
+    for (const dt of [0, 0.16]) {
+      tone(o, t + dt, { f: 95, f2: 55, d: 0.22, peak: 0.32 });
+      noise(o, t + dt, { d: 0.08, peak: 0.12, type: 'lowpass', f: 700 });
+    }
+    tone(o, t + 0.3, { type: 'sawtooth', f: 196, a: 0.04, d: 0.32, peak: 0.045 });
+    tone(o, t + 0.3, { type: 'sawtooth', f: 294, a: 0.04, d: 0.32, peak: 0.035 });
+  },
+  // the tutorial: a step done (a rising chime), and all done (a little fanfare)
+  step: (o, t) => {
+    [784, 988, 1319].forEach((f, i) => tone(o, t + i * 0.08, { type: 'triangle', f, d: 0.28, peak: 0.07 }));
+  },
+  fanfare: (o, t) => {
+    [[523, 0], [659, 0.12], [784, 0.24], [1047, 0.4]].forEach(([f, dt]) => {
+      tone(o, t + dt, { type: 'triangle', f, d: dt === 0.4 ? 0.7 : 0.18, peak: 0.08 });
+      tone(o, t + dt, { type: 'sawtooth', f: f / 2, a: 0.02, d: dt === 0.4 ? 0.6 : 0.16, peak: 0.025 });
+    });
+  },
   // interface
   click: (o, t) => tone(o, t, { type: 'triangle', f: 1400, f2: 900, d: 0.04, peak: 0.05 }),
   order: (o, t) => {
@@ -217,7 +240,7 @@ const SFX = {
 };
 
 // Fewest milliseconds between two sounds of a kind, and how many may play at once at most.
-const GAP = { ping: 150, click: 40, ok: 80, err: 120, place: 60, order: 120, arrow: 45, slash: 40, tshot: 60, hit: 90, boom: 70, gold: 120, raid: 200, built: 150, wave: 300, campSpawn: 500, buff: 300, trade: 150, capture: 300, coreDown: 300 };
+const GAP = { flee: 1500, clash: 1200, step: 300, fanfare: 2000, ping: 150, click: 40, ok: 80, err: 120, place: 60, order: 120, arrow: 45, slash: 40, tshot: 60, hit: 90, boom: 70, gold: 120, raid: 200, built: 150, wave: 300, campSpawn: 500, buff: 300, trade: 150, capture: 300, coreDown: 300 };
 const lastAt = new Map();
 let voices = 0;
 const MAX_VOICES = 18;
@@ -290,6 +313,9 @@ function onFx(f, delay) {
       play('tshot', pos, delay);
       return;
     case 'ping':
+      return;
+    case 'flee':
+      if (mine) play('flee'); // (heard wherever you're looking: your workers need you)
       return;
     default:
       play(f.k, pos, delay, f);

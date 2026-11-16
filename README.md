@@ -131,7 +131,7 @@ closes after a minute.
 | **Towers** | Zap enemy troops with **chain lightning** (58 damage; each bolt jumps on to up to 2 more enemies nearby, at 75% of the previous hit, so crowds suffer most). Cores zap the same way. A level 1 tower holds off one wave, two waves take it with heavy losses, and a level 3 tower needs a real army and **hold your land** (they claim none themselves). Each is a wizard tower whose top floats in pieces above its broken stump, held up by magic around a crystal. Your core (a great crystal over a rune circle) zaps too. Barracks are crystal halls: stone halls with crystals on the roof ridge and a doorway that flares as each wave marches out. Higher levels: a taller stump with a band, a spinning rune ring, gold runes and a glowing aura. Towers and barracks stand at the centre of one of your own hexes, one building per hex, and not in a hex next to an enemy building or core. |
 | **Destroying buildings** | **Destroy** an enemy tower, barracks or trade post and it's simply gone (+150g): nobody takes it over and the land stays its owner's. Your attackers and waves push on to that player's next building. Buildings only become ruins when their owner's core falls with nobody to take them. |
 | **Gold** | Land pays a steady income (1.5g/s + 0.015g/s per tile; tiles beyond 400 pay 40% of that, so a huge empire doesn't run away with the game). The rest comes from fighting: 14g per enemy troop killed (+6 per troop level), 40–250g per barbarian (a whole camp pays 120–370g), 150g for a tower, and 250g plus all of their gold for a core. Each bounty pops up where you earned it, and the death screen breaks down where your gold came from. |
-| **Barbarian camps** | 12 neutral barbarian camps, spread out (each is placed as far as possible from the others, at least 18 tiles apart), in three sizes: **Raider Camp** (3 axe raiders, 120g), **Barbarian Outpost** (a club-wielding brute + 2 raiders, 190g) and **Warlord's Fort** (a crowned warlord + 2 spearmen, 370g + buff). Each camp is a **tent village** on trampled earth: 3 tents for a Raider Camp, 4 plus war banners for an Outpost, and 5 with a watchtower for the Warlord's Fort (its beacon fire marks the buff). Barbarians are red-rimmed tokens with horned helmets; the weapon tells you the type. They're passive until attacked, or until anyone's troops or workers **come within a tile of the camp**: then the whole camp turns on that player. Hover a camp to see what it pays; right-click it to send troops. They come back after 45s (the Warlord's Fort after 90s) **in a new random spot**, shown on the map and minimap with a countdown ring. |
+| **Barbarian camps** | 18 neutral barbarian camps, spread out (each is placed as far as possible from the others, at least 18 tiles apart), in three sizes: **Raider Camp** (3 axe raiders, 120g), **Barbarian Outpost** (a club-wielding brute + 2 raiders, 190g) and **Warlord's Fort** (a crowned warlord + 2 spearmen, 370g + buff). Each camp is a **tent village** on trampled earth: 3 tents for a Raider Camp, 4 plus war banners for an Outpost, and 5 with a watchtower for the Warlord's Fort (its beacon fire marks the buff). Barbarians are red-rimmed tokens with horned helmets; the weapon tells you the type. They're passive until attacked, or until anyone's troops or workers **come within a tile of the camp**: then the whole camp turns on that player. Hover a camp to see what it pays; right-click it to send troops. They come back after 45s (the Warlord's Fort after 90s) **in a new random spot**, shown on the map and minimap with a countdown ring. |
 | **Jungle buff** | Defeating a **Warlord's Fort** (marked 🔥 buff) empowers all your troops for 60s: **+30% damage and 25% less damage taken**. Buffed troops glow orange and a 🔥 shows next to your name. |
 | **Rounds** | **Last core standing wins.** Joining is open for the first 60s of a round (bots fill in during that time too). After that, newcomers watch and join the next round automatically. Cores are **fortified for the first 8 minutes** (they take 80% less damage), and from minute 8 troops hit buildings **10% harder every minute**, so early rushes can't knock anyone out but pushes keep getting stronger. After **19 minutes, sudden death** starts: no home-turf bonus, troops deal double damage to towers and cores, and cores slowly crumble (and can't be repaired). **Six minutes into sudden death, time's up**: the round ends and whoever holds the most land wins, so every round ends. Then a scoreboard shows everyone's placing and a new round starts on a fresh map 15s later. If only bots are left, pressing *New round* starts one straight away. |
 | **Home turf** | Troops on their own land heal 2% HP/s and deal +30% damage, so defending is cheaper than attacking. |
@@ -173,7 +173,7 @@ and get a turning gold rune ring at level 4 and a radiant aura at level 5.
 | `H` | Every squad defends your core |
 | `R` | Place a barracks (your own land only): it raises your next squad |
 | `K` | Place a workshop: +2 workers |
-| `J` | Workers drawer: job priorities |
+| `J` | Workers drawer: how many workers on each job, presets, switches and the build queue |
 | Click a worker, right-click | Send it to build, repair, chop or farm there |
 | `T` | Place a trade post (your own land only): sends caravans to an ally's trade post |
 | `V` | Build walls: drag along your border. Click a wall to make it a gate, or knock it down (`Del`; the refund scales with its health) |
@@ -203,9 +203,10 @@ rounds (`ROUND_JOIN_WINDOW`, `ROUND_SUDDEN_DEATH`, `SUDDEN_DEATH_*`, `CORE_FORTI
 shared/config.js        game constants + stat/cost helpers (used by Node and the browser)
 shared/pathfinding.js   flow-field Dijkstra used by marching troops
 shared/vision.js        fog of war: who can see which tiles (server filtering + client drawing)
-public/js/terrain.js    the ground: plains, forest patches (chopped ones thin to stumps), rivers and bridges, from the round's map seed
-shared/terrain.js       which hexes are forest, and where rivers and bridges run (shared by server and browser)
-server/game/workers.js  workers and wood: building sites, repairs, chopping, farming, job priorities
+public/js/terrain.js    the ground: biomes, the sea and its cliffs, lakes, rivers and bridges, mountains, forests, ore and veins,
+                        painted into a cached layer of chunks (only what moves is drawn each frame)
+shared/terrain.js       the map's layout from its seed: sea, lakes, rivers, mountains, forests, ore, veins (server and browser)
+server/game/workers.js  workers: building sites, repairs, chopping, mining, farming, job counts, fleeing, the build queue
 shared/hex.js           the hex grid: which hex each tile is in, neighbours, corners (land, buildings, borders)
 server/index.js         HTTP static server + WebSocket, routes players to rooms, 20 Hz tick
 server/room.js          a room: its lobby (public countdown + Ready, or private host), its game, and the 10 Hz per-player state broadcast
@@ -220,8 +221,11 @@ public/js/*.js          the browser client as ES modules (entry: main.js):
                           state (shared data; values several modules reassign live on S) · net
                           (WebSocket, interpolation) · fog · targets · territory · render · structures ·
                           troops · camps · cores · effects · overlay (build preview, markers, minimap) ·
-                          ui (icons, tooltips) · bar (drawer contents) · dock (dock and drawers) · hud · tips · screens · input · main
-test/                   node:test suite (game rules, squads & orders, jungle, rounds, pathfinding, server)
+                          ui (icons, tooltips) · bar (drawer contents) · dock (dock and drawers) · hud · tips · screens · input ·
+                          workforce (the Workers drawer, worker icons, box select) · tutorial (the guided first game) ·
+                          touch (phones and tablets) · pings · audio · lobby · land · walls · trade · diplomacy · main
+test/                   node:test suite (game rules, squads & formations, workers, jungle, rounds, walls & terrain,
+                        trade, alliances, pathfinding, server)
 ```
 
 - **Authoritative server.** Clients only send intents (`build`, `upgrade`, `sell`, `capture`, `army`, `order` with optional `ids` or `squads`, `squad` to change a squad's mix or stance). The server validates everything.

@@ -6,6 +6,7 @@
 import { sendMsg } from './net.js';
 import { S, $, C, cam, ctx, players, scale, selUnits, toScreen } from './state.js';
 import { playerName } from './lobby.js';
+import { play } from './audio.js';
 
 const mySquads = () => (S.me && S.me.squads) || [];
 const myBuildings = (kind) => [...S.towers.values()].filter((t) => t.owner === S.myId && t.kind === kind && !t.ruin);
@@ -124,7 +125,10 @@ function updateTutorial() {
   }
   if (!start) start = { x: cam.x, y: cam.y, zoom: cam.zoom };
   const now = performance.now();
-  if (step < STEPS.length && !doneAt && STEPS[step].done()) doneAt = now;
+  if (step < STEPS.length && !doneAt && STEPS[step].done()) {
+    doneAt = now;
+    play(step === STEPS.length - 1 ? 'fanfare' : 'step');
+  }
   if (doneAt && now - doneAt > 1200) {
     doneAt = 0;
     step++;
