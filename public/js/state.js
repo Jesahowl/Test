@@ -62,7 +62,8 @@ S.forestLeft = new Map(); // chopped forest hexes: hex -> wood left in fifths
 S.oreLeft = new Map(); // mined ore deposits: hex -> iron left in fifths
 S.selWorker = null; // the worker picked (right-click sends it to work)...
 S.selWorkers = new Set(); // ...and every worker picked (click, Shift+click or drag a box)
-S.workerBox = null; // the box being dragged round workers (screen pixels)
+S.workerBox = null;
+S.struckAt = new Map(); // troop id -> when it last swung or shot (squads in a fight show it) // the box being dragged round workers (screen pixels)
 S.workerSent = new Map(); // worker id -> { x, y, at }: where I sent it by hand (marked until it gets there)
 
 S.effects = [];

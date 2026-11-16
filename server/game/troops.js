@@ -220,7 +220,7 @@ module.exports = {
     if (def.ranged) {
       // Archer: an arrow flies to the target.
       this.hurt(target, dmg, u.owner);
-      this.fx.push({ k: 'arrow', x1: round2(u.x), y1: round2(u.y), x2: round2(tx), y2: round2(ty), o: u.owner });
+      this.fx.push({ k: 'arrow', x1: round2(u.x), y1: round2(u.y), x2: round2(tx), y2: round2(ty), o: u.owner, a: u.id });
     } else {
       this.hurt(target, dmg, u.owner);
       this.fx.push({ k: 'slash', x: round2(tx), y: round2(ty), a: u.id }); // a: who swung (for the lunge)

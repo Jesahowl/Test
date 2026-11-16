@@ -353,6 +353,7 @@ function applyState(msg) {
     S.effects.push(fx);
     onFx(f, INTERP_DELAY / 1000); // its sound, in step too
     if (f.k === 'flee') onFlee(f);
+    if ((f.k === 'slash' || f.k === 'arrow') && f.a) S.struckAt.set(f.a, now + INTERP_DELAY); // (squad tags show who's fighting)
     if (f.k === 'wave') {
       const t = S.towers.get(grid.get(`${Math.floor(f.x)},${Math.floor(f.y)}`));
       if (t) t.waveAt = now + INTERP_DELAY;

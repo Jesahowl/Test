@@ -123,16 +123,42 @@ const rectHitsCircle = (r, c) => {
 };
 const rectsHit = (p, q) => p.x < q.x + q.w && q.x < p.x + p.w && p.y < q.y + q.h && q.y < p.y + p.h;
 
+// What a squad is doing, as [icon, colour, words] for its tag: fighting right now, attacking,
+// raiding a camp, pillaging, holding a spot, escorting, defending a tower, guarding home or
+// heading home.
+function squadActivity(q) {
+  const now = performance.now();
+  const fighting = q.units.some((u) => now - (S.struckAt.get(u.id) || -1e9) < 2000);
+  const st = String(q.status || q.order || '');
+  const [, kind, k] = /^(attack|defend) (\w):?/.exec(st) || [];
+  let a;
+  if (kind === 'defend') {
+    const tx = Math.floor(q.cx);
+    const ty = Math.floor(q.cy);
+    const home = tx >= 0 && ty >= 0 && tx < C.MAP_W && ty < C.MAP_H && terr[ty * C.MAP_W + tx] === S.myId;
+    a = k === 't' ? ['🛡\uFE0F', '#58a6ff', 'defending a tower'] : home ? ['🏠', '#58a6ff', 'guarding home'] : ['↩', '#8b949e', 'heading home'];
+  } else if (k === 'j') a = q.stance === 'pillage' ? ['🔥', '#ff9e57', 'pillaging camps'] : ['⛺', '#e3b341', 'raiding a camp'];
+  else if (k === 'p') a = ['📍', '#f2c14e', 'holding a spot'];
+  else if (k === 'e') a = ['🐂', '#7ee787', 'escorting a caravan'];
+  else if (kind === 'attack') a = ['⚔\uFE0F', '#ff9e57', 'attacking'];
+  else a = ['🏠', '#58a6ff', 'at home'];
+  if (fighting) a = ['💥', '#ff5f56', `fighting (${a[2]})`, true];
+  return a;
+}
+
 // A squad's number in a little flag above the group, so you can see and click squads at a glance.
 // Gold when it's one of the squads your orders go to. It moves to a free spot nearby (with a thin
 // line back to its squad) rather than cover another tag, an enemy or a building.
 function drawSquadTag(q, s, obs, placed) {
   const [ax, ay] = toScreen(q.cx, q.top);
   const picked = squadPicked(q.id) && !selUnits.size;
-  const fs = Math.max(10, Math.min(15, Math.round(s * 0.36)));
+  const fs = Math.max(12, Math.min(16, Math.round(s * 0.42)));
   ctx.font = `800 ${fs}px system-ui, sans-serif`;
   const txt = String(q.num);
-  const w = Math.max(fs * 1.35, ctx.measureText(txt).width + fs * 0.7);
+  // (its activity icon on the left of the number)
+  const [icon, col, , fighting] = squadActivity(q);
+  const iw = fs * 1.25;
+  const w = Math.max(fs * 1.35, ctx.measureText(txt).width + fs * 0.7) + iw;
   const h = fs * 1.3;
   const up = s * 0.75;
   // candidate spots: above, then up-left/up-right, the sides, higher up, and below
@@ -160,15 +186,36 @@ function drawSquadTag(q, s, obs, placed) {
     ctx.lineTo(ax, ay - s * 0.25);
     ctx.stroke();
   }
+  if (fighting) {
+    // in a fight: a red glow pulsing round the tag
+    const t = (performance.now() / 700) % 1;
+    ctx.strokeStyle = `rgba(255, 95, 86, ${0.7 * (1 - t)})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(x - w / 2 - 2 - t * 5, y - h / 2 - 2 - t * 5, w + 4 + t * 10, h + 4 + t * 10, h * 0.4);
+    ctx.stroke();
+  }
   ctx.fillStyle = picked ? '#ffd54f' : 'rgba(13, 17, 23, 0.85)';
-  ctx.strokeStyle = picked ? '#fff3c4' : 'rgba(230, 237, 243, 0.55)';
+  ctx.strokeStyle = picked ? '#fff3c4' : fighting ? '#ff5f56' : col;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.roundRect(x - w / 2, y - h / 2, w, h, h * 0.3);
   ctx.fill();
   ctx.stroke();
+  // the icon, in a little coloured well on the tag's left
+  ctx.fillStyle = picked ? 'rgba(26, 21, 5, 0.85)' : 'rgba(255, 255, 255, 0.06)';
+  ctx.beginPath();
+  ctx.roundRect(x - w / 2 + 2, y - h / 2 + 2, iw - 2, h - 4, h * 0.25);
+  ctx.fill();
+  ctx.font = `${Math.round(fs * 0.9)}px system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = col;
+  ctx.fillText(icon, x - w / 2 + 1 + iw / 2, y + 1);
+  ctx.font = `800 ${fs}px system-ui, sans-serif`;
   if (!moved) {
     // a little pointer down to the squad
+    ctx.fillStyle = picked ? '#ffd54f' : 'rgba(13, 17, 23, 0.85)';
     ctx.beginPath();
     ctx.moveTo(x - fs * 0.25, y + h / 2);
     ctx.lineTo(x, y + h / 2 + fs * 0.3);
@@ -179,7 +226,7 @@ function drawSquadTag(q, s, obs, placed) {
   ctx.fillStyle = picked ? '#1a1505' : '#e6edf3';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(txt, x, y + 0.5);
+  ctx.fillText(txt, x + iw / 2, y + 0.5);
 }
 
 function drawOverlay() {
