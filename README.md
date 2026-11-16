@@ -257,6 +257,13 @@ test/                   node:test suite (game rules, squads & formations, worker
   and 4 strike the nearest rival's towers once mostly at strength (with siege rams once they're big enough) and fall
   back to regroup when worn down, squad 2 guards home and squad 3 is an aggressive jungle party farming camps.
 
+## Developer tools
+
+`tools/` holds the scripts used to check changes (see `CLAUDE.md` for the full list):
+`npm run sim` (headless bot rounds: length, knockouts, economy, errors, slow ticks), `npm run mapstats`
+(map generation over 60 seeds), `npm run prof` / `npm run prof:client` (server tick and browser frame
+profiles) and `npm run shots` (screenshots of maps and live games into `shots/`).
+
 ## Ideas for next steps
 
 - Champions: one hero unit per player with abilities, leveling from kills

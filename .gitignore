@@ -5,3 +5,6 @@ node_modules/
 # stray screenshots in the top folder (the README's live in screenshots/)
 /*.png
 /*.jpg
+
+# dev tool output (tools/shots.js)
+/shots/

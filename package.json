@@ -5,7 +5,12 @@
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "sim": "node tools/sim.js",
+    "mapstats": "node tools/mapstats.js",
+    "prof": "node tools/profile-server.js",
+    "prof:client": "node tools/profile-client.js",
+    "shots": "node tools/shots.js"
   },
   "engines": {
     "node": ">=18"
