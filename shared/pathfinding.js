@@ -30,22 +30,32 @@
   }
 
   // Min-heap over (key, value) pairs stored in parallel arrays.
+  // A binary min-heap of (key, value) int pairs in typed arrays, reused between fields (one per
+  // module: computeField isn't re-entrant), so building a field allocates nothing per step.
   class Heap {
-    constructor() {
-      this.keys = [];
-      this.vals = [];
+    constructor(cap = 1 << 14) {
+      this.keys = new Int32Array(cap);
+      this.vals = new Int32Array(cap);
+      this.size = 0;
+      this.lastKey = 0;
     }
 
-    get size() {
-      return this.keys.length;
+    clear() {
+      this.size = 0;
     }
 
     push(k, v) {
+      if (this.size === this.keys.length) {
+        const keys = new Int32Array(this.size * 2);
+        const vals = new Int32Array(this.size * 2);
+        keys.set(this.keys);
+        vals.set(this.vals);
+        this.keys = keys;
+        this.vals = vals;
+      }
       const keys = this.keys;
       const vals = this.vals;
-      let i = keys.length;
-      keys.push(k);
-      vals.push(v);
+      let i = this.size++;
       while (i > 0) {
         const p = (i - 1) >> 1;
         if (keys[p] <= k) break;
@@ -57,16 +67,15 @@
       vals[i] = v;
     }
 
-    // Returns the value with the smallest key; the key is left in this.lastKey.
     pop() {
       const keys = this.keys;
       const vals = this.vals;
       const topV = vals[0];
       this.lastKey = keys[0];
-      const k = keys.pop();
-      const v = vals.pop();
-      const n = keys.length;
+      const n = --this.size;
       if (n > 0) {
+        const k = keys[n];
+        const v = vals[n];
         let i = 0;
         for (;;) {
           let c = 2 * i + 1;
@@ -83,8 +92,8 @@
       return topV;
     }
   }
+  const sharedHeap = new Heap();
 
-  // Every step's edge cost worked out once: an Int16Array by (from tile) * 8 + direction (DIRS).
   function edgeTable(w, h, edgeCost) {
     const t = new Int16Array(w * h * 8);
     for (let y = 0; y < h; y++) {
@@ -107,7 +116,8 @@
   function computeField(w, h, extra, goal, edgeCost) {
     const table = edgeCost && edgeCost.table;
     const dist = new Int32Array(w * h).fill(INF);
-    const heap = new Heap();
+    const heap = sharedHeap;
+    heap.clear();
     dist[goal] = 0;
     heap.push(0, goal);
     while (heap.size) {
@@ -122,8 +132,9 @@
         const ux = vx - DIRS[k][0];
         const uy = vy - DIRS[k][1];
         if (ux < 0 || uy < 0 || ux >= w || uy >= h) continue;
-        if (!canMove(extra, w, ux, uy, DIRS[k][0], DIRS[k][1])) continue;
         const u = uy * w + ux;
+        // (no cutting a corner past a blocked or costly tile: as canMove, inlined)
+        if (k >= 4 && (extra[u] !== 0 || extra[v] !== 0 || extra[uy * w + vx] !== 0 || extra[vy * w + ux] !== 0)) continue;
         let nd = d + DIRS[k][2] + enter;
         if (table) {
           const c = table[u * 8 + k];

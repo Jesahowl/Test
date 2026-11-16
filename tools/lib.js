@@ -18,8 +18,9 @@ function botGame(seed, { bots = 8, mapSeed = seed * 7919 } = {}) {
 }
 
 // A room with one silent human (kept alive) and `bots` bots, started: for timing whole ticks
-// including snapshots and broadcasts. Returns { room, g, me, sent: { bytes, msgs } }.
-function profRoom(bots = 9) {
+// including snapshots and broadcasts. Seeded: the same seed plays out the same. Returns { room, g, me, sent: { bytes, msgs } }.
+function profRoom(bots = 9, seed = 1) {
+  Math.random = seededRand(seed); // (the room's game draws on Math.random: seeded, runs repeat exactly)
   const sent = { bytes: 0, msgs: 0 };
   const client = { ws: { readyState: 1, OPEN: 1, send: (s) => { sent.bytes += s.length; sent.msgs++; } }, name: 'Tester', token: 'x' };
   const room = new Room({ code: 'PROF' });

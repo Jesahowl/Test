@@ -24,7 +24,8 @@ module.exports = {
 
   // Is b someone a fights? (Not themselves, not an ally, not nobody.)
   hostile(a, b) {
-    return !!a && !!b && a !== b && !this.alliances.has(pairKey(a, b));
+    if (!a || !b || a === b) return false;
+    return !this.alliances.size || !this.alliances.has(pairKey(a, b)); // (called thousands of times a tick: skip the key when nobody's allied)
   },
 
   alliesOf(pid) {

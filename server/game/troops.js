@@ -130,47 +130,46 @@ module.exports = {
   // Best thing for troop u to hit within `reach`: the nearest enemy troop, else monsters fighting
   // us (or the camp we were sent to), else - if `structures` - enemy towers and cores.
   pickTarget(u, def, reach, structures) {
+    // (distance first in each loop: it's the cheap test, and rules out nearly everything)
     let best = null;
     let bestScore = Infinity;
+    const r2 = reach * reach;
     for (const v of this.nearUnits(u.x, u.y, reach)) {
-      if (!this.hostile(u.owner, v.owner)) continue;
-      const d = dist(u.x, u.y, v.x, v.y);
-      if (d > reach) continue;
+      const dx = v.x - u.x;
+      const dy = v.y - u.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > r2 || d2 >= bestScore || !this.hostile(u.owner, v.owner)) continue;
       if (def.melee && this.wallBlocks(u.owner, u.x, u.y, v.x, v.y)) continue; // no swinging through a wall
-      if (d < bestScore) {
-        bestScore = d;
-        best = v;
-      }
+      bestScore = d2;
+      best = v;
     }
     if (best) return best;
+    const hunting = u.attack && u.attack.k === 'j' ? u.attack.id : -1;
     for (const c of this.creeps.values()) {
-      if (c.dead) continue;
-      if (c.angry !== u.owner && !(u.attack && u.attack.k === 'j' && u.attack.id === c.camp)) continue;
-      const d = dist(u.x, u.y, c.x, c.y);
-      if (d > reach) continue;
-      if (d < bestScore) {
-        bestScore = d;
-        best = c;
-      }
+      const dx = c.x - u.x;
+      const dy = c.y - u.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > r2 || d2 >= bestScore || c.dead) continue;
+      if (c.angry !== u.owner && c.camp !== hunting) continue;
+      bestScore = d2;
+      best = c;
     }
     if (best || !structures) return best;
     for (const t of this.towers.values()) {
-      if (!this.hostile(u.owner, t.owner) || this.isShielded(this.players.get(t.owner))) continue;
-      const d = dist(u.x, u.y, t.x + 0.5, t.y + 0.5);
-      if (d > reach) continue;
-      if (d < bestScore) {
-        bestScore = d;
-        best = t;
-      }
+      const dx = t.x + 0.5 - u.x;
+      const dy = t.y + 0.5 - u.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > r2 || d2 >= bestScore || !this.hostile(u.owner, t.owner) || this.isShielded(this.players.get(t.owner))) continue;
+      bestScore = d2;
+      best = t;
     }
     for (const p of this.players.values()) {
-      if (!p.alive || !this.hostile(u.owner, p.id) || this.isShielded(p)) continue;
-      const d = dist(u.x, u.y, p.core.x + 0.5, p.core.y + 0.5);
-      if (d > reach) continue;
-      if (d < bestScore) {
-        bestScore = d;
-        best = p;
-      }
+      const dx = p.core.x + 0.5 - u.x;
+      const dy = p.core.y + 0.5 - u.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > r2 || d2 >= bestScore || !p.alive || !this.hostile(u.owner, p.id) || this.isShielded(p)) continue;
+      bestScore = d2;
+      best = p;
     }
     return best;
   },
@@ -258,7 +257,11 @@ module.exports = {
     parent[start] = -1;
     let best = start;
     let bestD = dist(sx + 0.5, sy + 0.5, gx, gy);
-    while (head < tail) {
+    // (once the goal tile itself is reached, the search can stop: BFS found the shortest way there)
+    const gtx = Math.floor(gx);
+    const gty = Math.floor(gy);
+    const goalK = this.inBounds(gtx, gty) ? this.idx(gtx, gty) : -1;
+    search: while (head < tail) {
       const k = queue[head++];
       const x = k % w;
       const y = (k - x) / w;
@@ -276,6 +279,10 @@ module.exports = {
         stamp[n] = gen;
         parent[n] = k;
         queue[tail++] = n;
+        if (n === goalK) {
+          best = n;
+          break search;
+        }
         const d = dist(nx + 0.5, ny + 0.5, gx, gy);
         if (d < bestD) {
           bestD = d;

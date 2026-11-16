@@ -312,13 +312,29 @@ module.exports = {
       // (rivers never change: start from their table, and only work out again the steps near walls)
       const base = this.wallCostFn(0, true, false, true).table;
       const t = base.slice();
-      const near = new Set();
+      // (the tiles of each walled hex and one round them, gathered without repeats: a stamp per
+      // tile instead of a Set, as this runs for every player whenever any wall changes)
+      if (!this.nearStamp) this.nearStamp = new Uint32Array(this.w * this.h);
+      const stamp = this.nearStamp;
+      const gen = (this.nearGen = (this.nearGen || 0) + 1);
+      const near = [];
+      const seenHex = new Set();
       for (const w of this.walls.values()) {
         for (const hx of [w.a, w.b]) {
+          if (seenHex.has(hx)) continue;
+          seenHex.add(hx);
           for (const k of this.hex.hexes[hx].tiles) {
             const x = k % this.w;
             const y = (k - x) / this.w;
-            for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (this.inBounds(x + dx, y + dy)) near.add(k + dy * this.w + dx);
+            for (let dy = -1; dy <= 1; dy++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                if (!this.inBounds(x + dx, y + dy)) continue;
+                const n = k + dy * this.w + dx;
+                if (stamp[n] === gen) continue;
+                stamp[n] = gen;
+                near.push(n);
+              }
+            }
           }
         }
       }
