@@ -22,7 +22,7 @@ function raise(g, p) {
   if (g.armySize(p) === C.MAX_SQUADS * C.SQUAD_MAX_TROOPS) return;
   for (const n of [0, 1, 3, 4]) {
     const b = barracksAt(g, p, n);
-    while (b.level < C.maxLevel('barracks')) g.upgrade(p.id, b.id);
+    while (b.level < C.barracksTop(b.squad)) g.upgrade(p.id, b.id);
   }
 }
 
@@ -43,13 +43,16 @@ function respawn(g, p) {
   p.nextWaveAt = Infinity;
 }
 
-test('every player has 4 squads and no troops until a barracks raises one; fallen troops respawn', () => {
+test('every player has 4 squads; the core raises squad 1 (the rest wait for barracks); fallen troops respawn', () => {
   const { g, a } = duel(1);
   assert.strictEqual(a.squads.length, C.MAX_SQUADS);
   assert.deepStrictEqual(a.squads.map((q) => q.num), [1, 2, 3, 4]);
-  assert.strictEqual(g.armySize(a), 0, 'no barracks, no troops');
+  assert.strictEqual(g.armySize(a), C.CORE_SQUAD_TROOPS, 'no barracks: just squad 1, from the core');
+  assert.strictEqual(g.squadCap(a, a.squads[1]), 0);
   respawn(g, a);
-  assert.strictEqual(mine(g, a).length, 0);
+  assert.strictEqual(mine(g, a).length, C.CORE_SQUAD_TROOPS, 'squad 1 is out from the start');
+  assert.ok(mine(g, a).every((u) => u.sq === a.squads[0].id && u.kind === 'soldier'));
+  for (const u of mine(g, a)) g.units.delete(u.id); // (start the mixes below from an empty field)
   setMix(g, a, 0, { soldier: 2, archer: 1 });
   Object.assign(a.squads[1].mix, { siege: 1, medic: 1 });
   respawn(g, a);
@@ -70,26 +73,26 @@ test('every player has 4 squads and no troops until a barracks raises one; falle
   assert.ok(Math.abs(a.nextWaveAt - (g.time + C.WAVE_INTERVAL)) < 1.2, 'and the timer starts over');
 });
 
-test('each barracks raises a squad: 5 troops a level, up to 20; troops respawn there too', () => {
+test('the first barracks adds to squad 1, the others raise squads 2-4: 5 troops a level, up to 20; troops respawn there too', () => {
   const { g, a, b } = duel(16);
   const gold = a.gold;
   const b1 = barracksAt(g, a, 0);
   assert.strictEqual(a.gold, gold - C.buildCost('barracks', 0));
-  assert.strictEqual(b1.squad, 1, 'the first barracks raises squad 1');
+  assert.strictEqual(b1.squad, 1, 'the first barracks adds to squad 1');
   g.update(0.05);
-  assert.strictEqual(g.squadCap(a, a.squads[0]), C.BARRACKS_TROOPS);
-  assert.strictEqual(a.squads[0].mix.soldier, C.BARRACKS_TROOPS, 'its troops start as soldiers');
+  assert.strictEqual(g.squadCap(a, a.squads[0]), C.CORE_SQUAD_TROOPS + C.BARRACKS_TROOPS, 'the core\'s 5 plus 5');
+  assert.strictEqual(a.squads[0].mix.soldier, C.CORE_SQUAD_TROOPS + C.BARRACKS_TROOPS, 'its troops start as soldiers');
   assert.strictEqual(g.squadCap(a, a.squads[1]), 0);
-  // upgrades: +5 a level up to 20
-  for (let lv = 2; lv <= 4; lv++) {
+  // upgrades: +5 a level, up to 20 (squad 1's barracks is done at level 3)
+  for (let lv = 2; lv <= 3; lv++) {
     const before = a.gold;
     assert.strictEqual(g.upgrade(a.id, b1.id), null);
     assert.strictEqual(a.gold, before - C.upgradeCost('barracks', lv - 1));
     g.update(0.05);
-    assert.strictEqual(g.squadCap(a, a.squads[0]), C.BARRACKS_TROOPS * lv);
+    assert.strictEqual(g.squadCap(a, a.squads[0]), C.CORE_SQUAD_TROOPS + C.BARRACKS_TROOPS * lv);
   }
   assert.strictEqual(g.squadCap(a, a.squads[0]), C.SQUAD_MAX_TROOPS);
-  assert.match(g.upgrade(a.id, b1.id), /max/i);
+  assert.match(g.upgrade(a.id, b1.id), /already at 20/);
   // the next barracks raise squads 2, 3 and 4
   const b2 = barracksAt(g, a, 3);
   assert.ok(C.buildCost('barracks', 1) > C.buildCost('barracks', 0), 'each one costs more');
@@ -117,15 +120,14 @@ test('squad mixes are free to change; a full squad swaps soldiers out; levels co
   const { g, a, b } = duel(3);
   const gold = a.gold;
   const [s1, s2] = a.squads;
-  assert.match(g.squadMix(a.id, s1.id, 'archer', 1), /no barracks/);
-  barracksAt(g, a, 0);
+  assert.match(g.squadMix(a.id, s2.id, 'archer', 1), /no barracks/);
   g.update(0.05);
-  assert.deepStrictEqual(g.mixSlots(s1.mix), 5);
+  assert.deepStrictEqual(g.mixSlots(s1.mix), 5, 'squad 1: the core\'s 5 soldiers');
   // full: + swaps a soldier for it (a ram takes two)
   assert.strictEqual(g.squadMix(a.id, s1.id, 'archer', 1), null);
   assert.strictEqual(g.squadMix(a.id, s1.id, 'siege', 1), null);
   assert.deepStrictEqual([s1.mix.soldier, s1.mix.archer, s1.mix.siege], [2, 1, 1]);
-  assert.match(g.squadMix(a.id, s1.id, 'soldier', 1), /upgrade its barracks/);
+  assert.match(g.squadMix(a.id, s1.id, 'soldier', 1), /full/);
   // − frees a slot; + fills it
   assert.strictEqual(g.squadMix(a.id, s1.id, 'archer', -1), null);
   assert.strictEqual(g.squadMix(a.id, s1.id, 'medic', 1), null);
@@ -136,7 +138,7 @@ test('squad mixes are free to change; a full squad swaps soldiers out; levels co
   assert.match(g.squadMix(b.id, s1.id, 'medic', 1), /Invalid squad/);
   assert.match(g.squadMix(a.id, s1.id, 'dragon', 1), /Invalid/);
   assert.match(g.squadMix(a.id, s1.id, 'worker', 1), /Invalid/);
-  assert.ok(a.gold >= gold - C.buildCost('barracks', 0), 'changing squads is free');
+  assert.ok(a.gold >= gold, 'changing squads is free');
   // levels
   assert.strictEqual(g.armyLevel(a.id, 'medic'), null);
   assert.strictEqual(a.levels.medic, 2);

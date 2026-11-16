@@ -506,7 +506,7 @@ function drawBarracksSprite(t, x, y, s, now) {
     const by = y - r * 0.82;
     const fs = Math.max(11, Math.round(s * 0.36));
     ctx.font = `800 ${fs}px system-ui, sans-serif`;
-    const txt = `${t.squad} · ${C.squadCap(t.level)}`;
+    const txt = `${t.squad} · ${C.squadCapFor(t.squad, t.level)}`;
     const w = ctx.measureText(txt).width + fs * 0.7;
     ctx.fillStyle = 'rgba(13, 17, 23, 0.85)';
     ctx.strokeStyle = 'rgba(255, 213, 79, 0.8)';

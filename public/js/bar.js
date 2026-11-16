@@ -20,7 +20,7 @@ function buildBar() {
   tb.onclick = () => toggleBuild('tower');
   const bb = $('barracks-button');
   const bd = C.TOWERS.barracks;
-  bb.dataset.tip = `<span class="t">Barracks <kbd>${bd.key}</kbd></span><b>Raises a squad</b>: your 1st barracks raises squad 1, the 2nd squad 2, and so on. It gives its squad <b>${C.BARRACKS_TROOPS} troops</b>, +${C.BARRACKS_TROOPS} for each upgrade, up to ${C.SQUAD_MAX_TROOPS}. Troops respawn there too. Up to ${C.MAX_BARRACKS}; each costs ${C.BARRACKS_COST_STEP}g more than the last.`;
+  bb.dataset.tip = `<span class="t">Barracks <kbd>${bd.key}</kbd></span><b>Grows your army</b>: your core already raises squad 1 with ${C.CORE_SQUAD_TROOPS} troops; your 1st barracks adds <b>${C.BARRACKS_TROOPS} more</b> to squad 1, your 2nd raises squad 2, and so on. +${C.BARRACKS_TROOPS} troops for each upgrade, up to ${C.SQUAD_MAX_TROOPS} a squad. Troops respawn there too. Up to ${C.MAX_BARRACKS}; each costs ${C.BARRACKS_COST_STEP}g more than the last.`;
   bb.innerHTML = `<kbd>${bd.key}</kbd><span class="count"></span><img src="${iconURL('barracks')}" alt="">${bd.name}<span class="cost"></span>`;
   bb.onclick = () => toggleBuild('barracks');
   const xb = $('trade-button');
@@ -212,9 +212,13 @@ function updateSquadsUi() {
       }).join('');
       const stances = STANCES.map(([k, ic, name, what]) => `<button data-act="stance" data-stance="${k}" class="${q.stance === k ? 'on' : ''}" data-tip="<span class='t'>${name} <kbd>G</kbd></span>${what}">${ic}${q.stance === k ? ` ${name}` : ''}</button>`).join('');
       const forms = FORMATIONS.map(([k, ic, name, what]) => `<button data-act="formation" data-formation="${k}" class="${q.formation === k ? 'on' : ''}" data-tip="<span class='t'>${name} formation <kbd>F</kbd></span>${what}">${ic} ${name}</button>`).join('');
-      const lv = q.cap / C.BARRACKS_TROOPS;
+      const fromCore = q.num === 1 ? C.CORE_SQUAD_TROOPS : 0;
+      const lv = (q.cap - fromCore) / C.BARRACKS_TROOPS;
+      const src = lv ? `Barracks Lv ${lv}${fromCore ? ' + core' : ''}` : 'Core';
+      const capTip = lv ? `Squad ${q.num}'s barracks${fromCore ? ' and your core give' : ' gives'} it ${q.cap} troop slots. Upgrade the barracks for +${C.BARRACKS_TROOPS} (up to ${C.SQUAD_MAX_TROOPS}).`
+        : `Your core gives squad 1 ${fromCore} troops. Build a barracks (<kbd>R</kbd>) for +${C.BARRACKS_TROOPS} more, and upgrade it for more still (up to ${C.SQUAD_MAX_TROOPS}).`;
       const cap = q.cap
-        ? `<div class="sq-cap" data-tip="Squad ${q.num}'s barracks gives it ${q.cap} troop slots. Upgrade the barracks for +${C.BARRACKS_TROOPS} (up to ${C.SQUAD_MAX_TROOPS}).">Barracks Lv ${lv} · <b>${q.slots}/${q.cap}</b> slots${room > 0 ? ` · <span class="free">${room} free</span>` : ''}</div>`
+        ? `<div class="sq-cap" data-tip="${capTip}">${src} · <b>${q.slots}/${q.cap}</b> slots${room > 0 ? ` · <span class="free">${room} free</span>` : ''}</div>`
         : `<div class="sq-cap none">No barracks: build one (<kbd>R</kbd>) to raise squad ${q.num}</div>`;
       return `<div class="sq-card ${kind}${on ? ' on' : ''}${squadPicked(q.id) ? ' picked' : ''}${q.cap ? '' : ' empty'}" data-id="${q.id}">
         <div class="sq-top" data-act="pick" data-tip="<span class='t'>Squad ${q.num} <kbd>${q.num}</kbd></span>${escapeHtml(long)}.<br><span class='m'>Click to pick it, then right-click a target. <kbd>Shift</kbd>-click to pick several.</span>">

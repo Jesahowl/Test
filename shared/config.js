@@ -97,6 +97,7 @@
     STANCES: ['aggressive', 'defensive', 'hold', 'pillage'], // pillage: hunt barbarian camps on its own, nearest first
     BARRACKS_TROOPS: 5, // troop slots a barracks gives its squad per level...
     SQUAD_MAX_TROOPS: 20, // ...up to this many (level 4)
+    CORE_SQUAD_TROOPS: 5, // your core raises squad 1 with this many troops itself; its barracks adds to that
     MAX_BARRACKS: 4, // one per squad
     BARRACKS_COST_STEP: 100, // each extra barracks costs this much more than the last
     BARRACKS_UPGRADE_STEP: 100, // a barracks upgrade costs this much per level it has
@@ -460,6 +461,19 @@
   // Troop slots a barracks of this level gives its squad.
   CONFIG.squadCap = function (level) {
     return Math.min(CONFIG.SQUAD_MAX_TROOPS, CONFIG.BARRACKS_TROOPS * level);
+  };
+
+  // Troop slots squad number `num` gets with a barracks of `level` (0: none). Squad 1 also gets
+  // CORE_SQUAD_TROOPS from the core, so it has troops from the start.
+  CONFIG.squadCapFor = function (num, level) {
+    return Math.min(CONFIG.SQUAD_MAX_TROOPS, (num === 1 ? CONFIG.CORE_SQUAD_TROOPS : 0) + (level ? CONFIG.BARRACKS_TROOPS * level : 0));
+  };
+
+  // The highest level worth upgrading a barracks raising squad `num` to (squad 1's is full sooner).
+  CONFIG.barracksTop = function (num) {
+    let lv = 1;
+    while (lv < CONFIG.maxLevel('barracks') && CONFIG.squadCapFor(num, lv) < CONFIG.SQUAD_MAX_TROOPS) lv++;
+    return lv;
   };
 
   // Gold for the next tile of land, for a player who owns `territory` tiles.

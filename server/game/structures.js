@@ -81,6 +81,7 @@ module.exports = {
     if (!p || !p.alive || !t || t.owner !== pid) return 'Invalid upgrade';
     if (t.progress < 1) return 'Finish building it first';
     if (t.level >= C.maxLevel(t.kind)) return C.maxLevel(t.kind) > 1 ? 'Already max level' : `A ${C.TOWERS[t.kind].name} can't be upgraded`;
+    if (t.kind === 'barracks' && t.squad && t.level >= C.barracksTop(t.squad)) return `Squad ${t.squad} is already at ${C.SQUAD_MAX_TROOPS} troops`;
     const cost = C.upgradeCost(t.kind, t.level);
     if (p.gold < cost) return 'Not enough gold';
     p.gold -= cost;

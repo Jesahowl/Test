@@ -35,7 +35,7 @@ const STEPS = [
   },
   {
     title: 'Build a barracks',
-    text: 'You start with <b>no troops</b>. Press <kbd>R</kbd> (or <b>Build</b> → <b>Barracks</b>) and click a hex of your land. A barracks raises <b>squad 1</b>, and any of its troops that fall come back every 20 seconds.',
+    text: 'Your core gives you <b>squad 1</b>: 5 soldiers guarding home (any that fall come back every 20 seconds). To make it bigger, press <kbd>R</kbd> (or <b>Build</b> → <b>Barracks</b>) and click a hex of your land: your first barracks adds <b>5 more troops</b> to squad 1.',
     glow: ['.dock-btn[data-dr="build"]', '#barracks-button'],
     done: () => myBuildings('barracks').length > 0,
   },
@@ -55,7 +55,7 @@ const STEPS = [
   },
   {
     title: 'Pick your squad',
-    text: 'Squad 1 is here! <b>Click one of its troops</b> (or press <kbd>1</kbd>) to pick the squad. Its number floats above it.',
+    text: 'Squad 1 now has room for 10 troops (the new ones arrive at the next respawn). <b>Click one of its troops</b> (or press <kbd>1</kbd>) to pick the squad. Its number floats above it.',
     target: () => {
       const list = myTroops();
       if (!list.length) return null;

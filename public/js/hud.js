@@ -311,22 +311,23 @@ function updateSelectionPanel(gold) {
       $('sel-capture').onclick = () => sendMsg({ t: 'capture', id: t.id });
     } else if (t.owner === S.myId) {
       const st = C.towerStats(t.kind, t.level);
-      const maxed = t.level >= C.maxLevel(t.kind);
+      const maxed = t.level >= C.maxLevel(t.kind) || (t.kind === 'barracks' && t.squad && t.level >= C.barracksTop(t.squad));
+      const capAt = (lv) => C.squadCapFor(t.squad, lv); // (squad 1 also has the core's troops)
       const isB = t.kind === 'barracks';
       const isT = t.kind === 'trade';
       const next = !maxed ? C.towerStats(t.kind, t.level + 1) : null;
       const upTip = !next ? 'Max level' : isT
         ? `Level ${t.level + 1}: +${Math.round(C.CARAVAN_LEVEL_CARGO * 100)}% cargo, tougher caravans and guards, ${next.hp} HP <kbd>U</kbd>`
         : `Level ${t.level + 1}: damage ${Math.round(next.damage)}, range ${next.range}, ${next.hp} HP <kbd>U</kbd>`;
-      const upB = maxed ? 'Max level' : `Level ${t.level + 1}: squad ${t.squad || '?'} gets ${C.squadCap(t.level + 1)} troops (+${C.squadCap(t.level + 1) - C.squadCap(t.level)}) <kbd>U</kbd>`;
+      const upB = maxed ? 'Max level' : `Level ${t.level + 1}: squad ${t.squad || '?'} gets ${capAt(t.level + 1)} troops (+${capAt(t.level + 1) - capAt(t.level)}) <kbd>U</kbd>`;
       panel.innerHTML = `<h4>${img}Your ${d.name} · Lv ${t.level}</h4>
         <div id="sel-info" class="stats"></div>
         <div class="stats" id="sel-kind">${isB
-          ? `<div style="grid-column:span 2">${t.squad ? `Raises <b>squad ${t.squad}</b>: <b>${C.squadCap(t.level)}</b> of ${C.SQUAD_MAX_TROOPS} troops` : 'Raises no squad (you have one for every squad already)'}</div>`
+          ? `<div style="grid-column:span 2">${t.squad ? `Raises <b>squad ${t.squad}</b>: <b>${capAt(t.level)}</b> of ${C.SQUAD_MAX_TROOPS} troops${t.squad === 1 ? ` (${C.CORE_SQUAD_TROOPS} from your core)` : ''}` : 'Raises no squad (you have one for every squad already)'}</div>`
           : isT ? tradeInfo(t)
             : `<div>Damage <b>${st.damage.toFixed(0)}/s</b></div><div>Range <b>${st.range}</b></div>`}<div>Sight <b>${C.structSight(t.kind, t.level)}</b></div></div>
         <div class="btns">
-          <button id="sel-up" class="primary" data-tip="${isB ? upB : upTip}">${maxed ? 'Max level' : `▲ ${isB ? `+${C.squadCap(t.level + 1) - C.squadCap(t.level)} troops` : 'Upgrade'} ${C.upgradeCost(t.kind, t.level)}g`}</button>
+          <button id="sel-up" class="primary" data-tip="${isB ? upB : upTip}">${maxed ? 'Max level' : `▲ ${isB ? `+${capAt(t.level + 1) - capAt(t.level)} troops` : 'Upgrade'} ${C.upgradeCost(t.kind, t.level)}g`}</button>
           <button id="sel-sell">Sell</button>
         </div>
         <div class="btns"><button id="sel-defend">🛡 Defend here</button></div>`;

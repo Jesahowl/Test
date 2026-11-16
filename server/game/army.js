@@ -21,10 +21,11 @@ module.exports = {
     return best;
   },
 
-  // Troop slots squad q may use: BARRACKS_TROOPS per level of its barracks (none without one).
+  // Troop slots squad q may use: BARRACKS_TROOPS per level of its barracks, plus (squad 1)
+  // CORE_SQUAD_TROOPS from the core.
   squadCap(p, q) {
     const b = this.barracksOf(p, q);
-    return b ? C.squadCap(b.level) : 0;
+    return C.squadCapFor(q.num, b ? b.level : 0);
   },
 
   // Every squad's slots together.
@@ -49,8 +50,8 @@ module.exports = {
     return 0;
   },
 
-  // Player p's lasting squads: numbered 1..MAX_SQUADS, each { id, num, mix, stance, order }. They
-  // all start empty: a squad gets troops when a barracks raises it.
+  // Player p's lasting squads: numbered 1..MAX_SQUADS, each { id, num, mix, stance, order }. Squad 1
+  // starts with CORE_SQUAD_TROOPS from the core; the others get troops when a barracks raises them.
   makeSquads(p) {
     p.squads = [];
     p.squadNum = new Map();
@@ -99,6 +100,7 @@ module.exports = {
     if (d > 0) {
       const cap = this.squadCap(p, q);
       if (!cap) return `Squad ${q.num} has no barracks: build one to raise it`;
+      // (squad 1 without a barracks: full at the core's troops)
       const need = this.mixSlots(q.mix) + C.slotsOf(kind) - cap;
       if (need > 0) {
         if (kind === 'soldier' || q.mix.soldier < need) {
