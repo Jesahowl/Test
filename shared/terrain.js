@@ -3,7 +3,7 @@
 (function (root) {
   'use strict';
 
-  const FOREST_AT = 0.64; // noise above this is forest (about one hex in six)
+  const FOREST_AT = 0.665; // noise above this is forest (about one hex in eight; more is added where a region has too little)
 
   function hash(seed, x, y) {
     let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(seed, 0x27d4eb2d);
@@ -304,8 +304,9 @@
 
   // ---- the whole map's layout from its seed (server and browsers alike): rivers, mountains,
   // forests, iron ore and gold veins. Mountains are impassable hexes in ridges, kept out of river
-  // valleys, with passes opened wherever they (and rivers) would cut some land off; iron ore and
-  // gold veins mostly lie in their foothills (the hexes next to them), a few elsewhere.
+  // valleys, with passes opened wherever they (and rivers) would cut some land off; gold veins mostly
+  // lie in their foothills (the hexes next to them), and iron partly; then every place a base could
+  // start is given some forest and iron within reach (see the fairness pass).
   // The ocean comes first; rivers flow into it. opts: { rivers, mountains, ocean } (false turns one off;
   // the ocean follows `mountains` unless given).
   // Returns { rivers, mountains, ocean, oceanSides, blocked, forest, iron, veins, foothills } (Sets of hex indices).
@@ -441,14 +442,65 @@
     for (const hx of hex.hexes) {
       if (hx.full === false || mountains.has(hx.i) || water.has(hx.i) || forest.has(hx.i)) continue;
       const hill = foothills.has(hx.i);
-      // iron: mostly in the foothills, a little out in the open
-      const ore = hill ? hash(seed + 5, hx.q, hx.r) < 0.18 : fbm(seed + 77, hx.cx / 7, hx.cy / 7) > 0.7 && hash(seed + 5, hx.q, hx.r) < 0.12;
+      // iron: some in the foothills (open ground gets its share in the fairness pass below)
+      const ore = hill && hash(seed + 5, hx.q, hx.r) < 0.15;
       if (ore) {
         iron.add(hx.i);
         continue;
       }
       // gold veins: rare, nearly always in the foothills
       if (hash(seed + 913, hx.q * 7 + 3, hx.r * 11 + 5) < (hill ? 0.08 : 0.002)) veins.add(hx.i); // (per hex: hexes are big, so a little likelier)
+    }
+    // Fairness: wherever a base can start, some wood and iron should be in reach. Every open hex a
+    // core could stand on (away from the map's edge) gets at least FAIR_FOREST forest hexes and one
+    // iron deposit within FAIR_REACH tiles. Where the noise left gaps, the fewest extra groves and
+    // deposits that close them are added: each time, the free hex that covers the most of what's
+    // still short (deposits favour the foothills).
+    if (withMountains) {
+      const FAIR_REACH = 18;
+      const FAIR_FOREST = 3;
+      const EDGE = 8; // (cores start at least SPAWN_MARGIN from the edge, then move to their hex's centre)
+      const hexes = hex.hexes;
+      const R2 = (FAIR_REACH - 0.5) ** 2; // (a little inside: cores stand near, not exactly at, hex centres)
+      const near = (a, b) => (a.cx - b.cx) ** 2 + (a.cy - b.cy) ** 2 < R2;
+      const free = (hx) => hx.full !== false && !mountains.has(hx.i) && !water.has(hx.i) && !forest.has(hx.i) && !iron.has(hx.i) && !veins.has(hx.i);
+      const spots = hexes.filter((hx) => !mountains.has(hx.i) && !water.has(hx.i) && hx.cx >= EDGE && hx.cy >= EDGE && hx.cx <= w - EDGE && hx.cy <= h - EDGE);
+      // (which spots each hex is in reach of, worked out once)
+      const reach = hexes.map((c) => spots.filter((sp) => near(sp, c)).map((sp) => sp.i));
+      // greedy cover: need[i] is how many more spot i needs; place(c) adds round c and returns the hexes added
+      const cover = (has, want, salt, bonus, place) => {
+        const need = new Map(spots.map((sp) => [sp.i, want]));
+        for (const i of has) for (const k of reach[i]) need.set(k, need.get(k) - 1);
+        for (let guard = 0; guard < 200; guard++) {
+          let best = null;
+          let bestScore = 0;
+          for (const c of hexes) {
+            if (!free(c)) continue;
+            let gain = 0;
+            for (const k of reach[c.i]) if (need.get(k) > 0) gain++;
+            if (!gain) continue;
+            const score = gain + bonus(c) + hash(seed + salt, c.i, 2) * 0.5;
+            if (score > bestScore) {
+              bestScore = score;
+              best = c;
+            }
+          }
+          if (!best) break;
+          for (const i of place(best)) for (const k of reach[i]) need.set(k, need.get(k) - 1);
+          if (![...need.values()].some((n) => n > 0)) break;
+        }
+      };
+      const desert = (c) => biomeOf(climate(seed, c.cx, c.cy, w, h)) === 'desert';
+      // groves of two or three hexes (in a desert only if nowhere else will do)
+      cover(forest, FAIR_FOREST, 71, (c) => (desert(c) ? -3 : 0), (c) => {
+        const grove = [c.i, ...c.n.filter((k) => free(hexes[k]) && desert(hexes[k]) === desert(c)).slice(0, 1 + Math.floor(hash(seed + 72, c.i, 3) * 2))];
+        for (const i of grove) forest.add(i);
+        return grove;
+      });
+      cover(iron, 1, 73, (c) => (foothills.has(c.i) ? 2 : 0), (c) => {
+        iron.add(c.i);
+        return [c.i];
+      });
     }
     // (blocked: everywhere troops can't go, mountains and sea)
     const out = { rivers, mountains, ocean, oceanSides: sea.sides, lakes, blocked: new Set([...mountains, ...ocean, ...lakes]), forest, iron, veins, foothills };

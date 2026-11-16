@@ -255,7 +255,7 @@ test('rivers: troops only cross at bridges; no walls on them; no base starts bes
   assert.ok(arrived, 'got across by a bridge');
 });
 
-test('mountains: impassable ridges; every map stays connected; iron and gold sit in the foothills', () => {
+test('mountains: impassable ridges; every map stays connected; iron and gold partly in the foothills', () => {
   const Terrain = require('../shared/terrain');
   // connected on every map: all open hexes reach each other (round mountains, over bridges)
   for (let seed = 1; seed <= 30; seed++) {
@@ -277,7 +277,7 @@ test('mountains: impassable ridges; every map stays connected; iron and gold sit
   assert.ok(g.mountains.size > 15, `the map has mountains (${g.mountains.size})`);
   const layout = Terrain.mapTerrain(g.mapSeed, g.hex, g.w, g.h);
   const inHills = [...g.ore.keys()].filter((i) => layout.foothills.has(i)).length;
-  assert.ok(inHills / g.ore.size > 0.7, `most iron in the foothills (${inHills}/${g.ore.size})`);
+  assert.ok(inHills / g.ore.size > 0.25, `a good share of iron in the foothills (${inHills}/${g.ore.size})`);
   for (const i of g.mountains) assert.ok(!g.forest.has(i) && !g.ore.has(i) && !g.veins.has(i));
   // nobody owns, buys or stands on a mountain
   const m = [...g.mountains][0];
@@ -297,6 +297,23 @@ test('mountains: impassable ridges; every map stays connected; iron and gold sit
     return false;
   });
   assert.strictEqual(inside, 0, 'never set foot on the mountain');
+});
+
+test('fair starts: every base has forest and iron within reach', () => {
+  const Game = require('../server/game');
+  for (let seed = 1; seed <= 12; seed++) {
+    let r = seed * 977;
+    const rand = () => { r = (r * 1664525 + 1013904223) >>> 0; return r / 4294967296; };
+    const g = new Game({ botTarget: 0, rounds: true, rand, mapSeed: seed * 131 });
+    const hx = g.hex.hexes;
+    for (let k = 0; k < 8; k++) {
+      const p = g.addPlayer('P' + k, true);
+      if (!p) continue;
+      const near = (set) => [...set].filter((i) => Math.hypot(hx[i].cx - p.core.x, hx[i].cy - p.core.y) < 18).length;
+      assert.ok(near(g.layout.forest) >= 3, `seed ${g.mapSeed}: base ${k} has forest near (${near(g.layout.forest)})`);
+      assert.ok(near(g.layout.iron) >= 1, `seed ${g.mapSeed}: base ${k} has iron near`);
+    }
+  }
 });
 
 test('mountains stay thin and spread out (no fortresses), and never in a base\'s starting land', () => {

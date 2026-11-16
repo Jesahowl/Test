@@ -242,6 +242,7 @@ test('worker counts: exact numbers per job, spares share out, group orders, queu
   g.build(a.id, sx, sy, 'workshop');
   const shop = [...g.towers.values()].find((o) => o.owner === a.id && o.kind === 'workshop');
   shop.progress = 1;
+  shop.hp = shop.maxHp; // (finished whole: nothing for the repairers to see to but the towers below)
   respawn(g, a);
   const ws = workers(g, a);
   assert.strictEqual(ws.length, 5);
@@ -280,6 +281,7 @@ test('worker counts: exact numbers per job, spares share out, group orders, queu
   for (const u of workers(g, a)) {
     u.manual = false;
     u.queue = [];
+    u.carry = 0; // (a worker carrying a load home finishes that trip first)
   }
   const [x1, y1] = spot(g, a, 0);
   const [x2, y2] = spot(g, a, 4);
@@ -306,7 +308,7 @@ test('worker counts: exact numbers per job, spares share out, group orders, queu
   const fixing = () => workers(g, a).filter((u) => u.job && u.job.type === 'repair' && sites.some((t) => t.id === u.job.id)).length;
   assert.strictEqual(fixing(), 0, 'no repairs under fire');
   run(g, C.REPAIR_AFTER);
-  assert.ok(fixing() > 0, 'repairs once it is quiet');
+  assert.ok(run(g, 20, () => fixing() > 0), 'repairs once it is quiet (as soon as a worker is free of its load: a mining trip takes a while)');
   // raiders near a worker: it runs home (and tells its owner), then goes back to work
   const v = workers(g, a).find((u) => u.job && u.job.type === 'repair') || workers(g, a)[0];
   const [foe] = troops(g, b, 'soldier', 1, v.x + 2, v.y);
