@@ -14,6 +14,7 @@ import { updateDock } from './dock.js';
 import { allSquads } from './squads.js';
 import { updateWorkersPanel } from './workforce.js';
 import { updateTutorial } from './tutorial.js';
+import { touchOnly } from './touch.js';
 
 S.hudTimer = 0;
 
@@ -74,7 +75,7 @@ function updateHud() {
   const who = selUnits.size ? `${selUnits.size} picked troop${selUnits.size === 1 ? '' : 's'}` : squadsLabel();
   const orderHtml = selUnits.size
     ? `<span class="def">${who}</span><span class="hint">a number moves them to that squad · N makes a new squad · right-click sends them</span>`
-    : `<span class="def">🎯 ${who}</span><span class="hint">right-click a target to send ${!S.allSquads && S.selSquads.size === 1 ? 'it' : 'them'}${S.allSquads ? ' · click a troop to pick its squad' : ' · Q for all squads'}</span>`;
+    : `<span class="def">🎯 ${who}</span><span class="hint">${touchOnly ? 'press &amp; hold' : 'right-click'} a target to send ${!S.allSquads && S.selSquads.size === 1 ? 'it' : 'them'}${S.allSquads ? ` · ${touchOnly ? 'tap' : 'click'} a troop to pick its squad` : touchOnly ? '' : ' · Q for all squads'}</span>`;
   if ($('order-info').dataset.html !== orderHtml) {
     $('order-info').dataset.html = orderHtml;
     $('order-info').innerHTML = orderHtml;

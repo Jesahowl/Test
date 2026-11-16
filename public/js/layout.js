@@ -10,26 +10,28 @@ const GAP = 8;
 
 function layoutHud() {
   if ($('hud').classList.contains('hidden')) return;
+  // (on small screens the HUD is scaled down: screen pixels / z = its own pixels)
+  const z = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hud-zoom')) || 1;
   const H = window.innerHeight;
   const bottom = $('bottom').getBoundingClientRect();
   const mm = $('minimap-wrap').getBoundingClientRect();
 
   // the tips sit just above the minimap
   const tips = $('tips');
-  tips.style.bottom = `${H - mm.top + GAP + 30}px`; // (clear of the Ping button on the minimap)
+  tips.style.bottom = `${(H - mm.top) / z + GAP + 30}px`; // (clear of the Ping button on the minimap)
 
   // the selection panel: bottom right, unless the dock/drawer reaches under it
   const sel = $('selection');
   if (!sel.classList.contains('hidden')) {
-    const left = window.innerWidth - EDGE - sel.offsetWidth;
-    sel.style.bottom = `${bottom.height && left < bottom.right + GAP ? H - bottom.top + GAP : EDGE}px`;
+    const left = window.innerWidth - (EDGE + sel.offsetWidth) * z;
+    sel.style.bottom = `${bottom.height && left < bottom.right + GAP ? (H - bottom.top) / z + GAP : EDGE}px`;
   }
 
   // the feed stops above the tips (or the minimap)
   const feed = $('feed');
   const feedTop = feed.getBoundingClientRect().top;
   const limit = tips.classList.contains('hidden') ? mm.top - GAP : tips.getBoundingClientRect().top - GAP;
-  feed.style.maxHeight = `${Math.max(0, limit - feedTop)}px`;
+  feed.style.maxHeight = `${Math.max(0, (limit - feedTop) / z)}px`;
 }
 
 export { layoutHud };

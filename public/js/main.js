@@ -22,6 +22,7 @@ import { drawTradeRoads } from './trade.js';
 import { drawUnits } from './troops.js';
 import { drawBox, drawWorkerIcons, drawWorkHover } from './workforce.js';
 import { drawTutorialArrow } from './tutorial.js';
+import { drawTouch } from './touch.js';
 
 // ------------------------------------------------------------------ main loop
 let last = performance.now();
@@ -34,7 +35,7 @@ function frame(now) {
   if (S.myId || S.spectating) {
     if (S.menuCam) {
       S.menuCam = false;
-      cam.zoom = 1; // (back to the normal zoom after the menu's wide view)
+      cam.zoom = Math.min(window.innerWidth, window.innerHeight * 1.6) < 900 ? 0.6 : 1; // (back to the normal zoom after the menu's wide view; small screens see more)
     }
     const before = cam.x + cam.y;
     if (keys.has('w') || keys.has('arrowup')) cam.y -= pan;
@@ -82,6 +83,7 @@ function frame(now) {
   drawOverlay();
   drawWorkHover();
   drawTutorialArrow();
+  drawTouch();
   drawBox();
   if (S.myId || S.spectating) drawMinimap();
 

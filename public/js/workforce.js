@@ -209,6 +209,7 @@ function drawWorkerIcons() {
 
 // Hovering a forest or an iron ore deposit: a card saying who's on it and how long it will last.
 function drawWorkHover() {
+  if (document.body.classList.contains('touch')) return; // (no hovering on a touch screen)
   if (!S.myId || S.buildKind || !S.round || mouse.wx < 0 || mouse.wy < 0 || mouse.wx >= C.MAP_W || mouse.wy >= C.MAP_H) return;
   const i = HEX.tileHex[Math.floor(mouse.wy) * C.MAP_W + Math.floor(mouse.wx)];
   const L = window.TD_TERRAIN.mapTerrain(S.round.seed, HEX, C.MAP_W, C.MAP_H, { rivers: S.round.rivers !== false });
