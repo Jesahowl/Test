@@ -13,6 +13,8 @@ canvas client (no build step), and code shared by both. Rounds of up to 8 player
 | One test file | `node --test test/walls.test.js` (`--test-name-pattern="worker counts"` for one test) |
 | Bot rounds (balance, errors, slow ticks) | `npm run sim -- --seeds=4` |
 | Map generation stats over 60 seeds | `npm run mapstats` |
+| Invariant checks over bot rounds (NaN, troops on blocked hexes, caps, owners, territory counts) | `node tools/invariants.js --seeds=2` |
+| Contact sheet of screenshots | `node tools/sheet.js out.png a.png b.png ... [--cols=3]` |
 | Server tick profile | `npm run prof -- --marks=3,9,15` (`--detail` for functions inside troops/workers/bots) |
 | Client fps profile (Playwright) | `npm run prof:client` |
 | Screenshots into `shots/` (git-ignored) | `npm run shots -- map --seeds=777` · `npm run shots -- live --mins=7` |
