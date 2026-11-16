@@ -211,7 +211,12 @@ function findLabelSpots() {
 
 function drawTerritoryLabels(ox, oy, s) {
   if (!S.terrLabels) return;
+  // names on the land are for reading the map from afar: close up (where cores carry their own
+  // name and troops crowd round) they fade out
+  const fade = Math.max(0, Math.min(1, (34 - s) / 12));
+  if (!fade) return;
   ctx.save();
+  ctx.globalAlpha = fade;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   for (const l of S.terrLabels) {

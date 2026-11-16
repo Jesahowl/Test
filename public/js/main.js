@@ -65,8 +65,16 @@ function frame(now) {
     cam.x = C.MAP_W / 2 + Math.cos(now / 40000) * rx * 0.95;
     cam.y = C.MAP_H / 2 + Math.sin(now / 40000) * ry * 0.95;
   }
-  cam.x = Math.max(0, Math.min(C.MAP_W, cam.x));
-  cam.y = Math.max(0, Math.min(C.MAP_H, cam.y));
+  // keep the view on the map (a little past its edge at most), or centred when it's all in view
+  {
+    const s = scale();
+    const MARGIN = 2;
+    const hw = canvas.width / 2 / s;
+    const hh = canvas.height / 2 / s;
+    const fit = (v, half, size) => (half * 2 >= size + MARGIN * 2 ? size / 2 : Math.max(half - MARGIN, Math.min(size - half + MARGIN, v)));
+    cam.x = fit(cam.x, hw, C.MAP_W);
+    cam.y = fit(cam.y, hh, C.MAP_H);
+  }
   updateMouseWorld();
 
   drawBackground();

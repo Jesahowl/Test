@@ -173,7 +173,7 @@ module.exports = {
     alive.forEach((p, i) => this.recordStanding(p, i + 1));
     this.phase = 'over';
     const w = alive[0];
-    this.winner = w ? { id: w.id, name: w.name, hue: w.hue } : null;
+    this.winner = w ? { id: w.id, name: w.name, hue: w.hue, byLand: true } : null; // (won on land, not as the last core)
     if (w) this.pushFeed(`${w.name} holds the most land and wins round ${this.round}!`);
   },
 
@@ -267,7 +267,7 @@ module.exports = {
 
     let goldTaken = 0;
     if (conquered) {
-      goldTaken = Math.floor(p.gold);
+      goldTaken = this.rules.testMode && !p.isBot ? 0 : Math.floor(p.gold); // (a test-mode player's endless gold isn't loot)
       const bounty = C.CORE_KILL_BOUNTY + goldTaken;
       this.award(killer, bounty, 'cores', p.core.x + 0.5, p.core.y + 0.5);
       killer.coresDestroyed++;

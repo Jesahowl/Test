@@ -2,7 +2,9 @@
 //   node tools/shots.js map --seeds=777,4242 [--zoom=1.5 --at=125,22]   the menu's map (no game), whole or a spot
 //   node tools/shots.js live [--mins=7]   a public game with 7 bots, run ahead: our base, the whole map
 //                                         (from a watching tab), the two biggest bot bases, and fights
-const { chromium } = require('playwright');
+//   node tools/shots.js ui [--phone]      menu, a test game's HUD, each drawer, help, pause, death and
+//                                         round-over screens (--phone: an iPhone in landscape)
+const { chromium, devices } = require('playwright');
 const path = require('path');
 const fs = require('fs');
 const { createServer } = require('../server/index');
@@ -14,7 +16,7 @@ fs.mkdirSync(dir, { recursive: true });
 const errs = [];
 
 async function page(b) {
-  const p = await b.newPage({ viewport: { width: o.w, height: o.h }, deviceScaleFactor: o.scale });
+  const p = o.phone ? await (await b.newContext({ ...devices['iPhone 13 landscape'] })).newPage() : await b.newPage({ viewport: { width: o.w, height: o.h }, deviceScaleFactor: o.scale });
   p.on('pageerror', (e) => errs.push(e.message));
   p.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
   return p;
@@ -34,7 +36,7 @@ async function look(p, x, y, zoom, name, wait = 1500) {
 const whole = () => o.w / 200 / 28;
 
 (async () => {
-  const srv = createServer({ port: o.port, botTarget: 7, waits: { solo: 0.5, group: 0.5, ready: 0.5, full: 0.5, late: 0.5 } });
+  const srv = createServer({ port: o.port, dev: true, botTarget: 7, waits: { solo: 0.5, group: 0.5, ready: 0.5, full: 0.5, late: 0.5 } });
   await new Promise((r) => srv.server.once('listening', r));
   const b = await chromium.launch();
   const p = await page(b);
@@ -87,6 +89,38 @@ const whole = () => o.w / 200 / 28;
       for (const u of us) { let n = 0; for (const v of us) if (v.owner !== u.owner && Math.hypot(u.x - v.x, u.y - v.y) < 6) n++; if (n > bn) { bn = n; best = u; } }
       if (best && bn >= 4) await look(w, best.x, best.y, 0.95, `live-fight-${k}.png`, 1200);
     }
+  } else if (mode === 'ui') {
+    const tag = o.phone ? 'phone-' : '';
+    const snap = async (name) => { await p.waitForTimeout(600); await p.screenshot({ path: path.join(dir, `ui-${tag}${name}.png`) }); console.log(`  shots/ui-${tag}${name}.png`); };
+    await snap('menu');
+    await p.fill('#name', 'You');
+    await p.click('#test-game');
+    await p.waitForTimeout(2500);
+    const room = [...srv.rooms.values()].find((r) => r.game && !r.isPublic);
+    const g = room.game;
+    const me = [...g.players.values()].find((q) => !q.isBot);
+    for (let k = 0; k < 20 * 180; k++) { me.core.hp = me.core.maxHp; g.update(0.05); if (k % 200 === 0) await p.waitForTimeout(10); }
+    await p.waitForTimeout(2000);
+    await snap('hud');
+    for (const [key, name] of [['z', 'build'], ['x', 'army'], ['c', 'squads'], ['j', 'workers'], ['p', 'diplomacy']]) {
+      await p.keyboard.press(key);
+      await snap('drawer-' + name);
+      await p.keyboard.press('Escape');
+      await p.waitForTimeout(200);
+    }
+    await p.keyboard.press('?');
+    await snap('help');
+    await p.keyboard.press('Escape');
+    await p.waitForTimeout(300);
+    await p.keyboard.press('Escape');
+    await snap('pause');
+    await p.keyboard.press('Escape');
+    g.killPlayer(me, [...g.players.values()].find((q) => q.isBot && q.alive).id);
+    await p.waitForTimeout(2500);
+    await snap('death');
+    g.endRound();
+    await p.waitForTimeout(3000);
+    await snap('roundover');
   } else {
     console.log('usage: node tools/shots.js map|live [options]');
   }

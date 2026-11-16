@@ -91,8 +91,10 @@ function showRoundOver(msg) {
   if (!S.myId && !S.spectating && !S.queued && $('death').classList.contains('hidden')) return; // still on the menu
   $('death').classList.add('hidden');
   const w = msg.winner;
-  $('ro-title').textContent = !w ? `Round ${msg.round} is over` : w.id === S.myId ? 'Victory! You are the last core standing' : `${w.name} wins round ${msg.round}`;
-  $('ro-sub').textContent = w ? 'Last core standing' : 'No cores survived';
+  // (a round is won by being the last core standing, or, when time runs out, by holding the most land)
+  const how = w && w.byLand ? 'Most land when the round ended' : 'Last core standing';
+  $('ro-title').textContent = !w ? `Round ${msg.round} is over` : w.id === S.myId ? (w.byLand ? 'Victory! You hold the most land' : 'Victory! You are the last core standing') : `${w.name} wins round ${msg.round}`;
+  $('ro-sub').textContent = w ? how : 'No cores survived';
   const rows = msg.standings.map((r) => `<tr class="${r.id === S.myId ? 'me' : ''}${r.place === 1 ? ' win' : ''}">
     <td>${r.left ? '–' : r.place === 1 ? '🏆' : `#${r.place}`}</td>
     <td class="n"><span class="dot" style="background:${hslOf(r.hue, r.tone || 0)}"></span>${escapeHtml(r.name)}${r.isBot ? ' 🤖' : ''}${r.left ? ' <span style="color:#8b949e">(left)</span>' : ''}</td>

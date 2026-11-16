@@ -20,6 +20,23 @@ function layoutHud() {
   const tips = $('tips');
   tips.style.bottom = `${(H - mm.top) / z + GAP + 30}px`; // (clear of the Ping button on the minimap)
 
+  // a wide drawer (Squads) would run over the minimap and tips on a laptop screen: slide it right,
+  // as far as the screen allows; the tips step aside while it still covers them
+  const drawer = $('drawer');
+  drawer.style.transform = '';
+  let covered = false;
+  if (!drawer.classList.contains('hidden')) {
+    const d = drawer.getBoundingClientRect();
+    const k = d.width / (drawer.offsetWidth || d.width) || 1; // (screen pixels per drawer pixel)
+    const want = mm.right + GAP - d.left;
+    const room = window.innerWidth - EDGE - d.right;
+    const shift = Math.max(0, Math.min(want, room));
+    if (shift > 0) drawer.style.transform = `translateX(${shift / k}px)`;
+    const t = tips.getBoundingClientRect();
+    covered = !tips.classList.contains('hidden') && d.left + shift < t.right && d.top < t.bottom;
+  }
+  tips.style.visibility = covered ? 'hidden' : '';
+
   // the selection panel: bottom right, unless the dock/drawer reaches under it
   const sel = $('selection');
   if (!sel.classList.contains('hidden')) {
