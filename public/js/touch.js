@@ -6,7 +6,7 @@
 // - two fingers: pinch to zoom, drag to move the map
 // - double tap outside your land: grow your land all round (as a double-click)
 
-import { S, cam, canvas, ctx, toWorld } from './state.js';
+import { S, cam, canvas, ctx, toWorld, clampZoom } from './state.js';
 
 const HOLD_MS = 480;
 const MOVE_SLOP = 10; // pixels a finger may wander and still count as a tap or a hold
@@ -66,7 +66,7 @@ canvas.addEventListener('touchmove', (e) => {
     const my = (a.clientY + b.clientY) / 2;
     // zoom about the point between the fingers, then follow them
     const [bx, by] = toWorld(mx, my);
-    cam.zoom = Math.min(2.5, Math.max(0.35, cam.zoom * (d / (pinch.d || d))));
+    cam.zoom = clampZoom(cam.zoom * (d / (pinch.d || d)));
     const [ax, ay] = toWorld(mx, my);
     cam.x += bx - ax;
     cam.y += by - ay;

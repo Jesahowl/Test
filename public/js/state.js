@@ -183,6 +183,11 @@ const keys = new Set();
 const mouse = { sx: 0, sy: 0, wx: 0, wy: 0, rightDown: false, dragged: false, lastX: 0, lastY: 0 };
 
 const scale = () => BASE_SCALE * cam.zoom;
+// How far out you can zoom: enough to see the whole map with a margin round it on this screen
+// (never less far than 0.35), and how far in.
+const MAX_ZOOM = 2.5;
+const minZoom = () => Math.min(0.35, (0.92 * Math.min(canvas.width / C.MAP_W, canvas.height / C.MAP_H)) / BASE_SCALE);
+const clampZoom = (z) => Math.min(MAX_ZOOM, Math.max(minZoom(), z));
 
 const toScreen = (wx, wy) => [(wx - cam.x) * scale() + canvas.width / 2, (wy - cam.y) * scale() + canvas.height / 2];
 
@@ -200,4 +205,4 @@ const colorOf = (pid, l = 55, a = 1) => {
   return p ? hslOf(p.hue, p.tone, l, a) : pid ? hslOf(0, 0, l, a) : `rgba(140, 120, 90, ${a})`;
 };
 
-export { BASE_SCALE, hslOf, baseLift, hexSpot, towerInHex, HEX, FOG_PAD, FOG_RES, fogSoft, fogSoftCtx, $, C, CAMP_KEYS, CREEP_KEYS, KIND_KEYS, NTILES, TPX, UNIT_KEYS, ALL_UNIT_KEYS, Vision, cam, canvas, colorOf, ctx, explored, feed, fogCanvas, fogCtx, fogImg, grid, keys, mctx, mini, mouse, players, scale, selUnits, tctx, terr, terrCanvas, toScreen, toWorld, vis, withContext };
+export { BASE_SCALE, clampZoom, hslOf, baseLift, hexSpot, towerInHex, HEX, FOG_PAD, FOG_RES, fogSoft, fogSoftCtx, $, C, CAMP_KEYS, CREEP_KEYS, KIND_KEYS, NTILES, TPX, UNIT_KEYS, ALL_UNIT_KEYS, Vision, cam, canvas, colorOf, ctx, explored, feed, fogCanvas, fogCtx, fogImg, grid, keys, mctx, mini, mouse, players, scale, selUnits, tctx, terr, terrCanvas, toScreen, toWorld, vis, withContext };

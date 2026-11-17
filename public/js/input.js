@@ -11,7 +11,7 @@ import { sendMsg } from './net.js';
 import { clearSelection } from './overlay.js';
 import { resize } from './render.js';
 import { join, specNext, startSpectating, toast } from './screens.js';
-import { S, $, C, cam, canvas, HEX, keys, towerInHex, mini, mouse, players, scale, selUnits, terr, toWorld } from './state.js';
+import { S, $, C, cam, canvas, HEX, keys, towerInHex, mini, mouse, players, scale, selUnits, terr, toWorld, clampZoom } from './state.js';
 import { endBox, jumpIdle, moveBox, startBox } from './workforce.js';
 import { orderTargetAt } from './targets.js';
 import { hideTip } from './ui.js';
@@ -213,7 +213,7 @@ canvas.addEventListener('dblclick', (e) => {
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   const [bx, by] = toWorld(e.clientX, e.clientY);
-  cam.zoom = Math.min(2.5, Math.max(0.35, cam.zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12)));
+  cam.zoom = clampZoom(cam.zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12));
   const [ax, ay] = toWorld(e.clientX, e.clientY);
   cam.x += bx - ax;
   cam.y += by - ay;
