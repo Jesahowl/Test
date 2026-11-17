@@ -224,11 +224,11 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 /* troop upgrades: a row of chips atop the Squads drawer */
 .upgrades { display: grid; grid-template-columns: auto repeat(4, 1fr); gap: 6px; align-items: center; margin-bottom: 8px; }
 .upgrades .h { font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-right: 2px; cursor: default; }
-.upgrades .troop { width: auto; min-width: 0; flex-direction: row; align-items: center; gap: 5px; padding: 3px 4px 3px 5px; border-radius: 9px; font-size: 12px; }
-.upgrades .troop b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.upgrades .troop img { width: 20px; height: 20px; }
-.upgrades .troop b { font-size: 12px; }
-.upgrades .troop .up { flex: none; height: 22px; padding: 0 7px; border-radius: 6px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+.upgrades .troop { width: auto; min-width: 0; flex-direction: column; align-items: stretch; gap: 4px; padding: 5px 6px 6px; border-radius: 9px; }
+.upgrades .troop .head { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12.5px; }
+.upgrades .troop .head img { width: 20px; height: 20px; flex: none; }
+.upgrades .troop .head b { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; }
+.upgrades .troop .up { flex: none; height: 24px; width: 100%; padding: 0 6px; border-radius: 6px; font-size: 11.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 3px; white-space: nowrap; }
 .squad-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .squad-foot .squad-btns { width: 260px; }
 .squad-btns { display: flex; gap: 4px; }

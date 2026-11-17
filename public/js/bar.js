@@ -51,7 +51,7 @@ function buildBar() {
     const st1 = C.towerStats(kind, 1);
     const role = u.heal ? `heals ${u.heal}/s` : u.breaker ? `${st1.damage} dmg, ×${u.wallBreaker} against walls, ×${u.siege} against buildings` : `${st1.damage} dmg, ${u.melee ? 'melee' : `range ${st1.range}`}`;
     card.dataset.tip = `<span class="t">${u.name}</span>${u.desc}.<br><span class="m">${st1.hp} HP · ${role} · speed ${u.speed}</span>`;
-    card.innerHTML = `<img src="${iconURL(kind)}" alt=""><b>${u.name}</b><span class="lvl"></span><button class="up"></button>`;
+    card.innerHTML = `<div class="head"><img src="${iconURL(kind)}" alt=""><b>${u.name}</b><span class="lvl"></span></div><button class="up"></button>`;
     card.querySelector('.up').onclick = () => sendMsg({ t: 'army', op: 'level', kind });
     army.appendChild(card);
   }
