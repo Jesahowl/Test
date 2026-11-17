@@ -1,4 +1,5 @@
-// The in-game menu: Resume, How to play, Leave game. Opened with Esc (when there's nothing else to
+// The in-game menu: the room (code to share; test mode and its fog switch), sound, Resume, How to
+// play, Leave game. Opened with Esc (when there's nothing else to
 // cancel) or the ☰ button. It's a multiplayer game, so the round keeps running behind it.
 
 import { sendMsg } from './net.js';
@@ -32,10 +33,25 @@ function pauseOpen() {
   return !$('pause').classList.contains('hidden');
 }
 
+// Which game this is: the room code to share (private rooms), and in test mode its fog switch.
+function syncRoom() {
+  const r = S.round || {};
+  const fog = r.test && r.fog !== false && S.myId
+    ? `<button class="test-fog secondary" data-tip="Test mode: show or hide the fog of war (for you only)">🌫 Fog of war: ${S.me && S.me.noFog ? 'off' : 'on'}</button>` : '';
+  $('room-info').innerHTML = (r.code ? `<div>🔒 Private room <b class="code">${r.code}</b> <span class="muted">· share the code to invite friends</span></div>` : r.pub ? '<div>🌐 Public game</div>' : '')
+    + (r.test ? `<div class="test-row"><span class="test-badge">🛠 TEST</span><span class="muted">gold and wood never run out</span>${fog}</div>` : '');
+}
+$('room-info').addEventListener('click', (e) => {
+  if (!e.target.closest('.test-fog')) return;
+  sendMsg({ t: 'fog', on: !!(S.me && S.me.noFog) });
+  setTimeout(syncRoom, 300); // (the next snapshot says which way it went)
+});
+
 function openPause() {
   if (!S.myId && !S.spectating) return;
   $('pause').classList.remove('hidden');
   syncSound();
+  syncRoom();
   hideTip();
   $('pause-resume').focus();
 }

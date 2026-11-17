@@ -99,22 +99,10 @@ function updateHud() {
   updateRound();
   updateStats(p, gold, rank, sorted.length);
 
-  // respawns: the dock's squad rings, and who's on the way back (in the Army drawer)
+  // respawns: the dock's squad rings (each squad's card shows its own)
   const squads = allSquads();
   const used = squads.reduce((n, q) => n + UNIT_KEYS.reduce((m, k) => m + q.mix[k] * C.slotsOf(k), 0), 0); // army slots taken
-  $('wave-size').textContent = `${used} / ${armySize} army slots used · the fallen rejoin one every ${C.SQUAD_TRICKLE}s; a wiped-out squad takes ${C.SQUAD_WIPE_BASE}s + ${C.SQUAD_WIPE_PER_TROOP}s a troop`;
   drawSquadTimer(squads);
-  const down = {};
-  for (const q of squads) for (const k of UNIT_KEYS) down[k] = (down[k] || 0) + Math.max(0, q.mix[k] - (q.kinds[k] || 0));
-  const lineup = UNIT_KEYS.filter((k) => down[k]);
-  const slotKey = lineup.map((k) => `${k}${down[k]}`).join(',');
-  const box = $('slots');
-  if (box.dataset.key !== slotKey) {
-    box.dataset.key = slotKey;
-    box.innerHTML = lineup.length
-      ? '<span class="nw-label">On the way back</span>' + lineup.map((k) => `<span class="nw" style="--c:${C.UNITS[k].color}"><img src="${iconURL(k, 36)}" alt="">×${down[k]}</span>`).join('')
-      : '<span class="nw-label">Every squad at full strength</span>';
-  }
   $('alive').innerHTML = `Troops alive <b>${myTroops}</b> / ${armySize}`;
 
   const who = selUnits.size ? `${selUnits.size} picked troop${selUnits.size === 1 ? '' : 's'}` : squadsLabel();
@@ -125,6 +113,8 @@ function updateHud() {
     $('order-info').dataset.html = orderHtml;
     $('order-info').innerHTML = orderHtml;
   }
+  // (the hint only while it helps: with troops or a squad picked, and for your first few orders)
+  $('order-info').classList.toggle('hidden', !selUnits.size && S.allSquads && (S.ordersSent || 0) >= 3);
 
   updateBoards();
   updateDock(Math.max(0, armySize - used), (S.me.offersIn || []).length);
@@ -138,31 +128,24 @@ function updateHud() {
 // The player card (built once; numbers updated in place so tooltips keep working).
 function buildStats() {
   $('stats').innerHTML = `
-    <span class="who"><span class="dot"></span><span class="name"></span><span class="rank" data-tip="Your place on the land leaderboard"></span></span>
-    <span class="wood-row" data-tip="<span class='t'>Wood</span>Your workers chop it from forests next to your land and carry it to the core or a workshop. Towers, barracks, trade posts, workshops and walls need it.">🪵 <span class="wood"></span></span>
-    <span class="iron-row" data-tip="<span class='t'>Iron</span>Your workers mine it from iron ore deposits (rust-red rocks) and carry it home. Troop level-ups need it, as well as gold.">⚒ <span class="iron"></span></span>
-    <span class="gold-row" data-tip="<span class='t'>Gold</span>Earned from land (a trickle) and mostly from fighting: troop kills, jungle camps, towers and cores. Spend it on towers, barracks and troop levels.">
+    <span class="wood-row" data-tip="<span class='t'>Wood</span>Your workers chop it from forests next to your land and carry it to the core or a workshop. Towers, barracks, trade posts, workshops and walls need it."><i class="ico-wood"></i><span class="wood"></span></span>
+    <span class="iron-row" data-tip="<span class='t'>Iron</span>Your workers mine it from iron ore deposits (rust-red rocks) and carry it home. Troop upgrades need it, as well as gold."><i class="ico-iron"></i><span class="iron"></span></span>
+    <span class="gold-row" data-tip="<span class='t'>Gold</span>Earned from land (a trickle) and mostly from fighting: troop kills, jungle camps, towers and cores. Spend it on buildings, land and troop upgrades.">
       <span class="coin"></span><span class="gold"></span><span class="income"></span></span>
-    <span class="chip land" data-tip="Tiles you own. More land = more income and room for more troops.">🗺 <b></b> land</span>
-    <span class="chip kills" data-tip="Enemy troops and monsters your side has killed">⚔ <b></b> kills</span>
     <span class="meter" data-tip="Your core. If it falls, you're out of the round and whoever broke it takes your gold and troops."><i></i><span></span></span>
     <span class="chip shield hidden" data-tip="Spawn protection: your core and buildings can't be damaged yet">🛡 <b></b></span>
     <span class="chip buff hidden" data-tip="Buff from defeating a barbarian Warlord: your troops deal +${Math.round(C.JUNGLE_BUFF_DAMAGE * 100)}% damage and take ${Math.round(C.JUNGLE_BUFF_ARMOR * 100)}% less">🔥 <b></b></span>`;
 }
 
+// (your land, rank and kills live in the standings on the right: the left is what you spend)
 function updateStats(p, gold, rank, n) {
   const el = $('stats');
-  el.querySelector('.who .dot').style.background = colorOf(p.id, 55);
-  el.querySelector('.who .name').textContent = p.name;
-  el.querySelector('.who .rank').textContent = `#${rank} of ${n}`;
   const test = !!(S.round && S.round.test); // test mode: gold and wood never run out
   el.querySelector('.gold').textContent = test ? '∞' : gold.toLocaleString();
   el.querySelector('.wood').textContent = test ? '∞' : (S.me.wood || 0).toLocaleString();
   el.querySelector('.iron').textContent = test ? '∞' : (S.me.iron || 0).toLocaleString();
   el.classList.toggle('test-mode', test);
   el.querySelector('.income').textContent = `+${C.income(p.territory).toFixed(1)}/s`;
-  el.querySelector('.chip.land b').textContent = p.territory;
-  el.querySelector('.chip.kills b').textContent = p.kills;
   const sh = el.querySelector('.chip.shield');
   sh.classList.toggle('hidden', !p.shield);
   sh.querySelector('b').textContent = `${p.shield}s`;
@@ -177,10 +160,11 @@ function updateStats(p, gold, rank, n) {
   el.querySelector('.meter').dataset.tip = `<span class='t'>Core ${p.hp.toLocaleString()} / ${p.maxHp.toLocaleString()}</span>If it falls, you're out of the round and whoever broke it takes your gold and troops.`;
 }
 
-// Who q is allied with, as coloured dots (everyone can see alliances).
+// Who q is allied with, in words (everyone can see alliances).
 function allyMarks(q) {
   if (!q.allies || !q.allies.length) return '';
-  return ` <span class="allied" data-tip="Allied with ${escapeHtml(q.allies.map((id) => players.get(id)?.name || '?').join(', '))}">🤝${q.allies.map((id) => `<i style="background:${colorOf(id, 55)}"></i>`).join('')}</span>`;
+  const names = q.allies.map((id) => (id === S.myId ? 'you' : escapeHtml(players.get(id)?.name || '?'))).join(' and ');
+  return ` <span class="allied">· allied with ${names}</span>`;
 }
 
 // Player list (in the top bar), the Diplomacy drawer and the kill feed (shown to players and spectators).
@@ -195,7 +179,7 @@ function updateBoards() {
   }
   const lb = shown.map((q) => {
     const pos = sorted.indexOf(q) + 1;
-    const tip = `<span class='t'>#${pos} ${escapeHtml(q.name)}${q.isBot ? ' (bot)' : ''}</span>${q.territory} land${q.allies && q.allies.length ? ` · allied with ${escapeHtml(q.allies.map((id) => players.get(id)?.name || '?').join(', '))}` : ''}${q.buff ? ' · 🔥 empowered' : ''}${q.shield ? ' · 🛡 protected' : ''}`;
+    const tip = `<span class='t'>#${pos} ${escapeHtml(q.name)}${q.isBot ? ' (bot)' : ''}${q.id === S.myId ? ' (you)' : ''}</span>${q.territory} land · ${q.kills} kills${q.allies && q.allies.length ? ` · allied with ${escapeHtml(q.allies.map((id) => players.get(id)?.name || '?').join(', '))}` : ''}${q.buff ? ' · 🔥 empowered' : ''}${q.shield ? ' · 🛡 protected' : ''}`;
     return `<span class="pl${q.id === focus ? ' me' : ''}${isAlly(q.id) ? ' ally' : ''}" data-tip="${tip}"><span class="dot" style="background:${colorOf(q.id, 55)}"></span>`
       + `<span class="n">${q.id === S.myId ? 'You' : escapeHtml(q.name)}</span>${isAlly(q.id) ? '<span class="hs">🤝</span>' : ''}${q.buff ? '🔥' : ''}<span class="v">${q.territory}</span></span>`;
   }).join('') + (sorted.length > shown.length ? `<span class="pl more">+${sorted.length - shown.length}</span>` : '');
@@ -255,7 +239,7 @@ function updateTowerAndArmy(gold) {
   lb.classList.toggle('poor', gold < hexCost);
   lb.querySelector('.cost').textContent = `~${hexCost}g/hex`;
   updateWorkersUi();
-  // Troop cards: how many are in squads, level and its price.
+  // Troop upgrades (the row atop the Squads drawer): level and the next level's price.
   const inSquads = {};
   for (const q of allSquads()) for (const k of UNIT_KEYS) inSquads[k] = (inSquads[k] || 0) + q.mix[k];
   for (const card of document.querySelectorAll('#army .troop')) {
@@ -269,11 +253,9 @@ function updateTowerAndArmy(gold) {
     card.classList.toggle('in', n > 0);
     card.style.setProperty('--c', C.UNITS[kind].color);
     card.querySelector('.lvl').textContent = `Lv ${lvl}`;
-    const html = n ? `<b class="n">×${n}</b> <span class="muted">in your squads</span>` : 'none in your squads';
-    const countEl = card.querySelector('.count');
-    if (countEl.innerHTML !== html) countEl.innerHTML = html;
     const up = card.querySelector('.up');
-    up.textContent = lvl < C.MAX_LEVEL ? `▲ Level up ${upCost}g ⚒${upIron}` : 'MAX';
+    const upHtml = lvl < C.MAX_LEVEL ? `▲ ${upCost}g · ${upIron}<i class="ico-iron sm"></i>` : 'MAX';
+    if (up.innerHTML !== upHtml) up.innerHTML = upHtml;
     up.disabled = lvl >= C.MAX_LEVEL || gold < upCost || iron < upIron;
     const s1 = C.towerStats(kind, lvl);
     const s2 = lvl < C.MAX_LEVEL ? C.towerStats(kind, lvl + 1) : null;

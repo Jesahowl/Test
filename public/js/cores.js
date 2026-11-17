@@ -103,7 +103,7 @@ function drawCores(dt) {
     }
 
     structBar(p, x, y - r * 1.75, s * 1.6, now, Math.hypot(mouse.wx - p.x - 0.5, mouse.wy - p.y - 0.5) < 1.2, dt);
-    label(p.id === S.myId ? `${p.name} (you)` : isAlly(p.id) ? `🤝 ${p.name} (ally)` : p.name, x, y - r * 1.98, Math.max(11, Math.round(s * 0.5)), '#fff');
+    label(p.id === S.myId ? (p.name.toLowerCase() === 'you' ? 'You ★' : `${p.name} (you)`) : isAlly(p.id) ? `🤝 ${p.name} (ally)` : p.name, x, y - r * 1.98, Math.max(11, Math.round(s * 0.5)), '#fff');
 
     if (p.shield) {
       // spawn shield: a soft glassy dome over the core, shimmering

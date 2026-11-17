@@ -1,11 +1,13 @@
-// Workers, the easy way: the Workers drawer (presets, how many on each job, switches, the build
-// queue), job icons over your workers (idle ones pulse), "." to jump to the next idle worker,
+// Workers, the easy way: the Workers drawer (plans, who's doing what, exact counts under
+// "Customise", switches, the build queue), job icons over your workers (idle ones pulse), "." to jump to the next idle worker,
 // a card when hovering a forest or ore deposit (who's on it, how long it lasts), dragging a box
 // round workers to pick them, and the "workers fall back" warning.
 
 import { sendMsg } from './net.js';
 import { toast } from './screens.js';
 import { S, $, C, HEX, cam, ctx, hexSpot, mouse, scale, toScreen, toWorld } from './state.js';
+import { touchOnly } from './touch.js';
+import { tipDone } from './tips.js';
 
 // [job, icon, name, what] in the server's order (C.WORKER_JOBS); job codes as the server sends them
 const JOBS = {
@@ -20,12 +22,17 @@ const CODE = { build: 1, repair: 2, gather: 3, farm: 4, scout: 5, mine: 6 };
 const ICON_BY_CODE = ['', '🔨', '🔧', '🪓', '🌾', '🔭', '⛏'];
 const COL_BY_CODE = ['#f2c14e', '#f2c14e', '#58a6ff', '#7ee787', '#e3b341', '#d2a8ff', '#d6894e'];
 // one click sets every job
+// [key, label, one line on the card, tooltip, jobs]
 const PRESETS = [
-  ['eco', '⚒ Economy', 'Build and repair, then 3 chop wood, 2 mine iron and 1 farms', { build: 1, repair: 1, gather: 3, mine: 2, farm: 1, scout: 0 }],
-  ['build', '🏗 Build up', 'Everyone builds while there are sites; otherwise they chop wood', { build: 1, repair: 1, gather: 1, mine: 0, farm: 0, scout: 0 }],
-  ['repair', '🛠 Repair', 'Everyone repairs damage once the fighting stops; otherwise they chop wood', { build: 0, repair: 1, gather: 1, mine: 0, farm: 0, scout: 0 }],
-  ['farm', '🌾 Farm', 'Build and repair, then 4 farm gold and the rest chop wood', { build: 1, repair: 1, gather: 1, mine: 0, farm: 4, scout: 0 }],
+  ['eco', '⚒ Economy', 'chop wood and mine iron', 'Build and repair, then 3 chop wood, 2 mine iron and 1 farms', { build: 1, repair: 1, gather: 3, mine: 2, farm: 1, scout: 0 }],
+  ['build', '🏗 Build up', 'everyone on building sites', 'Everyone builds while there are sites; otherwise they chop wood', { build: 1, repair: 1, gather: 1, mine: 0, farm: 0, scout: 0 }],
+  ['repair', '🛠 Fix up', 'everyone repairing damage', 'Everyone repairs damage once the fighting stops; otherwise they chop wood', { build: 0, repair: 1, gather: 1, mine: 0, farm: 0, scout: 0 }],
+  ['farm', '🌾 Farm', 'work your land for gold', 'Build and repair, then 4 farm gold and the rest chop wood', { build: 1, repair: 1, gather: 1, mine: 0, farm: 4, scout: 0 }],
 ];
+// (the exact count per job opens under "Customise"; remembered in this browser)
+let custom = false;
+try { custom = localStorage.getItem('ts-wcustom') === '1'; } catch { /* ignore */ }
+const DOING = { build: 'building', repair: 'repairing', gather: 'chopping', mine: 'mining', farm: 'farming', scout: 'scouting' };
 
 const plan = () => {
   const w = (S.me && S.me.workers) || [0, [0, 0, 0, 0, 0, 0], 1, 0, []];
@@ -63,31 +70,35 @@ function updateWorkersPanel() {
     return mine.filter((u) => u.job === CODE.build && Math.hypot(u.rx - at.x, u.ry - at.y) < 2.6).length;
   };
   const box = $('jobs');
-  const key = JSON.stringify([jobs, flee, keep, busy, sites.map((t) => [t.id, Math.round(t.progress * 20), onSite(t)])]);
+  const key = JSON.stringify([jobs, flee, keep, busy, custom, sites.map((t) => [t.id, Math.round(t.progress * 20), onSite(t)])]);
   if (box.dataset.key === key) return;
   box.dataset.key = key;
-  const cur = PRESETS.find(([, , , p]) => C.WORKER_JOBS.every((j) => p[j] === jobs[j]));
-  const pips = (now, want) => `<span class="pips">${Array.from({ length: 8 }, (_, i) => `<i class="${i < now ? 'f' : i < want ? 'w' : ''}"></i>`).join('')}</span>`;
+  const cur = PRESETS.find(([, , , , p]) => C.WORKER_JOBS.every((jb) => p[jb] === jobs[jb]));
   const row = (job) => {
     const [ic, name, what] = JOBS[job];
     const n = busy[CODE[job]];
     const ctl = job === 'build'
       ? `<button class="tg ${jobs.build ? 'on' : ''}" data-act="build">${jobs.build ? 'All free hands' : 'Off'}</button>`
       : `<span class="step"><button data-act="cnt" data-job="${job}" data-d="-1" ${jobs[job] ? '' : 'disabled'}>−</button><b>${jobs[job]}</b><button data-act="cnt" data-job="${job}" data-d="1">+</button></span>`;
-    return `<div class="wrow" data-tip="<span class='t'>${name}</span>${what}"><span class="ic">${ic}</span><b>${name}</b>${pips(n, job === 'build' ? n : Math.max(n, jobs[job]))}<span class="nw">${n} working</span>${ctl}</div>`;
+    return `<div class="wrow" data-tip="<span class='t'>${name}</span>${what}"><span class="ic">${ic}</span><b>${name}</b><span class="nw">${n} working</span>${ctl}</div>`;
   };
+  // who's doing what, in one line
+  const doing = C.WORKER_JOBS.filter((jb) => busy[CODE[jb]]).map((jb) => `<span>${JOBS[jb][0]} <b>${busy[CODE[jb]]}</b> ${DOING[jb]}</span>`).join('')
+    || '<span class="muted">nobody at work yet</span>';
+  const how = touchOnly ? 'Tap a worker, then press &amp; hold a site, forest or ore to send it there.' : 'Pick a worker and right-click a site, forest or ore to send it there.';
   box.innerHTML = `
-    <div class="wtop">${idle ? `<button class="idlepill" data-act="idle" data-tip="Jump to the next idle worker <kbd>.</kbd>">Zz ${idle} idle · jump <kbd>.</kbd></button>` : '<span class="muted">Everyone is busy</span>'}</div>
-    <div class="presets">${PRESETS.map(([k, label, what]) => `<button data-act="preset" data-p="${k}" class="${cur && cur[0] === k ? 'on' : ''}" data-tip="${what}">${label}</button>`).join('')}</div>
-    ${['build', 'gather', 'mine', 'farm', 'scout'].map(row).join('')}
+    <div class="presets">${PRESETS.map(([k, label, line, what]) => `<button data-act="preset" data-p="${k}" class="${cur && cur[0] === k ? 'on' : ''}" data-tip="${what}"><b>${label}</b><span>${line}</span></button>`).join('')}</div>
+    <div class="doing">${doing}${idle ? `<button class="idlepill" data-act="idle" data-tip="Jump to the next idle worker <kbd>.</kbd>">Zz ${idle} idle · jump <kbd>.</kbd></button>` : ''}<button class="cust" data-act="custom">${custom ? 'Customise ▾' : 'Customise ▸'}</button></div>
+    ${custom ? ['build', 'gather', 'mine', 'farm', 'scout'].map(row).join('') : ''}
     <div class="switches">
-      <button class="sw ${flee ? 'on' : ''}" data-act="sw" data-sw="flee" data-tip="Workers run back to your core when enemy troops come close, then go back to work"><i></i>Flee from raiders</button>
-      <button class="sw ${jobs.repair ? 'on' : ''}" data-act="sw" data-sw="repair" data-tip="${JOBS.repair[2]}"><i></i>Repair after a fight</button>
+      <button class="sw ${flee ? 'on' : ''}" data-act="sw" data-sw="flee" data-tip="Workers run back to your core when enemy troops come close, then go back to work"><i></i>Run from raiders</button>
+      <button class="sw ${jobs.repair ? 'on' : ''}" data-act="sw" data-sw="repair" data-tip="${JOBS.repair[2]}"><i></i>Repair damage</button>
       <button class="sw ${keep ? 'on' : ''}" data-act="sw" data-sw="keep" data-tip="Leave the forests near your core standing (cover, and wood for later)"><i></i>Keep forests near the core</button>
     </div>
-    <div class="bq"><div class="bq-head"><span>Build queue${sites.length > 1 ? ' · drag to reorder' : ''}</span><span>${sites.length ? `${sites.length} site${sites.length === 1 ? '' : 's'}` : 'nothing to build'}</span></div>
+    ${sites.length ? `<div class="bq"><div class="bq-head"><span>Build queue${sites.length > 1 ? ' · drag to reorder' : ''}</span><span>${sites.length} site${sites.length === 1 ? '' : 's'}</span></div>
       ${sites.map((t, i) => `<div class="qi" draggable="true" data-id="${t.id}"><span class="h">⋮⋮</span><span>${SITE_ICON[t.kind] || '🏗'}</span><b>${C.TOWERS[t.kind]?.name || t.kind}</b><span class="p"><i style="width:${Math.round(t.progress * 100)}%"></i></span><span class="w">${onSite(t) ? `${onSite(t)} 👷` : i === 0 ? 'next' : ''}</span></div>`).join('')}
-    </div>`;
+    </div>` : ''}
+    <div class="muted how">${how} <kbd>.</kbd> jumps to an idle one.</div>`;
   if (bound) return;
   bound = true;
   box.addEventListener('click', (e) => {
@@ -95,8 +106,14 @@ function updateWorkersPanel() {
     if (!b) return;
     const { jobs: j } = plan();
     const act = b.dataset.act;
-    if (act === 'preset') {
-      const p = PRESETS.find(([k]) => k === b.dataset.p)[3];
+    if (act === 'custom') {
+      custom = !custom;
+      try { localStorage.setItem('ts-wcustom', custom ? '1' : '0'); } catch { /* ignore */ }
+      box.dataset.key = '';
+      updateWorkersPanel();
+    } else if (act === 'preset') {
+      tipDone('workers');
+      const p = PRESETS.find(([k]) => k === b.dataset.p)[4];
       for (const job of C.WORKER_JOBS) if (p[job] !== j[job]) sendMsg({ t: 'jobs', job, level: p[job] });
     } else if (act === 'cnt') {
       const job = b.dataset.job;

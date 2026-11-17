@@ -51,10 +51,7 @@ function buildBar() {
     const st1 = C.towerStats(kind, 1);
     const role = u.heal ? `heals ${u.heal}/s` : u.breaker ? `${st1.damage} dmg, ×${u.wallBreaker} against walls, ×${u.siege} against buildings` : `${st1.damage} dmg, ${u.melee ? 'melee' : `range ${st1.range}`}`;
     card.dataset.tip = `<span class="t">${u.name}</span>${u.desc}.<br><span class="m">${st1.hp} HP · ${role} · speed ${u.speed}</span>`;
-    card.innerHTML = `
-      <div class="head"><img src="${iconURL(kind)}" alt=""><b>${u.name}</b><span class="lvl"></span></div>
-      <div class="count"></div>
-      <div class="btns"><button class="up"></button></div>`;
+    card.innerHTML = `<img src="${iconURL(kind)}" alt=""><b>${u.name}</b><span class="lvl"></span><button class="up"></button>`;
     card.querySelector('.up').onclick = () => sendMsg({ t: 'army', op: 'level', kind });
     army.appendChild(card);
   }
@@ -128,7 +125,7 @@ const STANCES = [
   ['aggressive', '⚔', 'Aggressive', `Fights every enemy it meets on the way. At home it goes out after enemy troops within ${C.RAID_RANGE} tiles of your border`],
   ['defensive', '🛡', 'Defensive', 'Stays inside your land and defends it, never leaving your border. Sending it outside your land makes it aggressive'],
   ['hold', '✋', 'Hold', 'Never chases: marches past fights and only fights what comes within reach'],
-  ['pillage', '🏕', 'Pillage', 'Hunts barbarian camps on its own: the nearest one you have discovered first, then the next (camps coming back nearer home first). With none in sight it searches the fog for one. Sending it anywhere else sets it back to defensive'],
+  ['pillage', '🏕', 'Raid camps', 'Pillage: hunts barbarian camps on its own: the nearest one you have discovered first, then the next (camps coming back nearer home first). With none in sight it searches the fog for one. Sending it anywhere else sets it back to defensive'],
 ];
 
 // G: the picked squads (or all) move to the next stance.
@@ -183,6 +180,7 @@ function bindSquadCards() {
       tipDone('mix');
     } else if (act === 'stance') sendMsg({ t: 'squad', op: 'stance', sq: id, stance: el.dataset.stance });
     else if (act === 'formation') sendMsg({ t: 'squad', op: 'formation', sq: id, formation: el.dataset.formation });
+    else if (act === 'barracks') toggleBuild('barracks');
   });
 }
 
@@ -196,7 +194,13 @@ function updateSquadsUi() {
   const key = squads.map((q) => `${q.id}:${q.stance}:${q.formation}:${q.cap}:${UNIT_KEYS.map((k) => `${q.mix[k]}/${q.kinds[k] || 0}`).join(',')}:${q.status}:${squadPicked(q.id) ? 1 : 0}:${Math.round(10 * hpFrac(q))}:${respawnState(q)}`).join('|') + `|${S.allSquads}`;
   if (box.dataset.key !== key) {
     box.dataset.key = key;
+    const firstEmpty = squads.find((q) => !q.cap);
     box.innerHTML = squads.map((q) => {
+      // a squad without a barracks: just a line saying how to raise it
+      if (!q.cap) {
+        return `<div class="sq-card ghost" data-id="${q.id}"><b>Squad ${q.num}</b><span>${q === firstEmpty ? `Build a barracks to raise it (+${C.BARRACKS_TROOPS} troops).` : 'Needs another barracks.'}</span>`
+          + `${q === firstEmpty ? `<button data-act="barracks" data-tip="Place a barracks on your land <kbd>R</kbd>">Build barracks <kbd>R</kbd></button>` : ''}</div>`;
+      }
       const [kind, short, long] = squadStatus(q);
       const on = S.allSquads || squadPicked(q.id);
       const alive = q.units.length;
@@ -210,8 +214,11 @@ function updateSquadsUi() {
           + `<img src="${iconURL(k)}" alt=""><b>${n}</b>${down ? `<i class="down">−${down}</i>` : ''}`
           + `<span class="pm"><button data-act="add" data-kind="${k}"${canAdd(k) ? '' : ' disabled'} data-tip="${!q.cap ? `Build a barracks to raise squad ${q.num}` : room >= C.slotsOf(k) ? `One more ${C.UNITS[k].name.toLowerCase()} (it joins as a straggler)` : `Swap ${C.slotsOf(k) > 1 ? 'soldiers' : 'a soldier'} for a ${C.UNITS[k].name.toLowerCase()} (the squad is full)`}">+</button><button data-act="rem" data-kind="${k}"${n ? '' : ' disabled'} data-tip="One fewer ${C.UNITS[k].name.toLowerCase()} (frees a slot for another squad)">−</button></span></div>`;
       }).join('');
-      const stances = STANCES.map(([k, ic, name, what]) => `<button data-act="stance" data-stance="${k}" class="${q.stance === k ? 'on' : ''}" data-tip="<span class='t'>${name} <kbd>G</kbd></span>${what}">${ic}${q.stance === k ? ` ${name}` : ''}</button>`).join('');
-      const forms = FORMATIONS.map(([k, ic, name, what]) => `<button data-act="formation" data-formation="${k}" class="${q.formation === k ? 'on' : ''}" data-tip="<span class='t'>${name} formation <kbd>F</kbd></span>${what}">${ic} ${name}</button>`).join('');
+      const stances = STANCES.map(([k, ic, name, what]) => `<button data-act="stance" data-stance="${k}" class="${q.stance === k ? 'on' : ''}" data-tip="<span class='t'>${name} <kbd>G</kbd></span>${what}">${ic} ${name}</button>`).join('');
+      // (formation: one small switch; F does the same)
+      const [, fic, fname] = FORMATIONS.find(([k]) => k === q.formation) || FORMATIONS[0];
+      const [other, , , otherWhat] = FORMATIONS.find(([k]) => k !== q.formation);
+      const forms = `<button data-act="formation" data-formation="${other}" data-tip="<span class='t'>Formation <kbd>F</kbd></span>Now: ${fname}. Click to switch: ${otherWhat}">${fic} ${fname} ⇄</button>`;
       const fromCore = q.num === 1 ? C.CORE_SQUAD_TROOPS : 0;
       const lv = (q.cap - fromCore) / C.BARRACKS_TROOPS;
       const src = lv ? `Barracks Lv ${lv}${fromCore ? ' + core' : ''}` : 'Core';
@@ -304,6 +311,8 @@ function sendOrder(tg, opts) {
     const pos = targetPos(`${tg.k}:${tg.id}`);
     if (pos) S.effects.push({ k: 'ping', x: pos.x, y: pos.y, born: performance.now(), atk: !isMineTarget(tg) });
   }
+  S.ordersSent = (S.ordersSent || 0) + 1; // (the order hint steps aside after the first few)
+  try { localStorage.setItem('ts-orders', String(Math.min(9, S.ordersSent))); } catch { /* ignore */ }
   if (!isMineTarget(tg)) tipDone('attack');
   if (tg.k === 'j') tipDone('jungle');
   if (!ids && !everyone) tipDone('send');

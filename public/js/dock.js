@@ -1,12 +1,12 @@
-// The dock at the bottom of the screen: Build, Army, the squads at a glance (their respawns), Squads,
-// Workers and Diplomacy.
+// The dock at the bottom of the screen: Build, the squads at a glance (their respawns), Squads (with
+// troop upgrades), Workers and Diplomacy.
 // Each button opens its drawer above the dock (one at a time; the same button or Esc closes it),
 // so the map stays clear until you need a panel.
 
 import { S, $ } from './state.js';
 import { hideTip } from './ui.js';
 
-S.drawer = null; // 'build' | 'army' | 'squads' | 'diplo' | null
+S.drawer = null; // 'build' | 'squads' | 'workers' | 'diplo' | null
 
 function setDrawer(name) {
   S.drawer = name && S.drawer !== name ? name : null;

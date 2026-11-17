@@ -75,9 +75,9 @@ function updateRound() {
   else if (S.round.t >= (S.round.fort ?? C.SIEGE_RAMP_START) && S.round.sd > 120) sub = `<div class="sub">⚔ Siege power ×${(1 + (S.round.t - (S.round.fort ?? C.SIEGE_RAMP_START)) / 60 * C.SIEGE_RAMP_PER_MIN).toFixed(1)} · sudden death in ${fmtTime(S.round.sd)}</div>`;
   else if (S.round.sd <= 0) sub = `<div class="sd">☠ Sudden death: cores crumble · troops hit buildings ×2${S.round.end > 0 ? ` · time's up in ${fmtTime(S.round.end)} (most land wins)` : ''}</div>`;
   else if (S.round.sd <= 120) sub = `<div class="sd">Sudden death in ${fmtTime(S.round.sd)}</div>`;
-  const fogChip = S.round.test && S.round.fog !== false && S.myId
-    ? `<button class="test-fog${S.me && S.me.noFog ? '' : ' on'}" data-tip="Test mode: show or hide the fog of war (for you only)">🌫 Fog ${S.me && S.me.noFog ? 'off' : 'on'}</button> ` : '';
-  const html = `${S.round.test ? '<span class="test-badge" data-tip="Test mode: your gold and wood never run out">🛠 TEST</span> ' : ''}${fogChip}${S.round.code ? `🔒 Room <b>${S.round.code}</b> · ` : S.round.pub ? '🌐 Public game · ' : ''}Round <b>${S.round.n}</b> · <b>${players.size}</b> core${players.size === 1 ? '' : 's'} left · ${fmtTime(S.round.t)}${sub}`;
+  // (the room code, test mode and its fog switch live in the ☰ menu: the bar is just the round)
+  $('menu-toggle').classList.toggle('test', !!S.round.test);
+  const html = `Round <b>${S.round.n}</b> · <b>${players.size}</b> core${players.size === 1 ? '' : 's'} left · ${fmtTime(S.round.t)}${sub}`;
   if (el.dataset.html !== html) {
     // (only when it changes: rebuilding it every frame would make its buttons and tooltips flicker)
     el.innerHTML = html;

@@ -77,11 +77,11 @@ function allyButton(q) {
   if (!S.me || S.spectating || q.id === S.myId) return '';
   const inOffer = (S.me.offersIn || []).includes(q.id);
   const outOffer = (S.me.offersOut || []).includes(q.id);
-  if (isAlly(q.id)) return `<button class="dip ally" data-act="break" data-id="${q.id}" data-tip="Allied: you don't fight and you can see each other's bases. Click to break the alliance">🤝</button>`;
+  if (isAlly(q.id)) return `<button class="dip ally" data-act="break" data-id="${q.id}" data-tip="Allied: you don't fight and you can see each other's bases. Click to break the alliance">🤝 Allies · break</button>`;
   if (inOffer) return `<button class="dip offer" data-act="accept" data-id="${q.id}" data-tip="${escapeHtml(q.name)} offers an alliance: click to accept">✓ Ally</button>`;
-  if (outOffer) return '<button class="dip wait" disabled data-tip="Waiting for an answer">…</button>';
+  if (outOffer) return '<button class="dip wait" disabled data-tip="Waiting for an answer">Offer sent…</button>';
   const full = (players.get(S.myId)?.allies || []).length >= C.MAX_ALLIES;
-  return `<button class="dip" data-act="propose" data-id="${q.id}"${full ? ' disabled' : ''} data-tip="${full ? `At most ${C.MAX_ALLIES} allies` : `Offer ${escapeHtml(q.name)} an alliance: you stop fighting each other and can see each other's bases`}">+🤝</button>`;
+  return `<button class="dip" data-act="propose" data-id="${q.id}"${full ? ' disabled' : ''} data-tip="${full ? `At most ${C.MAX_ALLIES} allies` : `Offer ${escapeHtml(q.name)} an alliance: you stop fighting each other and can see each other's bases`}">Offer alliance</button>`;
 }
 
 // Incoming offers, shown at the top of the Diplomacy drawer.

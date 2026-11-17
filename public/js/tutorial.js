@@ -76,8 +76,8 @@ const STEPS = [
   },
   {
     title: 'Level up your troops',
-    text: 'Open <b>Army</b> (<kbd>X</kbd>) and press <b>Level up</b> on soldiers. Level-ups cost gold and <b>iron</b> ⛏, which your workers mine from the rust-red rocks.',
-    glow: ['.dock-btn[data-dr="army"]'],
+    text: 'Open <b>Squads</b> (<kbd>C</kbd>) and press <b>▲</b> on Soldier in <b>Upgrades</b>. Upgrades cost gold and <b>iron</b>, which your workers mine from the rust-red rocks.',
+    glow: ['.dock-btn[data-dr="squads"]', '#army'],
     done: () => S.me && S.me.levels && Object.values(S.me.levels).some((l) => l > 1),
   },
   {

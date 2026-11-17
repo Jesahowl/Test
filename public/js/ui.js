@@ -28,7 +28,7 @@ function iconURL(kind, size = 44) {
   return url;
 }
 
-// ---- tooltips: any element with data-tip (trusted HTML) shows it on hover.
+// ---- tooltips: any element with data-tip (trusted HTML) shows it on hover (on touch: a long press).
 const tipEl = $('tip');
 
 let tipFor = null;
@@ -55,7 +55,35 @@ function hideTip() {
   tipEl.classList.remove('show');
 }
 
+// (phones and tablets fake a hover on every tap, which would pop tips over what you're pressing:
+// there a tip shows only on a long press, and that press doesn't also click)
+const touchTips = window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+let pressTimer = null;
+let pressShown = false;
+if (touchTips) {
+  document.addEventListener('touchstart', (e) => {
+    hideTip();
+    pressShown = false;
+    const el = e.target.closest ? e.target.closest('[data-tip]') : null;
+    if (!el) return;
+    clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => {
+      tipFor = el;
+      placeTip();
+      pressShown = true;
+      tipTimer = setTimeout(hideTip, 2500);
+    }, 500);
+  }, { passive: true });
+  const cancel = () => clearTimeout(pressTimer);
+  document.addEventListener('touchmove', cancel, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    cancel();
+    if (pressShown && e.cancelable) e.preventDefault(); // (a long press read the tip: it doesn't click)
+  });
+}
+
 document.addEventListener('mouseover', (e) => {
+  if (touchTips) return;
   const el = e.target.closest ? e.target.closest('[data-tip]') : null;
   if (el === tipFor) return;
   hideTip();

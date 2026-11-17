@@ -294,7 +294,7 @@ window.addEventListener('keydown', (e) => {
   if (k === 'l') toggleBuild('land');
   // the dock's drawers
   if (k === 'z') setDrawer('build');
-  if (k === 'x') setDrawer('army');
+  if (k === 'x') setDrawer('squads'); // (the old Army key: troop upgrades live in Squads now)
   if (k === 'c') setDrawer('squads');
   if (k === 'p') setDrawer('diplo');
   if (k === 'escape') {

@@ -1,17 +1,19 @@
 // First-game tips.
 
 import { S, $ } from './state.js';
+import { touchOnly } from './touch.js';
 
 // ---- first-game tips: one at a time, each ticks off when you do the thing.
+// (one short line each; `touch`: the same said for phones and tablets)
 const TIPS = [
-  { id: 'attack', text: 'Your core gives you <b>squad 1</b>: 5 troops; any that fall rejoin one by one (a squad wiped out takes longer to come back). <b>Right-click</b> an enemy tower, core or camp to send them. A <b>barracks</b> (<kbd>R</kbd>) makes squad 1 bigger, and more barracks raise more squads. Press <kbd>H</kbd> to bring everyone home.' },
-  { id: 'land', text: '<b>Double-click</b> outside your land to grow it all round, or press <kbd>L</kbd> and <b>drag along your border</b> to claim just the hexes you want. Land means more gold and a bigger army. Your <b>first 5 hexes are half price</b>; after that each costs a little more the more you own.' },
-  { id: 'tower', text: 'Open <b>Build</b> (<kbd>Z</kbd>) or press <kbd>B</kbd>, and click your land to build a <b>tower</b>. Towers zap enemies and hold your land: lose one and the land around it opens up.' },
-  { id: 'workers', text: 'Your <b>workers</b> (hard hats) put up what you build, repair, chop <b>wood</b> 🪵, mine <b>iron</b> ⛏ and farm. Open <b>Workers</b> (<kbd>J</kbd>) to choose <b>how many</b> do each job, or pick a preset. Buildings and walls cost wood as well as gold.' },
-  { id: 'barracks', text: 'Each barracks raises a squad: your 2nd raises squad 2, and so on (up to 4). Click a barracks and <b>upgrade</b> it for +5 troops in its squad, up to 20.' },
-  { id: 'mix', text: 'Open <b>Squads</b> (<kbd>C</kbd>): you have up to <b>4 squads</b>. Choose each one\'s troops with <b>+</b> and <b>−</b>, and its <b>stance</b>. <b>Archers</b> shoot from range, <b>medics</b> heal and <b>siege rams</b> smash walls and buildings.' },
-  { id: 'send', text: 'Each squad\'s number floats above it. <b>Click one of its troops</b> or press <kbd>1</kbd>–<kbd>4</kbd>, then right-click to send <b>just that squad</b>. Keep one home to defend.' },
-  { id: 'jungle', text: 'Right-click <b>barbarian camps</b> for gold. Beat a <b>Warlord\'s Fort</b> (🔥) to power up your troops for 60s.' },
+  { id: 'attack', text: '<b>Right-click</b> an enemy tower or camp to send your squads.', touch: '<b>Press &amp; hold</b> an enemy tower or camp to send your squads.' },
+  { id: 'barracks', text: 'Your first <b>barracks</b> (<kbd>R</kbd>) adds 5 troops to squad 1; more barracks raise more squads.', touch: 'Your first <b>barracks</b> (Build) adds 5 troops to squad 1; more barracks raise more squads.' },
+  { id: 'land', text: '<b>Double-click</b> outside your land to grow it. More land, more gold.', touch: '<b>Double-tap</b> outside your land to grow it. More land, more gold.' },
+  { id: 'tower', text: 'Press <kbd>B</kbd> and click your land to build a <b>tower</b>: it guards the land round it.', touch: 'Open <b>Build</b> and tap your land to put up a <b>tower</b>: it guards the land round it.' },
+  { id: 'workers', text: 'Pick a plan for your <b>workers</b> in <b>Workers</b> (<kbd>J</kbd>): wood, iron, building or gold.', touch: 'Pick a plan for your <b>workers</b> in <b>Workers</b>: wood, iron, building or gold.' },
+  { id: 'mix', text: 'Choose each squad\'s troops and stance in <b>Squads</b> (<kbd>C</kbd>).', touch: 'Choose each squad\'s troops and stance in <b>Squads</b>.' },
+  { id: 'send', text: 'Press <kbd>1</kbd>–<kbd>4</kbd> (or click a troop) to command just one squad.', touch: 'Tap a troop to command just its squad.' },
+  { id: 'jungle', text: 'Beat a <b>Warlord\'s Fort</b> 🔥 to power up your troops for 60s.' },
 ];
 
 S.tipsDone = new Set();
@@ -34,7 +36,7 @@ function updateTips() {
   // tick off what the player has already done
   const mine = [...S.towers.values()].filter((t) => t.owner === S.myId);
   if (mine.some((t) => t.kind === 'tower')) tipDone('tower');
-  if (mine.filter((t) => t.kind === 'barracks').length >= 2 || mine.some((t) => t.kind === 'barracks' && t.level > 1)) tipDone('barracks');
+  if (mine.some((t) => t.kind === 'barracks')) tipDone('barracks');
   // (the tutorial has its own guide)
   const tip = !S.tipsOff && !(S.round && S.round.tutorial) && TIPS.find((t) => !S.tipsDone.has(t.id));
   if (!tip || S.buildKind) {
@@ -45,8 +47,8 @@ function updateTips() {
   if (el.dataset.key === tip.id) return;
   el.dataset.key = tip.id;
   const n = TIPS.indexOf(tip) + 1;
-  el.innerHTML = `<div class="t-head">💡 Tip ${n} of ${TIPS.length}<button class="x" data-tip="Hide tips (bring them back from the ? window)">×</button></div>
-    <p>${tip.text}</p><div class="t-foot"><span>${'●'.repeat(n)}${'○'.repeat(TIPS.length - n)}</span><button class="next">Next ›</button></div>`;
+  el.innerHTML = `<span class="bulb">💡</span><p>${touchOnly && tip.touch ? tip.touch : tip.text}</p>`
+    + `<span class="t-foot">${n}/${TIPS.length}<button class="next">Next ›</button><button class="x" data-tip="Hide tips (bring them back from the ? window)">×</button></span>`;
   el.querySelector('.next').onclick = () => tipDone(tip.id);
   el.querySelector('.x').onclick = () => {
     S.tipsOff = true;

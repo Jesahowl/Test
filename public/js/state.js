@@ -46,6 +46,8 @@ S.ws = null;
 
 S.myId = null;
 
+S.ordersSent = 0; // orders sent (in this browser, up to 9): the order hint hides after a few
+try { S.ordersSent = Number(localStorage.getItem('ts-orders')) || 0; } catch { /* ignore */ }
 S.me = null; // { id, gold, squads, armySize, levels, workers, ... } (see personal() on the server)
 S.lastName = '';
 

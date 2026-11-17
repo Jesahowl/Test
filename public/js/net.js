@@ -153,13 +153,6 @@ function handle(msg) {
       break;
     case 'hello':
       if (!S.reconnecting) S.resumeToken = msg.token; // (the key to this game if the connection drops)
-      // (the test-mode fog switch in the round bar: one listener, the bar is redrawn often)
-      if (!S.fogClick) {
-        S.fogClick = true;
-        $('round').addEventListener('pointerdown', (e) => {
-          if (e.target.closest('.test-fog')) sendMsg({ t: 'fog', on: !!(S.me && S.me.noFog) });
-        });
-      }
       // test mode is on offer on this server
       S.dev = !!msg.dev;
       $('test-game').classList.toggle('hidden', !S.dev);
