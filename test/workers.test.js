@@ -13,7 +13,7 @@ function setup(seed) {
   for (const p of [a, b]) {
     p.gold = 1e5;
     p.spawnTime = -1000;
-    p.nextWaveAt = Infinity;
+    p.holdRespawns = true;
     for (const q of p.squads) for (const k of Object.keys(q.mix)) q.mix[k] = 0; // no troops in the way
   }
   g.update(0.05);
@@ -22,9 +22,8 @@ function setup(seed) {
 
 const workers = (g, p) => [...g.units.values()].filter((u) => u.owner === p.id && u.worker);
 const respawn = (g, p) => {
-  p.nextWaveAt = g.time;
-  g.update(0.05);
-  p.nextWaveAt = Infinity;
+  g.respawnAll(p);
+  p.holdRespawns = true;
 };
 const only = (p, job) => {
   for (const j of C.WORKER_JOBS) p.jobs[j] = j === job ? 2 : 0;
@@ -198,9 +197,8 @@ test('sudden death: workers can\'t patch a crumbling core back up', () => {
   a.gold = 1e5;
   a.spawnTime = -1000;
   only(a, 'repair');
-  a.nextWaveAt = g.time;
-  g.update(0.05);
-  a.nextWaveAt = Infinity;
+  g.respawnAll(a);
+  a.holdRespawns = true;
   g.time = g.rules.suddenDeath + 1;
   a.core.hp = a.core.maxHp * 0.6;
   const hp = a.core.hp;

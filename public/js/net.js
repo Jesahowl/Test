@@ -251,6 +251,7 @@ function interpPos(o, rt) {
 
 function applyState(msg) {
   S.me = msg.me;
+  S.meAt = performance.now(); // (squad respawn timers count down from here between snapshots)
   newOffers(toast);
   const now = performance.now();
   stampSnapshot(now, msg.tk);

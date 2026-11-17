@@ -18,6 +18,55 @@ import { touchOnly } from './touch.js';
 
 S.hudTimer = 0;
 
+// The dock's squads at a glance: a little ring per squad. Green: full strength. Blue: reinforcing
+// (the ring is how full it is). Red: wiped out (the seconds left, the ring filling as it comes back).
+// Gold: newly raised, mustering. Dim: no barracks for it yet.
+function drawSquadTimer(squads) {
+  const el = $('squad-timer');
+  const R = 10.5;
+  const LEN = 2 * Math.PI * R;
+  const ring = (frac, colour) => `<svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="${R}" fill="none" stroke="#273041" stroke-width="2.6"/>`
+    + `<circle cx="13" cy="13" r="${R}" fill="none" stroke="${colour}" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="${(LEN * Math.max(0, Math.min(1, frac))).toFixed(1)} ${LEN.toFixed(1)}"/></svg>`;
+  const lines = [];
+  let html = '';
+  for (const q of squads) {
+    const alive = q.units.length;
+    let cls;
+    let inner = q.num;
+    let frac;
+    let colour;
+    if (!q.cap || !q.size) {
+      cls = 'none';
+      frac = 0;
+      colour = '#273041';
+      lines.push(`Squad ${q.num}: no barracks yet`);
+    } else if (q.respawnIn > 0) {
+      const muster = q.respawnFor === C.SQUAD_RAISE_DELAY;
+      cls = muster ? 'muster' : 'wiped';
+      inner = Math.ceil(q.respawnIn);
+      frac = 1 - q.respawnIn / (q.respawnFor || 1);
+      colour = muster ? '#ffd54f' : '#f85149';
+      lines.push(muster ? `Squad ${q.num}: mustering, out in ${inner}s` : `Squad ${q.num}: <b style="color:#ffa198">wiped out</b>, back in ${inner}s`);
+    } else if (alive < q.size) {
+      cls = 'trickle';
+      frac = alive / q.size;
+      colour = '#58a6ff';
+      lines.push(`Squad ${q.num}: ${alive}/${q.size}, reinforcing (next in ${Math.ceil(q.trickleIn) || C.SQUAD_TRICKLE}s)`);
+    } else {
+      cls = 'full';
+      frac = 1;
+      colour = '#3fb950';
+      lines.push(`Squad ${q.num}: full strength (${q.size})`);
+    }
+    html += `<span class="sr ${cls}">${ring(frac, colour)}<b>${inner}</b></span>`;
+  }
+  if (el.dataset.html !== html) {
+    el.dataset.html = html;
+    el.innerHTML = html;
+  }
+  el.dataset.tip = `<span class="t">Squads <kbd>C</kbd></span>${lines.join('<br>')}<br><span class="m">Fallen troops rejoin one every ${C.SQUAD_TRICKLE}s. A squad wiped out comes back all at once after ${C.SQUAD_WIPE_BASE}s + ${C.SQUAD_WIPE_PER_TROOP}s per troop.</span>`;
+}
+
 function updateHud() {
   if (S.spectating) {
     updateBoards();
@@ -50,24 +99,20 @@ function updateHud() {
   updateRound();
   updateStats(p, gold, rank, sorted.length);
 
-  // respawns: countdown ring, and who comes back when it runs out
+  // respawns: the dock's squad rings, and who's on the way back (in the Army drawer)
   const squads = allSquads();
   const used = squads.reduce((n, q) => n + UNIT_KEYS.reduce((m, k) => m + q.mix[k] * C.slotsOf(k), 0), 0); // army slots taken
-  $('wave-size').textContent = `${used} / ${armySize} army slots used · fallen troops respawn every ${C.WAVE_INTERVAL}s`;
-  const frac = Math.max(0, Math.min(1, S.me.nextWave / C.WAVE_INTERVAL));
-  $('wave-timer').innerHTML = `<svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="11" fill="none" stroke="#273041" stroke-width="2.4"/>
-    <circle cx="13" cy="13" r="11" fill="none" stroke="#ffd54f" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="${(69.1 * (1 - frac)).toFixed(1)} 69.1"/></svg><span>${S.me.nextWave}s</span>`;
+  $('wave-size').textContent = `${used} / ${armySize} army slots used · the fallen rejoin one every ${C.SQUAD_TRICKLE}s; a wiped-out squad takes ${C.SQUAD_WIPE_BASE}s + ${C.SQUAD_WIPE_PER_TROOP}s a troop`;
+  drawSquadTimer(squads);
   const down = {};
   for (const q of squads) for (const k of UNIT_KEYS) down[k] = (down[k] || 0) + Math.max(0, q.mix[k] - (q.kinds[k] || 0));
   const lineup = UNIT_KEYS.filter((k) => down[k]);
-  const nDown = lineup.reduce((n, k) => n + down[k], 0);
-  $('wave-timer').dataset.tip = `<span class="t">Respawn in ${S.me.nextWave}s</span>${nDown ? `${nDown} fallen troop${nDown === 1 ? '' : 's'} will respawn and rejoin their squads.` : 'Every squad is at full strength.'} Every ${C.WAVE_INTERVAL} seconds, every fallen troop respawns at your core and barracks.`;
-  const slotKey = lineup.map((k) => `${k}${down[k]}`).join(',') + `|${S.me.nextWave}`;
+  const slotKey = lineup.map((k) => `${k}${down[k]}`).join(',');
   const box = $('slots');
   if (box.dataset.key !== slotKey) {
     box.dataset.key = slotKey;
     box.innerHTML = lineup.length
-      ? `<span class="nw-label">Respawning in ${S.me.nextWave}s</span>` + lineup.map((k) => `<span class="nw" style="--c:${C.UNITS[k].color}"><img src="${iconURL(k, 36)}" alt="">×${down[k]}</span>`).join('')
+      ? '<span class="nw-label">On the way back</span>' + lineup.map((k) => `<span class="nw" style="--c:${C.UNITS[k].color}"><img src="${iconURL(k, 36)}" alt="">×${down[k]}</span>`).join('')
       : '<span class="nw-label">Every squad at full strength</span>';
   }
   $('alive').innerHTML = `Troops alive <b>${myTroops}</b> / ${armySize}`;

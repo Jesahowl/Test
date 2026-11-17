@@ -1,4 +1,5 @@
-// The dock at the bottom of the screen: Build, Army, the next-wave timer, Squads and Diplomacy.
+// The dock at the bottom of the screen: Build, Army, the squads at a glance (their respawns), Squads,
+// Workers and Diplomacy.
 // Each button opens its drawer above the dock (one at a time; the same button or Esc closes it),
 // so the map stays clear until you need a panel.
 
@@ -18,6 +19,7 @@ function setDrawer(name) {
 
 function initDock() {
   for (const b of document.querySelectorAll('.dock-btn')) b.onclick = () => setDrawer(b.dataset.dr);
+  $('squad-timer').onclick = () => setDrawer('squads');
   setDrawer(null);
 }
 

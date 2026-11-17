@@ -46,7 +46,7 @@ S.ws = null;
 
 S.myId = null;
 
-S.me = null; // { id, gold, nextWave, army, levels, order }
+S.me = null; // { id, gold, squads, armySize, levels, workers, ... } (see personal() on the server)
 S.lastName = '';
 
 S.round = null; // { n, phase, t, join, sd }

@@ -212,7 +212,7 @@ test('troops and workers find their way round walls to a gate, however far, and 
     let bd = Infinity;
     for (const h of g.hex.hexes) if (h.full && !g.hexOwner[h.i]) { const d = Math.hypot(h.cx - (west.x - 4), h.cy - west.y); if (d < bd) { bd = d; best = h.i; } }
     g.forest.set(best, 200);
-    a.nextWaveAt = g.time; g.update(0.05); a.nextWaveAt = Infinity;
+    g.respawnAll(a); a.holdRespawns = true;
     const w = g.workersOf(a)[0];
     for (const j of C.WORKER_JOBS) a.jobs[j] = 0;
     assert.strictEqual(g.sendWorker(a.id, w.id, { k: 'h', id: best }), null);

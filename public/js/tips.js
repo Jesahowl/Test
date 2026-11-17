@@ -4,7 +4,7 @@ import { S, $ } from './state.js';
 
 // ---- first-game tips: one at a time, each ticks off when you do the thing.
 const TIPS = [
-  { id: 'attack', text: 'Your core gives you <b>squad 1</b>: 5 troops, back every 20 seconds if they fall. <b>Right-click</b> an enemy tower, core or camp to send them. A <b>barracks</b> (<kbd>R</kbd>) makes squad 1 bigger, and more barracks raise more squads. Press <kbd>H</kbd> to bring everyone home.' },
+  { id: 'attack', text: 'Your core gives you <b>squad 1</b>: 5 troops; any that fall rejoin one by one (a squad wiped out takes longer to come back). <b>Right-click</b> an enemy tower, core or camp to send them. A <b>barracks</b> (<kbd>R</kbd>) makes squad 1 bigger, and more barracks raise more squads. Press <kbd>H</kbd> to bring everyone home.' },
   { id: 'land', text: '<b>Double-click</b> outside your land to grow it all round, or press <kbd>L</kbd> and <b>drag along your border</b> to claim just the hexes you want. Land means more gold and a bigger army. Your <b>first 5 hexes are half price</b>; after that each costs a little more the more you own.' },
   { id: 'tower', text: 'Open <b>Build</b> (<kbd>Z</kbd>) or press <kbd>B</kbd>, and click your land to build a <b>tower</b>. Towers zap enemies and hold your land: lose one and the land around it opens up.' },
   { id: 'workers', text: 'Your <b>workers</b> (hard hats) put up what you build, repair, chop <b>wood</b> 🪵, mine <b>iron</b> ⛏ and farm. Open <b>Workers</b> (<kbd>J</kbd>) to choose <b>how many</b> do each job, or pick a preset. Buildings and walls cost wood as well as gold.' },

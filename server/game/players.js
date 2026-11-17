@@ -53,7 +53,7 @@ module.exports = {
       vis: new Uint8Array(this.w * this.h), // fog of war: what this player sees now
       explored: new Uint8Array(this.w * this.h), // ...and everywhere they have seen
       levels,
-      nextWaveAt: this.time + C.FIRST_WAVE_DELAY,
+      nextWorkersAt: this.time + C.SQUAD_RAISE_DELAY, // (fallen workers come back on their own timer: WORKER_RESPAWN)
       bot: isBot ? { next: this.time + 1, nextOrder: this.time + 10 } : null,
     };
     this.makeSquads(p); // squads 1-4 (see army.js)

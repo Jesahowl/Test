@@ -74,7 +74,7 @@ test('raiders who destroy a caravan take half its cargo', () => {
     p.gold = 1e6;
     p.wood = 1e6;
     p.spawnTime = -1000;
-    p.nextWaveAt = Infinity;
+    p.holdRespawns = true;
   }
   g.update(0.05);
   ally(g, a, b);
@@ -97,7 +97,7 @@ test('caravans steer round hostile towers', () => {
   for (const p of [a, b, c]) {
     p.gold = 1e6;
     p.spawnTime = -1000;
-    p.nextWaveAt = Infinity;
+    p.holdRespawns = true;
   }
   g.update(0.05);
   ally(g, a, b);

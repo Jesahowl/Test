@@ -36,11 +36,10 @@ function setMix(g, p, i, mix) {
   Object.assign(p.squads[i].mix, mix);
 }
 
-// Respawn time: every fallen troop comes back now.
+// Every fallen troop comes back now.
 function respawn(g, p) {
-  p.nextWaveAt = g.time;
-  g.update(0.05);
-  p.nextWaveAt = Infinity;
+  g.respawnAll(p);
+  p.holdRespawns = true;
 }
 
 test('every player has 4 squads; the core raises squad 1 (the rest wait for barracks); fallen troops respawn', () => {
@@ -62,15 +61,54 @@ test('every player has 4 squads; the core raises squad 1 (the rest wait for barr
   assert.deepStrictEqual(s2.map((u) => u.kind).sort(), ['medic', 'siege']);
   respawn(g, a);
   assert.strictEqual(mine(g, a).length, 5, 'a squad at full strength gets no more');
-  // two fall; at the next respawn exactly those two come back
+  // two fall: those two come back
   g.units.delete(s1[0].id);
   g.units.delete(s2[0].id);
-  a.nextWaveAt = g.time + 1;
-  run(g, 0.5);
-  assert.strictEqual(mine(g, a).length, 3, 'not before the timer');
-  run(g, 1);
-  assert.strictEqual(mine(g, a).length, 5, 'back when it runs out');
-  assert.ok(Math.abs(a.nextWaveAt - (g.time + C.WAVE_INTERVAL)) < 1.2, 'and the timer starts over');
+  a.holdRespawns = false;
+  run(g, C.SQUAD_TRICKLE * 2 + 1);
+  assert.strictEqual(mine(g, a).length, 5, 'the fallen come back');
+});
+
+test('squad respawns: stragglers trickle back one at a time; a wiped-out squad waits a cooldown that grows with its size', () => {
+  const { g, a } = duel(1);
+  setMix(g, a, 0, { soldier: 5 });
+  g.respawnAll(a);
+  a.holdRespawns = false;
+  const q = a.squads[0];
+  const inSquad = () => mine(g, a).filter((u) => u.sq === q.id);
+  assert.strictEqual(inSquad().length, 5);
+  // three fall, two still standing: one comes back every SQUAD_TRICKLE seconds
+  for (const u of inSquad().slice(0, 3)) g.units.delete(u.id);
+  run(g, C.SQUAD_TRICKLE - 0.3);
+  assert.strictEqual(inSquad().length, 2, 'nobody back before the first straggler is due');
+  run(g, 0.6);
+  assert.strictEqual(inSquad().length, 3, 'the first straggler');
+  assert.ok(g.personal(a).squads[0][9] > 0, 'the owner sees when the next one is due');
+  run(g, C.SQUAD_TRICKLE);
+  assert.strictEqual(inSquad().length, 4, 'the second');
+  run(g, C.SQUAD_TRICKLE);
+  assert.strictEqual(inSquad().length, 5, 'and the third: full strength');
+  run(g, C.SQUAD_TRICKLE * 2);
+  assert.strictEqual(inSquad().length, 5, 'never more than the mix');
+  // wiped out: nothing until the cooldown (15s + 2s a troop) runs out, then the whole squad at once
+  for (const u of inSquad()) g.units.delete(u.id);
+  run(g, 0.2);
+  const cd = C.wipeCooldown(5);
+  const [, , , , , , , left, full] = g.personal(a).squads[0];
+  assert.strictEqual(full, cd, 'the countdown is the wipe cooldown');
+  assert.ok(left > cd - 1 && left <= cd, `the owner sees the countdown (${left}s of ${full}s)`);
+  run(g, cd - 1);
+  assert.strictEqual(inSquad().length, 0, 'still down just before the cooldown ends');
+  run(g, 1.2);
+  assert.strictEqual(inSquad().length, 5, 'the whole squad turns out together');
+  assert.ok(C.wipeCooldown(20) > C.wipeCooldown(5), 'a bigger squad takes longer');
+  // a squad that has never had troops (newly raised) turns out after a short muster, not a wipe cooldown
+  const q2 = a.squads[1];
+  q2.mix.soldier = 0;
+  Object.assign(q2.mix, { soldier: 2 });
+  g.squadCap = ((cap) => (p, sq) => (sq === q2 ? 5 : cap.call(g, p, sq)))(g.squadCap);
+  run(g, C.SQUAD_RAISE_DELAY + 0.5);
+  assert.strictEqual(mine(g, a).filter((u) => u.sq === q2.id).length, 2, 'a new squad musters quickly');
 });
 
 test('the first barracks adds to squad 1, the others raise squads 2-4: 5 troops a level, up to 20; troops respawn there too', () => {

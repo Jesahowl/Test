@@ -24,7 +24,7 @@ function duel(seed = 1, opts = {}) {
     p.wood = 1e6;
     p.iron = 1e6;
     p.spawnTime = -1000;
-    p.nextWaveAt = Infinity;
+    p.holdRespawns = true;
   }
   g.update(0.05);
   return { g, a, b };

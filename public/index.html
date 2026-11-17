@@ -71,7 +71,7 @@
       <div id="dock">
         <button class="dock-btn" data-dr="build" data-tip="Build towers, barracks, trade posts, walls and land <kbd>Z</kbd>">Build<kbd>Z</kbd></button>
         <button class="dock-btn" data-dr="army" data-tip="Level up your troop types and see who's respawning <kbd>X</kbd>">Army<kbd>X</kbd></button>
-        <div id="wave-timer" data-tip="Every 20 seconds, fallen troops respawn and rejoin their squads"></div>
+        <button id="squad-timer" data-dr="squads" data-tip="Your squads at a glance"></button>
         <button class="dock-btn" data-dr="squads" data-tip="Your four squads: their troops, stance and orders <kbd>C</kbd>">Squads<kbd>C</kbd><span class="badge hot" id="squads-badge" data-tip="Free troop slots: add troops to a squad"></span></button>
         <button class="dock-btn" data-dr="workers" data-tip="Workers: what they build, repair, chop and farm <kbd>J</kbd>">Workers<kbd>J</kbd><span class="badge" id="workers-badge"></span></button>
         <button class="dock-btn" data-dr="diplo" data-tip="Alliances: offer, accept or break <kbd>P</kbd>">Diplomacy<kbd>P</kbd><span class="badge hot" id="diplo-badge"></span></button>
@@ -107,7 +107,7 @@
       <button class="close" data-tip="Close <kbd>Esc</kbd>">×</button>
       <h2>How to play</h2>
       <div class="how-grid">
-        <div><b>🏰 Army</b>Your core starts you off with <b>squad 1</b> (5 troops). Your first <b>barracks</b> (<kbd>R</kbd>) adds 5 more to it; each barracks after that raises another of your <b>4 squads</b>. Upgrade a barracks for +5, up to 20 a squad. Choose each squad's troops in <b>Squads</b> (<kbd>C</kbd>). Troops that fall <b>respawn every 20s</b>.</div>
+        <div><b>🏰 Army</b>Your core starts you off with <b>squad 1</b> (5 troops). Your first <b>barracks</b> (<kbd>R</kbd>) adds 5 more to it; each barracks after that raises another of your <b>4 squads</b>. Upgrade a barracks for +5, up to 20 a squad. Choose each squad's troops in <b>Squads</b> (<kbd>C</kbd>). Fallen troops <b>rejoin one at a time</b> (one every 3s); a squad <b>wiped out</b> comes back all at once after 15s + 2s a troop. The rings by the dock show each squad.</div>
         <div><b>🎯 Squads</b>Click one of a squad's troops (or press <kbd>1</kbd>–<kbd>4</kbd>), then <b>right-click</b> a target. Set each squad's <b>stance</b>: aggressive, defensive or hold.</div>
         <div><b>🗺 Land</b>The map is made of <b>hexes</b>. Claim them with gold (<kbd>L</kbd>, then click or drag along your border). More land means more gold and a bigger army. <b>Towers</b> defend it.</div>
         <div><b>🏆 Win</b>Take enemy towers, break their core, and be the <b>last core standing</b>. Beating a barbarian Warlord powers up your troops.</div>
@@ -179,7 +179,7 @@
       <button id="test-game" class="secondary hidden" data-tip="Start a private game in test mode straight away: infinite gold and wood, two bots">🛠 Test game <span class="muted">(infinite gold &amp; wood)</span></button>
       <div id="conn"></div>
       <div class="how-grid">
-        <div><b>🏰 Squads</b>Each <b>barracks</b> raises a squad (up to 4). Fallen troops <b>respawn every 20s</b>.</div>
+        <div><b>🏰 Squads</b>Each <b>barracks</b> raises a squad (up to 4). Fallen troops <b>rejoin one by one</b>; a squad wiped out comes back after a cooldown.</div>
         <div><b>🎯 Orders</b>Click a squad, then <b>right-click</b> a target. Set its <b>stance</b>.</div>
         <div><b>🗺 Land</b>Claim <b>hexes</b> of land with gold. Land means more gold. <b>Towers</b> defend it.</div>
         <div><b>🏆 Win</b>Be the <b>last core standing</b>. Rounds last about 15–22 minutes.</div>

@@ -10,7 +10,7 @@ function roundGame(seed = 3) {
   const a = g.addPlayer('A');
   const b = g.addPlayer('B');
   const c = g.addPlayer('C');
-  for (const p of [a, b, c]) p.nextWaveAt = Infinity;
+  for (const p of [a, b, c]) p.holdRespawns = true;
   g.update(0.05);
   return { g, a, b, c };
 }
@@ -130,7 +130,7 @@ test('in sudden death, troops sent at a core hit it when they reach it, even wit
   const g = new Game({ botTarget: 0, rand: seeded(31), rounds: true });
   const a = g.addPlayer('A');
   const b = g.addPlayer('B');
-  for (const p of [a, b]) { p.spawnTime = -1000; p.nextWaveAt = Infinity; }
+  for (const p of [a, b]) { p.spawnTime = -1000; p.holdRespawns = true; }
   g.update(0.05);
   g.time = C.ROUND_SUDDEN_DEATH + 60;
   b.core.hp = 1;

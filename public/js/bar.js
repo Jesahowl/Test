@@ -193,7 +193,7 @@ function updateSquadsUi() {
   if (!S.allSquads && !S.selSquads.size) S.allSquads = true;
   const free = squads.reduce((n, q) => n + Math.max(0, q.cap - q.slots), 0);
   const box = $('squads');
-  const key = squads.map((q) => `${q.id}:${q.stance}:${q.formation}:${q.cap}:${UNIT_KEYS.map((k) => `${q.mix[k]}/${q.kinds[k] || 0}`).join(',')}:${q.status}:${squadPicked(q.id) ? 1 : 0}:${Math.round(10 * hpFrac(q))}`).join('|') + `|${S.allSquads}`;
+  const key = squads.map((q) => `${q.id}:${q.stance}:${q.formation}:${q.cap}:${UNIT_KEYS.map((k) => `${q.mix[k]}/${q.kinds[k] || 0}`).join(',')}:${q.status}:${squadPicked(q.id) ? 1 : 0}:${Math.round(10 * hpFrac(q))}:${respawnState(q)}`).join('|') + `|${S.allSquads}`;
   if (box.dataset.key !== key) {
     box.dataset.key = key;
     box.innerHTML = squads.map((q) => {
@@ -208,7 +208,7 @@ function updateSquadsUi() {
         const down = Math.max(0, n - (q.kinds[k] || 0));
         return `<div class="mx${n ? '' : ' none'}" data-tip="<span class='t'>${C.UNITS[k].name}s in squad ${q.num}</span>${n} in the squad${down ? `, ${down} respawning` : ''}">`
           + `<img src="${iconURL(k)}" alt=""><b>${n}</b>${down ? `<i class="down">−${down}</i>` : ''}`
-          + `<span class="pm"><button data-act="add" data-kind="${k}"${canAdd(k) ? '' : ' disabled'} data-tip="${!q.cap ? `Build a barracks to raise squad ${q.num}` : room >= C.slotsOf(k) ? `One more ${C.UNITS[k].name.toLowerCase()} (it arrives at the next respawn)` : `Swap ${C.slotsOf(k) > 1 ? 'soldiers' : 'a soldier'} for a ${C.UNITS[k].name.toLowerCase()} (the squad is full)`}">+</button><button data-act="rem" data-kind="${k}"${n ? '' : ' disabled'} data-tip="One fewer ${C.UNITS[k].name.toLowerCase()} (frees a slot for another squad)">−</button></span></div>`;
+          + `<span class="pm"><button data-act="add" data-kind="${k}"${canAdd(k) ? '' : ' disabled'} data-tip="${!q.cap ? `Build a barracks to raise squad ${q.num}` : room >= C.slotsOf(k) ? `One more ${C.UNITS[k].name.toLowerCase()} (it joins as a straggler)` : `Swap ${C.slotsOf(k) > 1 ? 'soldiers' : 'a soldier'} for a ${C.UNITS[k].name.toLowerCase()} (the squad is full)`}">+</button><button data-act="rem" data-kind="${k}"${n ? '' : ' disabled'} data-tip="One fewer ${C.UNITS[k].name.toLowerCase()} (frees a slot for another squad)">−</button></span></div>`;
       }).join('');
       const stances = STANCES.map(([k, ic, name, what]) => `<button data-act="stance" data-stance="${k}" class="${q.stance === k ? 'on' : ''}" data-tip="<span class='t'>${name} <kbd>G</kbd></span>${what}">${ic}${q.stance === k ? ` ${name}` : ''}</button>`).join('');
       const forms = FORMATIONS.map(([k, ic, name, what]) => `<button data-act="formation" data-formation="${k}" class="${q.formation === k ? 'on' : ''}" data-tip="<span class='t'>${name} formation <kbd>F</kbd></span>${what}">${ic} ${name}</button>`).join('');
@@ -220,11 +220,12 @@ function updateSquadsUi() {
       const cap = q.cap
         ? `<div class="sq-cap" data-tip="${capTip}">${src} · <b>${q.slots}/${q.cap}</b> slots${room > 0 ? ` · <span class="free">${room} free</span>` : ''}</div>`
         : `<div class="sq-cap none">No barracks: build one (<kbd>R</kbd>) to raise squad ${q.num}</div>`;
-      return `<div class="sq-card ${kind}${on ? ' on' : ''}${squadPicked(q.id) ? ' picked' : ''}${q.cap ? '' : ' empty'}" data-id="${q.id}">
+      return `<div class="sq-card ${kind}${on ? ' on' : ''}${squadPicked(q.id) ? ' picked' : ''}${q.cap ? '' : ' empty'}${respawnState(q) === 'wiped' ? ' down' : ''}" data-id="${q.id}">
         <div class="sq-top" data-act="pick" data-tip="<span class='t'>Squad ${q.num} <kbd>${q.num}</kbd></span>${escapeHtml(long)}.<br><span class='m'>Click to pick it, then right-click a target. <kbd>Shift</kbd>-click to pick several.</span>">
           <span class="num">${q.num}</span><span class="st">${STATUS_ICON[kind]} ${escapeHtml(short)}</span><span class="cnt">${alive}/${q.size}</span>
           <button class="find" data-act="find" data-tip="Find squad ${q.num} on the map"${alive ? '' : ' disabled'}>◎</button></div>
         <div class="sq-hp"><i style="width:${Math.round(100 * hpFrac(q))}%"></i></div>
+        ${respawnRow(q)}
         ${cap}
         <div class="sq-mix">${mixHtml}</div>
         <div class="sq-stance">${stances}</div>
@@ -232,9 +233,44 @@ function updateSquadsUi() {
       </div>`;
     }).join('');
   }
+  tickRespawnRows(squads);
   $('squad-all').classList.toggle('on', S.allSquads);
   const hint = free > 0 ? `${free} free troop slot${free === 1 ? '' : 's'}: add troops to a squad` : squads.some((q) => !q.cap) ? 'each barracks raises a squad: build more for more squads' : 'upgrade barracks for bigger squads';
   if ($('squad-hint').textContent !== hint) $('squad-hint').textContent = hint;
+}
+
+// ---- squad respawns on the cards: a wiped-out (or newly raised) squad's countdown, or stragglers
+// rejoining one at a time. The row is built with the card; its numbers and bar tick in place.
+const mustering = (q) => q.respawnFor === C.SQUAD_RAISE_DELAY;
+function respawnState(q) {
+  if (q.respawnIn > 0) return mustering(q) ? 'muster' : 'wiped';
+  if (q.trickleIn > 0) return 'trickle';
+  return '';
+}
+const downOf = (q) => UNIT_KEYS.reduce((n, k) => n + Math.max(0, q.mix[k] - (q.kinds[k] || 0)), 0);
+function respawnRow(q) {
+  const st = respawnState(q);
+  if (!st) return '';
+  const tip = st === 'trickle'
+    ? `<span class='t'>Reinforcing</span>While squad ${q.num} still has troops standing, its fallen rejoin one at a time, one every ${C.SQUAD_TRICKLE}s, from its ${q.num === 1 ? 'barracks (or core)' : 'barracks'}.`
+    : st === 'muster'
+      ? `<span class='t'>Mustering</span>Squad ${q.num} has just been raised: its troops turn out in a moment.`
+      : `<span class='t'>Wiped out</span>Squad ${q.num} was wiped out. A wiped-out squad comes back all at once after ${C.SQUAD_WIPE_BASE}s + ${C.SQUAD_WIPE_PER_TROOP}s per troop (${C.wipeCooldown(q.size)}s for its ${q.size}). While any of its troops still stand, the fallen rejoin one at a time instead.`;
+  const label = st === 'trickle' ? `⟳ <b data-n>${downOf(q)}</b> down · next in <b data-t></b>` : st === 'muster' ? '⚑ Mustering · <b data-t></b>' : '☠ Wiped out · back in <b data-t></b>';
+  return `<div class="sq-rsp ${st}" data-rsp="${q.id}" data-tip="${tip}"><span>${label}</span><i><b></b></i></div>`;
+}
+function tickRespawnRows(squads) {
+  for (const el of $('squads').querySelectorAll('[data-rsp]')) {
+    const q = squads.find((s) => s.id === Number(el.dataset.rsp));
+    if (!q) continue;
+    const trickle = el.classList.contains('trickle');
+    const left = trickle ? q.trickleIn : q.respawnIn;
+    const full = trickle ? C.SQUAD_TRICKLE : q.respawnFor || 1;
+    const t = el.querySelector('[data-t]');
+    const txt = `${Math.max(0, Math.ceil(left))}s`;
+    if (t && t.textContent !== txt) t.textContent = txt;
+    el.querySelector('i b').style.width = `${Math.round(100 * Math.max(0, Math.min(1, 1 - left / full)))}%`;
+  }
 }
 
 // How healthy a squad is: its troops' HP over the HP its whole mix would have.

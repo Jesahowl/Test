@@ -1,6 +1,7 @@
 // Towers, barracks and ruins: sprites, health bars and build effects.
 
 import { drawTradeSprite } from './trade.js';
+import { allSquads } from './squads.js';
 import { onScreen } from './render.js';
 import { S, C, baseLift, colorOf, ctx, hexSpot, mouse, scale, toScreen, towerInHex } from './state.js';
 
@@ -501,21 +502,24 @@ function drawBarracksSprite(t, x, y, s, now) {
   ctx.restore();
   if (t.hp / t.maxHp < 0.3) drawSmoke(x, y, r, now, t.id);
   if (s >= 12 && t.squad) {
-    // badge: the squad this barracks raises, and how many troops it gives it
+    // badge: the squad this barracks raises, and how many troops it gives it (my own: while that
+    // squad is wiped out, how long until it turns out here)
     const bx = x - r * 1.0;
     const by = y - r * 0.82;
     const fs = Math.max(11, Math.round(s * 0.36));
     ctx.font = `800 ${fs}px system-ui, sans-serif`;
-    const txt = `${t.squad} · ${C.squadCapFor(t.squad, t.level)}`;
+    const q = t.owner === S.myId ? allSquads().find((sq) => sq.num === t.squad) : null;
+    const back = q && q.respawnIn > 0 && q.respawnFor !== C.SQUAD_RAISE_DELAY ? Math.ceil(q.respawnIn) : 0;
+    const txt = back ? `${t.squad} · ☠ ${back}s` : `${t.squad} · ${C.squadCapFor(t.squad, t.level)}`;
     const w = ctx.measureText(txt).width + fs * 0.7;
     ctx.fillStyle = 'rgba(13, 17, 23, 0.85)';
-    ctx.strokeStyle = 'rgba(255, 213, 79, 0.8)';
+    ctx.strokeStyle = back ? 'rgba(248, 81, 73, 0.9)' : 'rgba(255, 213, 79, 0.8)';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.roundRect(bx - w / 2, by - fs * 0.7, w, fs * 1.4, fs * 0.7);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = '#ffd54f';
+    ctx.fillStyle = back ? '#ffa198' : '#ffd54f';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(txt, bx, by + 0.5);

@@ -15,16 +15,21 @@ function troopStatus(u) {
 
 // Every squad, troops or not:
 // [{ id, num, stance, formation ('spread' | 'rect'), mix: {kind: n}, size (troops), slots (army slots), cap (slots its barracks
-// gives it), units, kinds, status, cx, cy, top }] by number.
+// gives it), units, kinds, status, cx, cy, top, respawnIn (seconds until a wiped-out or new squad turns out, 0: none),
+// respawnFor (that countdown's full length), trickleIn (seconds until the next straggler rejoins, 0: none) }] by number.
 // cx/cy/top are only set when the squad has troops. Cached per frame.
 function allSquads() {
   const now = performance.now();
   if (cache && now - cacheAt < 16) return cache;
   const by = new Map();
-  for (const [id, num, stance, mix, order, cap, formation] of (S.me && S.me.squads) || []) {
+  // (respawn timers count down between snapshots from when the last one came in)
+  const since = S.meAt ? (now - S.meAt) / 1000 : 0;
+  const tick = (t) => (t > 0 ? Math.max(0, t - since) : 0);
+  for (const [id, num, stance, mix, order, cap, formation, respawn, respawnFor, trickle] of (S.me && S.me.squads) || []) {
     const m = Object.fromEntries(UNIT_KEYS.map((k, i) => [k, mix[i] || 0]));
     const slots = UNIT_KEYS.reduce((n, k) => n + m[k] * C.slotsOf(k), 0);
-    by.set(id, { id, num, stance, formation: formation || 'rect', mix: m, size: mix.reduce((a, b) => a + b, 0), slots, cap: cap || 0, order, units: [], kinds: {}, votes: new Map() });
+    by.set(id, { id, num, stance, formation: formation || 'rect', mix: m, size: mix.reduce((a, b) => a + b, 0), slots, cap: cap || 0, order, units: [], kinds: {}, votes: new Map(),
+      respawnIn: tick(respawn), respawnFor: respawnFor || 0, trickleIn: tick(trickle) });
   }
   for (const u of S.units.values()) {
     const q = u.owner === S.myId && by.get(u.sq);

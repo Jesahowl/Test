@@ -4,8 +4,8 @@
 //
 // Positions are in tiles. A structure on tile (x, y) has its centre at (x + 0.5, y + 0.5).
 // - Cores and towers sit on the grid. Both claim land and shoot enemy troops.
-// - Every WAVE_INTERVAL seconds each core sends out a free wave of troops built from the player's
-//   army plan. Troops follow orders: attack an enemy tower/core/jungle camp (marching across the
+// - Each player's squads (raised by the core and barracks) get their fallen troops back on their
+//   own: stragglers one at a time, a squad wiped out after a cooldown. Troops follow orders: attack an enemy tower/core/jungle camp (marching across the
 //   map via flow fields, fighting what they meet), or defend one of their own structures
 //   (patrolling around it on their own land).
 // - Jungle camps are neutral monsters that sit still, fight back when attacked, and pay out.
@@ -154,7 +154,7 @@ class Game {
     }
 
     this.updateDiplomacy();
-    this.updateWaves();
+    this.updateRespawns();
     this.updateTrade();
     this.updateWorkers(dt);
     this.buildUnitGrid();
@@ -241,9 +241,13 @@ class Game {
 
   // Personal state for one player (sent only to them).
   personal(p) {
-    // My squads: [id, number, stance, mix (per UNIT_KEYS), order ("attack t:12", "defend c:5"), troop slots, formation]. Their troops carry the id.
+    // My squads: [id, number, stance, mix (per UNIT_KEYS), order ("attack t:12", "defend c:5"), troop slots, formation,
+    // respawn (seconds until a wiped-out or new squad turns out, 0: none), its full countdown, next straggler (seconds, 0: none)].
+    // Their troops carry the id.
     const okey = (o) => (o.type === 'defend' ? `defend ${o.anchor ? `t:${o.anchor}` : `c:${p.id}`}` : `attack ${o.target.k}:${o.target.id}`);
-    const squads = p.squads.map((q) => [q.id, q.num, q.stance, UNIT_KEYS.map((k) => q.mix[k] || 0), okey(q.order), this.squadCap(p, q), q.formation || 'spread']);
+    const left = (t) => (t === undefined ? 0 : Math.max(0.1, Math.round((t - this.time) * 10) / 10));
+    const squads = p.squads.map((q) => [q.id, q.num, q.stance, UNIT_KEYS.map((k) => q.mix[k] || 0), okey(q.order), this.squadCap(p, q), q.formation || 'spread',
+      left(q.respawnAt), q.respawnAt === undefined ? 0 : q.respawnFor, left(q.trickleAt)]);
     return {
       id: p.id,
       gold: Math.floor(p.gold),
@@ -254,7 +258,6 @@ class Game {
       noFog: p.noFog || undefined, // (test mode: fog switched off for me)
       // [cap, how many each job wants (build/repair: on or off), flee?, keep forests?, build order]
       workers: [this.workerCap(p), C.WORKER_JOBS.map((j) => p.jobs[j]), p.workerFlee !== false ? 1 : 0, p.keepForest ? 1 : 0, p.buildOrder || []],
-      nextWave: Math.max(0, Math.ceil(p.nextWaveAt - this.time)),
       armySize: this.armySize(p),
       levels: p.levels,
       squads,

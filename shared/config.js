@@ -89,10 +89,19 @@
     // You have up to MAX_SQUADS lasting squads, each with its own troop mix and stance. Each squad is
     // raised by a barracks: your 1st barracks raises squad 1, the 2nd squad 2 and so on. A barracks
     // gives its squad BARRACKS_TROOPS troop slots per level (up to SQUAD_MAX_TROOPS); you start with
-    // no troops at all. Every WAVE_INTERVAL seconds every fallen troop respawns (at the core and
-    // barracks) and marches out to rejoin its squad.
-    WAVE_INTERVAL: 20,
-    FIRST_WAVE_DELAY: 6,
+    // no troops at all. Fallen troops come back squad by squad (at the squad's barracks, or the
+    // core for squad 1):
+    // - while a squad still has troops standing, its fallen rejoin one at a time, one every
+    //   SQUAD_TRICKLE seconds;
+    // - a squad wiped out completely comes back all at once, after a cooldown that grows with its
+    //   size: SQUAD_WIPE_BASE + SQUAD_WIPE_PER_TROOP per troop (a full 20 takes 55s), so losing a
+    //   big army costs more than losing a few;
+    // - a newly raised squad turns out SQUAD_RAISE_DELAY seconds after it gets its troop slots.
+    SQUAD_TRICKLE: 3,
+    SQUAD_WIPE_BASE: 15,
+    SQUAD_WIPE_PER_TROOP: 2,
+    SQUAD_RAISE_DELAY: 6,
+    WORKER_RESPAWN: 20, // fallen workers come back (at the core and workshops) every this many seconds
     MAX_SQUADS: 4,
     STANCES: ['aggressive', 'defensive', 'hold', 'pillage'], // pillage: hunt barbarian camps on its own, nearest first
     BARRACKS_TROOPS: 5, // troop slots a barracks gives its squad per level...
@@ -429,6 +438,11 @@
     let total = CONFIG.defOf(kind).cost;
     for (let l = 1; l < level; l++) total += CONFIG.upgradeCost(kind, l);
     return total;
+  };
+
+  // How long a squad of `troops` troops takes to come back after being wiped out (seconds).
+  CONFIG.wipeCooldown = function (troops) {
+    return CONFIG.SQUAD_WIPE_BASE + CONFIG.SQUAD_WIPE_PER_TROOP * troops;
   };
 
   CONFIG.sellValue = function (kind, level) {

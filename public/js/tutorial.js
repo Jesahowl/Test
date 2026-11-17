@@ -35,7 +35,7 @@ const STEPS = [
   },
   {
     title: 'Build a barracks',
-    text: 'Your core gives you <b>squad 1</b>: 5 soldiers guarding home (any that fall come back every 20 seconds). To make it bigger, press <kbd>R</kbd> (or <b>Build</b> → <b>Barracks</b>) and click a hex of your land: your first barracks adds <b>5 more troops</b> to squad 1.',
+    text: 'Your core gives you <b>squad 1</b>: 5 soldiers guarding home (any that fall rejoin one by one; if the whole squad falls, it comes back after a cooldown). To make it bigger, press <kbd>R</kbd> (or <b>Build</b> → <b>Barracks</b>) and click a hex of your land: your first barracks adds <b>5 more troops</b> to squad 1.',
     glow: ['.dock-btn[data-dr="build"]', '#barracks-button'],
     done: () => myBuildings('barracks').length > 0,
   },
@@ -82,7 +82,7 @@ const STEPS = [
   },
   {
     title: 'Raid a barbarian camp',
-    text: 'Barbarian camps pay gold. Pick your squad and <b>right-click the camp</b> the arrow points at. Watch your squad\'s health: fallen troops respawn at home every 20 seconds.',
+    text: 'Barbarian camps pay gold. Pick your squad and <b>right-click the camp</b> the arrow points at. Watch your squad\'s health: fallen troops rejoin one at a time, but if the whole squad is wiped out it takes a while to come back (see the rings by the dock).',
     target: () => {
       const c = nearestCamp();
       return c ? { x: c.x + 0.5, y: c.y + 0.5 } : null;

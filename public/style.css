@@ -109,10 +109,17 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
   border: 1px solid var(--line-hi); font-size: 10.5px; line-height: 16px; color: var(--text); }
 .dock-btn .badge:empty { display: none; }
 .dock-btn .badge.hot { background: #238636; border-color: #2ea043; animation: dip-pulse 1.2s infinite; }
-#wave-timer { position: relative; width: 62px; height: 62px; flex: none; border-radius: 50%; background: var(--panel); border: 1px solid var(--line);
-  box-shadow: var(--shadow); backdrop-filter: blur(6px); }
-#wave-timer svg { position: absolute; inset: 5px; width: 50px; height: 50px; transform: rotate(-90deg); }
-#wave-timer span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; }
+#squad-timer { position: relative; flex: none; display: grid; color: var(--text); font: inherit; grid-template-columns: 26px 26px; grid-template-rows: 26px 26px; gap: 2px; padding: 4px;
+  border-radius: 14px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); backdrop-filter: blur(6px); cursor: pointer; }
+#squad-timer:hover { border-color: var(--accent); }
+#squad-timer .sr { position: relative; width: 26px; height: 26px; }
+#squad-timer .sr svg { position: absolute; inset: 0; width: 26px; height: 26px; transform: rotate(-90deg); }
+#squad-timer .sr b { position: absolute; inset: 0; display: grid; place-items: center; font-size: 10.5px; font-weight: 800; font-variant-numeric: tabular-nums; }
+#squad-timer .sr.none b { color: var(--dim); }
+#squad-timer .sr.wiped b { color: var(--bad-soft); }
+#squad-timer .sr.muster b { color: var(--gold); }
+#squad-timer .sr.wiped { animation: sr-pulse 1.2s ease-in-out infinite; }
+@keyframes sr-pulse { 50% { filter: drop-shadow(0 0 4px rgba(248, 81, 73, 0.7)); } }
 
 #drawer { position: static; padding: 10px 12px 12px; min-width: 420px; }
 #drawer .dr { display: flex; flex-direction: column; gap: 8px; }
@@ -164,6 +171,19 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 .sq-card.on { border-color: rgba(255, 213, 79, 0.45); }
 .sq-card.picked { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; background: #211d0f; }
 .sq-card.empty { opacity: 0.75; }
+/* a squad coming back: wiped out (red), newly raised (gold) or reinforcing one at a time (blue) */
+.sq-rsp { display: flex; flex-direction: column; gap: 3px; padding: 4px 6px 5px; border-radius: 7px; font-size: 11px; font-weight: 600; cursor: default; }
+.sq-rsp span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sq-rsp b { font-weight: 800; font-variant-numeric: tabular-nums; }
+.sq-rsp i { display: block; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.sq-rsp i b { display: block; height: 100%; width: 0; border-radius: 2px; transition: width 0.15s linear; }
+.sq-rsp.wiped { background: rgba(248, 81, 73, 0.12); color: var(--bad-soft); }
+.sq-rsp.wiped i b { background: var(--bad); }
+.sq-rsp.muster { background: rgba(255, 213, 79, 0.1); color: var(--gold); }
+.sq-rsp.muster i b { background: var(--gold); }
+.sq-rsp.trickle { background: rgba(88, 166, 255, 0.1); color: #9ecbff; }
+.sq-rsp.trickle i b { background: var(--accent); }
+.sq-card.down .sq-hp, .sq-card.down .sq-mix { opacity: 0.55; }
 .sq-top { display: flex; align-items: center; gap: 6px; cursor: pointer; min-width: 0; }
 .sq-top .num { min-width: 20px; height: 20px; border-radius: 6px; background: var(--raise-2); font-weight: 800; font-size: 12px; display: grid; place-items: center; flex: none; }
 .sq-card.picked .sq-top .num { background: var(--gold); color: #1a1505; }

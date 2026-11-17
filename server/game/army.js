@@ -2,7 +2,8 @@
 
 // The army: up to MAX_SQUADS lasting squads, each raised by a barracks (5 troops per barracks level,
 // up to 20), with its own troop mix, stance and order; troop levels; orders; and reinforcements
-// (every WAVE_INTERVAL seconds every fallen troop respawns and marches out to rejoin its squad).
+// (fallen troops come back squad by squad: stragglers one at a time, a wiped-out squad after a
+// cooldown; see squadRespawn).
 // These methods are mixed into Game (see ../game.js), so `this` is the game.
 
 const { C, UNIT_KEYS, dist } = require('./common');
@@ -435,54 +436,113 @@ module.exports = {
     for (const u of this.units.values()) if (u.owner === p.id && u.sq === q.id) this.applyOrder(u, ord);
   },
 
-  updateWaves() {
+  updateRespawns() {
+    // (one pass over the troops counts every squad's living members, by kind)
+    const alive = new Map(); // squad id -> { n, slots, kinds: {kind: n}, lead }
+    for (const u of this.units.values()) {
+      if (!u.sq || u.trade || u.worker) continue;
+      let a = alive.get(u.sq);
+      if (!a) alive.set(u.sq, (a = { n: 0, slots: 0, kinds: {}, lead: u }));
+      a.n++;
+      a.slots += C.slotsOf(u.kind);
+      a.kinds[u.kind] = (a.kinds[u.kind] || 0) + 1;
+    }
     for (const p of this.players.values()) {
       if (!p.alive) continue;
       this.fitArmy(p);
       this.updatePillage(p);
-      if (this.time < p.nextWaveAt) continue;
-      p.nextWaveAt += C.WAVE_INTERVAL;
-      this.spawnWave(p);
+      if (p.holdRespawns) continue; // (tests)
+      if (this.time >= p.nextWorkersAt) {
+        p.nextWorkersAt = this.time + C.WORKER_RESPAWN;
+        this.spawnWorkers(p);
+      }
+      for (const q of p.squads) this.squadRespawn(p, q, alive.get(q.id));
     }
   },
 
-  // How many of each kind squad q is missing (its mix minus its living troops).
-  missingOf(p, q) {
-    const alive = {};
-    for (const u of this.units.values()) if (u.owner === p.id && u.sq === q.id && !u.trade && !u.worker) alive[u.kind] = (alive[u.kind] || 0) + 1;
+  // Squad q's fallen troops coming back (see SQUAD_TRICKLE and friends in config): `a` is its
+  // living members (or undefined). Sets q.respawnAt / q.respawnFor (a wiped or new squad's
+  // countdown) and q.trickleAt (the next straggler), which the owner sees on the squad's card.
+  squadRespawn(p, q, a) {
+    const n = a ? a.n : 0;
+    const need = this.missingOf(p, q, a);
+    if (n > 0) {
+      q.respawnAt = undefined;
+      q.lastAlive = n;
+      if (!need.length) {
+        q.trickleAt = undefined;
+        return;
+      }
+      if (q.trickleAt === undefined) q.trickleAt = this.time + C.SQUAD_TRICKLE;
+      else if (this.time >= q.trickleAt) {
+        this.spawnSquad(p, q, need.slice(0, 1), a.lead, false);
+        q.trickleAt = need.length > 1 ? this.time + C.SQUAD_TRICKLE : undefined;
+      }
+      return;
+    }
+    q.trickleAt = undefined;
+    if (!need.length) {
+      q.respawnAt = undefined;
+      q.lastAlive = 0;
+      return;
+    }
+    if (q.respawnAt === undefined) {
+      // just wiped out: the cooldown; never had troops (newly raised): a short muster
+      q.respawnFor = q.lastAlive > 0 ? C.wipeCooldown(need.length) : C.SQUAD_RAISE_DELAY;
+      q.respawnAt = this.time + q.respawnFor;
+      q.lastAlive = 0;
+    } else if (this.time >= q.respawnAt) {
+      q.respawnAt = undefined;
+      this.spawnSquad(p, q, need, null, true);
+    }
+  },
+
+  // Which troops squad q is missing (its mix minus its living troops, as a list of kinds), as many
+  // as fit its troop slots (troops beyond its mix, e.g. defectors, take slots too). `a`: its living
+  // members, counted (worked out here when not given).
+  missingOf(p, q, a) {
+    if (!a) {
+      a = { slots: 0, kinds: {} };
+      for (const u of this.units.values()) {
+        if (u.owner !== p.id || u.sq !== q.id || u.trade || u.worker) continue;
+        a.slots += C.slotsOf(u.kind);
+        a.kinds[u.kind] = (a.kinds[u.kind] || 0) + 1;
+      }
+    }
+    let room = this.squadCap(p, q) - a.slots;
     const out = [];
-    for (const k of UNIT_KEYS) for (let i = alive[k] || 0; i < (q.mix[k] || 0); i++) out.push(k);
+    for (const k of UNIT_KEYS) {
+      for (let i = a.kinds[k] || 0; i < (q.mix[k] || 0); i++) {
+        if (room < C.slotsOf(k)) return out;
+        room -= C.slotsOf(k);
+        out.push(k);
+      }
+    }
     return out;
   },
 
-  // Every fallen troop respawns, taking turns between the core and each barracks, and heads off to
-  // rejoin its squad: it takes on the order of a living squadmate, else the squad's own order.
-  // Never more troops alive than the army size (extra troops, e.g. defectors, count too).
-  spawnWave(p) {
+  // Troops of `kinds` join squad q: at its barracks (squad 1 without one: the core), taking on
+  // the order of a living squadmate (`lead`), else the squad's own order. `fanfare`: a whole squad
+  // turning out (the wave effect and sound).
+  spawnSquad(p, q, kinds, lead, fanfare) {
     this.tidySquadOrders(p);
-    this.spawnWorkers(p);
-    const barracks = [...this.towers.values()].filter((t) => t.owner === p.id && t.kind === 'barracks' && !(t.progress < 1))
-      .sort((a, b) => a.id - b.id).slice(0, C.MAX_BARRACKS);
-    const spots = [null, ...barracks];
-    let spawned = 0;
-    for (const q of p.squads) {
-      const missing = this.missingOf(p, q);
-      if (!missing.length) continue;
-      // never more troops in a squad than its barracks gives it (extra ones, e.g. defectors, count)
-      let room = this.squadCap(p, q);
-      for (const u of this.units.values()) if (u.owner === p.id && u.sq === q.id && !u.trade && !u.worker) room -= C.slotsOf(u.kind);
-      const lead = [...this.units.values()].find((u) => u.owner === p.id && u.sq === q.id && !u.trade && !u.worker);
-      for (const kind of missing) {
-        if (room < C.slotsOf(kind)) break;
-        room -= C.slotsOf(kind);
-        const u = this.spawnTroop(p, kind, spots[spawned % spots.length], q.id, q.order);
-        if (lead) this.copyOrder(lead, u);
-        spawned++;
-      }
+    const from = this.barracksOf(p, q);
+    for (const kind of kinds) {
+      const u = this.spawnTroop(p, kind, from, q.id, q.order);
+      if (lead) this.copyOrder(lead, u);
     }
-    if (spawned) {
-      this.fx.push({ k: 'wave', x: p.core.x + 0.5, y: p.core.y + 0.5, o: p.id });
-      for (const b of barracks.slice(0, spawned - 1)) this.fx.push({ k: 'wave', x: b.x + 0.5, y: b.y + 0.5, o: p.id });
+    if (fanfare && kinds.length) this.fx.push({ k: 'wave', x: (from ? from.x : p.core.x) + 0.5, y: (from ? from.y : p.core.y) + 0.5, o: p.id });
+  },
+
+  // Every fallen troop of p's (and worker) comes back right now (tests, and the tutorial's set-ups).
+  respawnAll(p) {
+    this.fitArmy(p);
+    this.spawnWorkers(p);
+    for (const q of p.squads) {
+      const need = this.missingOf(p, q);
+      if (need.length) this.spawnSquad(p, q, need, null, true);
+      q.respawnAt = undefined;
+      q.trickleAt = undefined;
     }
   },
 
