@@ -11,6 +11,7 @@ import { showDeath, showMenu, showRoundOver, startSpectating, stopSpectating, to
 import { S, $, C, ALL_UNIT_KEYS, baseLift, cam, CAMP_KEYS, hexSpot, CREEP_KEYS, feed, grid, KIND_KEYS, players, selUnits, terr } from './state.js';
 import { tipDone } from './tips.js';
 import { onFlee } from './workforce.js';
+import { objFromRow } from './objectives.js';
 
 // ------------------------------------------------------------------ network
 // If the connection drops mid-game, the client reconnects on its own (retrying for up to
@@ -339,6 +340,7 @@ function applyState(msg) {
   if (S.selWorker && !S.units.has(S.selWorker)) S.selWorker = null;
   S.campMap = merge(S.campMap, msg.camps, (a) => ({ id: a[0], x: a[1], y: a[2], type: CAMP_KEYS[a[3]], alive: !!a[4], respawn: a[5] }));
   S.camps = [...S.campMap.values()];
+  if (msg.objectives) S.objMap = merge(S.objMap || new Map(), msg.objectives, objFromRow);
   if (msg.exp) setExplored(msg.exp);
   updateFog(!!msg.terr);
 
@@ -347,6 +349,15 @@ function applyState(msg) {
     S.effects.push(fx);
     onFx(f, INTERP_DELAY / 1000); // its sound, in step too
     if (f.k === 'flee') onFlee(f);
+    // map objectives: yours being taken, or one you've just taken
+    if (f.k === 'objAlert' && f.o === S.myId) {
+      const o = S.objMap && S.objMap.get(f.id);
+      if (o) toast(`⚠ ${(players.get(f.by) || { name: 'Someone' }).name} is capturing your ${C.OBJ_KINDS[o.kind].name}`);
+    }
+    if (f.k === 'objCap' && f.o === S.myId) {
+      const o = S.objMap && S.objMap.get(f.id);
+      if (o) toast(`${C.OBJ_KINDS[o.kind].icon} You captured the ${C.OBJ_KINDS[o.kind].name}`, true);
+    }
     if ((f.k === 'slash' || f.k === 'arrow') && f.a) S.struckAt.set(f.a, now + INTERP_DELAY); // (squad tags show who's fighting)
     if (f.k === 'wave') {
       const t = S.towers.get(grid.get(`${Math.floor(f.x)},${Math.floor(f.y)}`));

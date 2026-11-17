@@ -8,7 +8,9 @@ function round(seed) {
   const g = botGame(seed, { bots: o.bots });
   const out = { seed, elims: [], snaps: {}, deaths: {}, workerDeaths: 0, campClears: 0, errors: 0, slowTicks: 0 };
   const kp = g.killPlayer.bind(g);
-  g.killPlayer = (p, killerId, left) => { out.elims.push(Math.round(g.time)); return kp(p, killerId, left); };
+  const earned = {}; // (everyone's, counted as they go out too: knocked-out players leave the game)
+  const tally = (p) => { for (const [k, v] of Object.entries(p.earned)) earned[k] = (earned[k] || 0) + Math.round(v); };
+  g.killPlayer = (p, killerId, left) => { out.elims.push(Math.round(g.time)); if (p.alive) tally(p); return kp(p, killerId, left); };
   let prevUnits = new Map();
   let prevCamps = g.camps.map((c) => c.alive);
   const t0 = Date.now();
@@ -35,8 +37,7 @@ function round(seed) {
   out.timeout = g.time >= g.rules.suddenDeath + C.SUDDEN_DEATH_LIMIT - 1;
   out.winner = g.winner && g.winner.name;
   out.secs = ((Date.now() - t0) / 1000).toFixed(1);
-  const earned = {};
-  for (const p of g.players.values()) for (const [k, v] of Object.entries(p.earned)) earned[k] = (earned[k] || 0) + Math.round(v);
+  for (const p of g.players.values()) if (p.alive) tally(p);
   out.earned = earned;
   return out;
 }

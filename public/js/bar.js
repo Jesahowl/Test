@@ -4,7 +4,8 @@ import { checkAllyOrder } from './diplomacy.js';
 import { buildStats } from './hud.js';
 import { sendMsg } from './net.js';
 import { clearSelection } from './overlay.js';
-import { S, $, C, cam, selUnits, UNIT_KEYS } from './state.js';
+import { S, $, C, HEX, cam, selUnits, UNIT_KEYS } from './state.js';
+import { objectiveAtHex } from './objectives.js';
 import { allSquads, squadPicked } from './squads.js';
 import { isMineTarget, targetName, targetPos } from './targets.js';
 import { tipDone } from './tips.js';
@@ -159,7 +160,11 @@ const STATUS_ICON = { defend: '🛡', attack: '⚔', hold: '🚩' };
 function squadStatus(q) {
   const [type, key] = q.status.split(' ');
   if (type === 'defend') return key.startsWith('c:') ? ['defend', 'Guarding home', 'Guarding your core'] : ['defend', `Guarding ${targetName(key)}`, `Defending ${targetName(key)}`];
-  if (key.startsWith('p:')) return ['hold', 'Holding a spot', 'Holding a spot on the map'];
+  if (key.startsWith('p:')) {
+    const o = objectiveAtHex(HEX.tileHex[Number(key.slice(2))]);
+    if (o) return ['attack', `${C.OBJ_KINDS[o.kind].icon} ${C.OBJ_KINDS[o.kind].name}`, `Taking or holding the ${C.OBJ_KINDS[o.kind].name}`];
+    return ['hold', 'Holding a spot', 'Holding a spot on the map'];
+  }
   return ['attack', targetName(key), `Attacking ${targetName(key)}`];
 }
 

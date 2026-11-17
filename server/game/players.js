@@ -47,7 +47,7 @@ module.exports = {
       kills: 0,
       coresDestroyed: 0,
       towersDestroyed: 0,
-      earned: { income: 0, troops: 0, camps: 0, towers: 0, cores: 0, trade: 0, farm: 0 }, // gold by source
+      earned: { income: 0, troops: 0, camps: 0, towers: 0, cores: 0, trade: 0, farm: 0, objectives: 0 }, // gold by source
       spawnTime: this.time,
       buffUntil: 0, // jungle buff active until this time
       vis: new Uint8Array(this.w * this.h), // fog of war: what this player sees now
@@ -91,6 +91,7 @@ module.exports = {
       // (with the bigger hexes that's as much room as two rings used to be: no ready-made fortress)
       if (hx.n.length < 6 || [hx.i, ...hx.n].some((j) => this.mountains.has(j))) continue;
       if (this.camps.some((c) => c.alive && dist(x, y, c.x, c.y) < 7)) continue;
+      if ((this.objectives || []).some((o) => dist(x, y, o.x, o.y) < C.OBJ_BASE_GAP)) continue; // (nor next to a map objective)
       let score = Infinity; // distance to the nearest base (buildings count as a bit closer than they are)
       for (const o of others) score = Math.min(score, dist(x, y, o.x, o.y) - o.w);
       cands.push({ x, y, score });
@@ -219,6 +220,7 @@ module.exports = {
     const killer = killerId ? this.players.get(killerId) : null;
     const conquered = !!(killer && killer.alive && killer.id !== p.id);
     if (conquered) killer.conquests = (killer.conquests || 0) + 1; // (momentum: see CONQUEST_SIEGE)
+    this.passObjectives(p, conquered ? killer : null); // (its map objectives go to the conqueror)
 
     // Their towers and barracks: the conqueror's (otherwise they fall to ruins).
     let towersTaken = 0;

@@ -4,6 +4,7 @@ import { drawWalls } from './walls.js';
 import { layoutHud } from './layout.js';
 import { buildBar } from './bar.js';
 import { drawCamps, drawCreeps } from './camps.js';
+import { drawObjectiveHover, drawObjectives } from './objectives.js';
 import { drawCores } from './cores.js';
 import { initDiplomacy } from './diplomacy.js';
 import { initDock } from './dock.js';
@@ -73,6 +74,7 @@ function frame(now) {
   drawBackground();
   drawTradeRoads();
   drawCamps();
+  drawObjectives();
   drawTowers(dt);
   drawWalls();
   drawCreeps(dt);
@@ -83,6 +85,7 @@ function frame(now) {
   drawFog();
   drawOverlay();
   drawWorkHover();
+  drawObjectiveHover();
   drawTutorialArrow();
   drawTouch();
   drawBox();

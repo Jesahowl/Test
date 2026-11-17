@@ -466,6 +466,8 @@ module.exports = {
   squadRespawn(p, q, a) {
     const n = a ? a.n : 0;
     const need = this.missingOf(p, q, a);
+    const ruins = this.perk(p.id, 'ruins') > 0; // (the Barracks Ruins: faster on both counts)
+    const trickle = ruins ? C.RUINS_TRICKLE : C.SQUAD_TRICKLE;
     if (n > 0) {
       q.respawnAt = undefined;
       q.lastAlive = n;
@@ -473,10 +475,10 @@ module.exports = {
         q.trickleAt = undefined;
         return;
       }
-      if (q.trickleAt === undefined) q.trickleAt = this.time + C.SQUAD_TRICKLE;
+      if (q.trickleAt === undefined) q.trickleAt = this.time + trickle;
       else if (this.time >= q.trickleAt) {
         this.spawnSquad(p, q, need.slice(0, 1), a.lead, false);
-        q.trickleAt = need.length > 1 ? this.time + C.SQUAD_TRICKLE : undefined;
+        q.trickleAt = need.length > 1 ? this.time + trickle : undefined;
       }
       return;
     }
@@ -488,7 +490,8 @@ module.exports = {
     }
     if (q.respawnAt === undefined) {
       // just wiped out: the cooldown; never had troops (newly raised): a short muster
-      q.respawnFor = q.lastAlive > 0 ? C.wipeCooldown(need.length) : C.SQUAD_RAISE_DELAY;
+      if (q.lastAlive > 0) p.lastWipeAt = this.time; // (bots want the Barracks Ruins after losing squads)
+      q.respawnFor = q.lastAlive > 0 ? Math.round(C.wipeCooldown(need.length) * (ruins ? C.RUINS_WIPE : 1)) : C.SQUAD_RAISE_DELAY;
       q.respawnAt = this.time + q.respawnFor;
       q.lastAlive = 0;
     } else if (this.time >= q.respawnAt) {

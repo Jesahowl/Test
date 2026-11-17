@@ -1,5 +1,6 @@
 // Overlays: build and land previews (in hexes), order lines and markers, and the minimap.
 
+import { drawObjectivesMinimap } from './objectives.js';
 import { drawWallMode } from './walls.js';
 import { isAlly } from './diplomacy.js';
 import { squadsLabel } from './bar.js';
@@ -456,6 +457,7 @@ function drawMinimap() {
       mctx.stroke();
     }
   }
+  drawObjectivesMinimap(mctx, sx, sy); // (map objectives: seen by everyone, through the fog)
   // towers and barracks: small squares in the owner's colour
   for (const t of S.towersView.values()) {
     if (!t.owner) continue;

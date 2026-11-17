@@ -50,10 +50,14 @@ module.exports = {
   // randomness so bots don't all grow the same way.
   botBuyLand(p, n) {
     const cands = [];
+    // (map objectives it holds but hasn't linked yet: land toward them comes first, to link them)
+    const reach = (this.objectives || []).filter((o) => o.holder === p.id && !o.linked);
     for (const h of this.hex.hexes) {
       if (!this.canBuyHex(p.id, h.i)) continue;
       // (a gold vein on the border is worth reaching for)
-      cands.push([h.i, Math.hypot(h.cx - p.core.x, h.cy - p.core.y) + this.rand() * 4 - (this.veins.has(h.i) ? 25 : 0)]);
+      let score = Math.hypot(h.cx - p.core.x, h.cy - p.core.y) + this.rand() * 4 - (this.veins.has(h.i) ? 25 : 0);
+      for (const o of reach) score -= Math.max(0, 40 - Math.hypot(h.cx - o.x, h.cy - o.y));
+      cands.push([h.i, score]);
     }
     cands.sort((a, b) => a[1] - b[1]);
     if (cands.length) this.buyLand(p.id, cands.slice(0, n).map((c) => c[0]));
@@ -315,6 +319,7 @@ module.exports = {
     const intruders = [...this.units.values()].filter((u) => this.hostile(p.id, u.owner) && !u.trade && !u.worker
       && this.terr[this.idx(Math.floor(u.x), Math.floor(u.y))] === p.id);
     if (intruders.length) {
+      p.bot.attackedAt = this.time; // (it'll want a Watchtower on the way in)
       const cx = intruders.reduce((sum, u) => sum + u.x, 0) / intruders.length;
       const cy = intruders.reduce((sum, u) => sum + u.y, 0) / intruders.length;
       let anchor = { k: 'c', id: p.id };
@@ -338,9 +343,35 @@ module.exports = {
       }
     } else if (guard.order.type !== 'defend' || guard.order.anchor) send(guard, { k: 'c', id: p.id }); // the home guard stays home
 
+    // The jungle squad also goes for map objectives when one is worth more than a camp right now
+    // (see botObjectiveTarget): it stands in the objective's hex until it's taken, then goes back
+    // to farming camps.
+    p.bot.hurt = strikeTroops.length > 0 && strikeTroops.reduce((t, u) => t + u.hp / u.maxHp, 0) / strikeTroops.length < 0.6;
+    let onObjective = false;
+    // (the jungle squad when it's been raised; until then squad 1, while it waits at home)
+    const strikeOnObj = strike.order.type === 'attack' && strike.order.target.k === 'p' && this.objByHex && this.objByHex.has(this.hex.tileHex[strike.order.target.id]);
+    const party = size(jungle) ? jungle : size(strike) && (strike.order.type === 'defend' || strikeOnObj) ? strike : null;
+    if (party && party.stance !== 'pillage' && this.objectives && this.objectives.length) {
+      const tg = party.order.type === 'attack' && party.order.target;
+      const at = tg && tg.k === 'p' ? this.objByHex.get(this.hex.tileHex[tg.id]) : null;
+      if (at) {
+        const taken = at.holder === p.id && !(at.capturer && this.hostile(at.capturer, p.id));
+        onObjective = !taken && this.time - (p.bot.objSince || 0) < 90; // (gives up after 90s)
+        if (!onObjective && party === strike) send(strike, { k: 'c', id: p.id }); // (squad 1 goes home to get ready again)
+      } else if (this.time >= (p.bot.objCheck || 0) && alive(party) >= Math.min(3, size(party))) {
+        p.bot.objCheck = this.time + 10;
+        const o = this.botObjectiveTarget(p, powerOf(troops.filter((u) => u.sq === party.id)), party === strike ? 40 : 0);
+        if (o) {
+          send(party, { k: 'p', id: this.idx(Math.floor(o.x), Math.floor(o.y)) });
+          p.bot.objSince = this.time;
+          onObjective = true;
+        }
+      }
+    }
+    if (onObjective && party === strike) return; // (squad 1 is busy taking an objective)
     // The jungle squad farms the nearest camp (it pays well; the warlord's fort is worth a detour),
     // unless it's pillaging (then it picks camps itself).
-    if (size(jungle) && jungle.stance !== 'pillage' && (jungle.order.type !== 'attack' || jungle.order.target.k !== 'j' || !this.camps[jungle.order.target.id]?.alive)) {
+    if (!(onObjective && party === jungle) && size(jungle) && jungle.stance !== 'pillage' && (jungle.order.type !== 'attack' || jungle.order.target.k !== 'j' || !this.camps[jungle.order.target.id]?.alive)) {
       const campScore = (c) => dist(c.x, c.y, p.core.x, p.core.y) - (C.BUFF_CAMPS.includes(c.type) ? 8 : 0);
       const camp = this.camps
         .filter((c) => c.alive && dist(c.x, c.y, p.core.x, p.core.y) < BOT_JUNGLE_RANGE)
@@ -388,6 +419,45 @@ module.exports = {
       this.order(p.id, null, this.botPickObjective(p, enemy, strikePower), [strike.id, second.id]);
       p.bot.readySince = 0;
     }
+  },
+
+  // The map objective most worth p's jungle squad (strength `power`) right now, or null. What a bot
+  // wants depends on its situation: a Gold Mine once it's raised squads, a Watchtower after being
+  // attacked, the Shrine just before it wakes, a Healing Spring when its army comes home hurt, the
+  // Barracks Ruins after losing a squad, and its own objectives back when a rival's taking them.
+  // Easy bots only look next door; anything well guarded is left alone.
+  botObjectiveTarget(p, power, maxDist = 0) {
+    if (this.suddenDeath() || (this.rules.tutorial && this.time < C.TUTORIAL_CALM)) return null;
+    const recent = (t) => t !== undefined && this.time - t < 120;
+    const reach = Math.min(this.rules.difficulty === 'easy' ? 28 : 80, maxDist || Infinity);
+    let best = null;
+    let bestScore = 0;
+    for (const o of this.objectives) {
+      const d = dist(o.x, o.y, p.core.x, p.core.y);
+      if (d > reach) continue;
+      const threatened = o.holder === p.id && o.capturer && this.hostile(o.capturer, p.id);
+      if (o.holder === p.id && !threatened) continue;
+      if (o.holder && o.holder !== p.id && !this.hostile(p.id, o.holder)) continue; // (an ally's)
+      let v = { mine: 10, watchtower: 5, shrine: 5, spring: 4, ruins: 4 }[o.kind] || 0;
+      if (o.kind === 'watchtower' && recent(p.bot.attackedAt)) v += 8;
+      if (o.kind === 'shrine') {
+        const next = C.SHRINE_AWAKE.find(([, b]) => this.time < b);
+        if (next && this.time > next[0] - 60) v += 12;
+      }
+      if (o.kind === 'spring' && p.bot.hurt) v += 8;
+      if (o.kind === 'ruins' && recent(p.lastWipeAt)) v += 10;
+      if (threatened) v += 20;
+      if (o.holder && o.holder !== p.id) {
+        if (this.botDefence(o.holder, o.x, o.y, 8).total > power * 0.8) continue; // (too well guarded)
+        v = v * 0.8 + (o.holder === p.bot.target ? 6 : 0); // (taking one from the rival it's fighting is worth more)
+      }
+      const score = v - d / 6;
+      if (score > bestScore) {
+        bestScore = score;
+        best = o;
+      }
+    }
+    return best;
   },
 
   // Put a tower up on the border facing the nearest enemy, away from my other towers.

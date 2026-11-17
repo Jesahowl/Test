@@ -91,6 +91,7 @@ module.exports = {
     const ha = this.hex.hexes[a];
     if (!ha || !this.hex.hexes[b] || !ha.n.includes(b)) return false;
     if ((this.hexOwner[a] === pid) === (this.hexOwner[b] === pid)) return false;
+    if (this.isObjectiveHex(a) || this.isObjectiveHex(b)) return false; // (map objectives are never walled off)
     return !this.wallBetween(a, b) && this.wallBuildProblem(pid, a, b) === null;
   },
 

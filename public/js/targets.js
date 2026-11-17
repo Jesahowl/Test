@@ -1,6 +1,7 @@
 // Order targets: what is under the cursor and how to name it.
 
-import { S, C, baseLift, explored, hexSpot, players, terr, towerInHex } from './state.js';
+import { S, C, HEX, baseLift, explored, hexSpot, players, terr, towerInHex } from './state.js';
+import { objectiveAtHex } from './objectives.js';
 
 // ------------------------------------------------------------------ targets
 // Targets are encoded like the server does: 't:<tower id>', 'c:<player id>', 'j:<camp id>'.
@@ -34,7 +35,10 @@ function targetName(key) {
     const c = S.campsView.find((o) => o.id === id);
     return c ? `the ${C.CAMP_INFO[c.type].name}` : 'a jungle camp';
   }
-  if (k === 'p') return 'a rally point';
+  if (k === 'p') {
+    const o = objectiveAtHex(HEX.tileHex[id]);
+    return o ? `the ${C.OBJ_KINDS[o.kind].name}` : 'a rally point';
+  }
   if (k === 'u') {
     const u = S.units.get(id);
     return u ? `${(players.get(u.owner) || { name: '?' }).name}'s ${C.UNITS[u.kind].name}` : 'a troop';

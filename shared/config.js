@@ -85,6 +85,35 @@
     RUIN_CAPTURE_COST: 25,
     RUIN_LIFETIME: 120, // seconds before an unclaimed ruin crumbles
 
+    // ---- Map objectives: neutral landmarks in their own hexes, spread between the bases. Stand
+    // troops in one's hex (no enemies there) and a ring fills: it's yours until someone else takes
+    // it. Its perk works while a chain of your land reaches it, for at most OBJ_MAX_ACTIVE at once
+    // (the ones held longest), and none in sudden death (the end of a round is about cores).
+    OBJECTIVES: { mine: 2, watchtower: 2, shrine: 1, spring: 1, ruins: 1 }, // how many of each a map
+    OBJ_KINDS: {
+      mine: { name: 'Gold Mine', icon: '⛏' },
+      watchtower: { name: 'Watchtower', icon: '🗼' },
+      shrine: { name: 'Shrine of War', icon: '🔥' },
+      spring: { name: 'Healing Spring', icon: '💧' },
+      ruins: { name: 'Barracks Ruins', icon: '🏚' },
+    },
+    OBJ_CAPTURE: [[5, 7], [3, 10], [1, 15]], // [troops in the hex, seconds to capture] (most first)
+    OBJ_DECAY: 15, // a capture ring left alone drains in this many seconds
+    OBJ_BASE_GAP: 12, // tiles: objectives and starting bases stay at least this far apart
+    OBJ_SPACING: 22, // tiles apart they try to be (closer only when the map runs out of room)
+    OBJ_EDGE: 8, // tiles from the map's edge at least
+    OBJ_MAX_ACTIVE: 3, // perks from at most this many objectives at once
+    MINE_GOLD: 2, // gold a second from a Gold Mine
+    WATCH_SIGHT: 16, // tiles a Watchtower sees (no fog there: enemy squads show on the minimap)
+    SHRINE_DAMAGE: 0.1, // +10% troop damage from the Shrine of War, while it's awake
+    SHRINE_AWAKE: [[360, 600], [780, 1020]], // seconds into the round it burns (dormant the rest)
+    SHRINE_WARN: 30, // everyone is told this long before it wakes
+    SPRING_RANGE: 10, // tiles round a Healing Spring its holder's troops heal...
+    SPRING_HEAL: 0.03, // ...this fraction of their max HP a second...
+    SPRING_CALM: 3, // ...once they haven't been hit for this many seconds
+    RUINS_TRICKLE: 2, // with the Barracks Ruins, stragglers rejoin every this many seconds...
+    RUINS_WIPE: 0.7, // ...and a wiped-out squad's cooldown is this much as long
+
     // ---- Squads and reinforcements
     // You have up to MAX_SQUADS lasting squads, each with its own troop mix and stance. Each squad is
     // raised by a barracks: your 1st barracks raises squad 1, the 2nd squad 2 and so on. A barracks

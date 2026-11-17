@@ -90,7 +90,7 @@ module.exports = {
   // Can pid buy hex i: empty, touching their land, and not where a barbarian camp stands?
   canBuyHex(pid, i) {
     const h = this.hex.hexes[i];
-    if (!h || this.hexOwner[i] || this.mountains.has(i)) return false; // (mountains belong to nobody)
+    if (!h || this.hexOwner[i] || this.mountains.has(i) || this.isObjectiveHex(i)) return false; // (mountains and map objectives belong to nobody)
     if (!h.n.some((j) => this.hexOwner[j] === pid)) return false;
     for (const c of this.camps) if (c.alive && this.hexAt(c.x, c.y) === i) return false;
     return true;

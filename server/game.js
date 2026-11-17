@@ -84,6 +84,7 @@ class Game {
     this.onDeath = null;
 
     this.setupCamps();
+    this.placeObjectives(opts.objectives !== false); // (map objectives: see game/objectives.js)
     this.recomputeTerritory();
   }
 
@@ -164,6 +165,7 @@ class Game {
       u.py = u.y;
     }
     this.updateUnits(dt);
+    this.updateObjectives(dt);
     // Walking this tick (on its own legs: being pushed apart doesn't count, or a troop nudged off
     // its spot would be let through the crowd, walk back into it, and get pushed again: a wiggle).
     for (const u of this.units.values()) u.moving = Math.hypot(u.x - u.px, u.y - u.py) > 0.01;
@@ -221,7 +223,7 @@ class Game {
       c.alive ? 0 : Math.max(0, Math.ceil(c.respawnAt - this.time))]);
     const walls = [];
     for (const w of this.walls.values()) walls.push([w.id, w.a, w.b, w.owner, Math.ceil(w.hp), w.maxHp, w.gate ? 1 : 0, w.progress < 1 ? Math.floor(w.progress * 100) : 100]);
-    const snap = { players, towers, walls, units, creeps, camps, forest: this.forestRows(), ore: this.oreRows(), fx: this.fx, feed: this.feed };
+    const snap = { players, towers, walls, units, creeps, camps, objectives: this.objectiveRows(), forest: this.forestRows(), ore: this.oreRows(), fx: this.fx, feed: this.feed };
     if (this.rounds) {
       snap.round = {
         n: this.round, phase: this.phase, t: Math.floor(this.time), seed: this.mapSeed, rivers: this.riversOn,
@@ -281,6 +283,7 @@ Object.assign(Game.prototype,
   require('./game/diplomacy'),
   require('./game/trade'),
   require('./game/walls'),
+  require('./game/objectives'),
 );
 
 Game.KIND_KEYS = KIND_KEYS;

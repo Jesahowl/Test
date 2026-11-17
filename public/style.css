@@ -318,7 +318,7 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid 
 .menu-card .join { display: flex; gap: 8px; }
 .menu-card .foot { color: var(--dim); font-size: 12px; margin: 16px 0 0; }
 #conn { margin-top: 8px; font-size: 12px; color: var(--muted); min-height: 16px; }
-.how-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; text-align: left; }
+.how-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 12px; text-align: left; }
 .how-grid div { background: var(--raise); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
 .how-grid div b { color: var(--text); }
 .how-grid div > b:first-child { display: block; margin-bottom: 2px; font-size: 13px; }

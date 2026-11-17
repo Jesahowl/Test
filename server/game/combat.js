@@ -16,6 +16,7 @@ module.exports = {
 
   damageUnit(u, amount, byPid) {
     if (!this.units.has(u.id)) return;
+    u.hitAt = this.time; // (a Healing Spring only heals troops out of the fight)
     u.hp -= this.buffed(u.owner) ? amount * (1 - C.JUNGLE_BUFF_ARMOR) : amount;
     if (u.hp > 0) return;
     this.units.delete(u.id);

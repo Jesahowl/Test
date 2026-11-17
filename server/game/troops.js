@@ -211,7 +211,8 @@ module.exports = {
     const wallBonus = !target.isWall ? 1 : def.wallBreaker || (u.kind === 'soldier' ? C.WALL_SOLDIER_BONUS : 1);
     const home = this.onHomeLand(u) ? 1 + C.HOME_DAMAGE_BONUS : 1;
     const buff = this.buffed(u.owner) ? 1 + C.JUNGLE_BUFF_DAMAGE : 1;
-    const base = s.damage * buff;
+    const shrine = this.perk(u.owner, 'shrine') && this.shrineAwake() ? 1 + C.SHRINE_DAMAGE : 1; // (the Shrine of War, while it's awake)
+    const base = s.damage * buff * shrine;
     // (momentum: each core its owner has destroyed adds CONQUEST_SIEGE against buildings)
     const won = Math.min(C.CONQUEST_MAX, (this.players.get(u.owner) || {}).conquests || 0);
     const siege = isStruct ? (def.siege || 1) * (this.suddenDeath() ? C.SUDDEN_DEATH_SIEGE : this.siegeRamp()) * (1 + C.CONQUEST_SIEGE * won) : 1;

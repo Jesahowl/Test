@@ -1,7 +1,7 @@
 // Screenshots for checking how things look (headless Chromium via Playwright). Output: shots/ (git-ignored).
 //   node tools/shots.js map --seeds=777,4242 [--zoom=1.5 --at=125,22]   the menu's map (no game), whole or a spot
 //   node tools/shots.js live [--mins=7]   a public game with 7 bots, run ahead: our base, the whole map
-//                                         (from a watching tab), the two biggest bot bases, and fights
+//                                         (from a watching tab), each map objective, the two biggest bot bases, and fights
 //   node tools/shots.js ui [--phone]      menu, a test game's HUD, each drawer, help, pause, death and
 //                                         round-over screens (--phone: an iPhone in landscape)
 const { chromium, devices } = require('playwright');
@@ -79,6 +79,8 @@ const whole = () => o.w / 200 / 28;
     await w.waitForTimeout(2000);
     await freeCam(w);
     await look(w, 100, 50, whole(), 'live-map.png', 2500);
+    // map objectives, close up
+    for (const [k, o] of (g.objectives || []).entries()) await look(w, o.x, o.y + 1, 1.1, `live-obj-${k}-${o.kind}.png`, 900);
     const top = [...g.players.values()].filter((q) => q.alive && q.isBot).sort((a, c) => c.territory - a.territory);
     if (top[0]) await look(w, top[0].core.x, top[0].core.y, 1.0, 'live-bot-base.png');
     if (top[1]) await look(w, top[1].core.x, top[1].core.y, 0.7, 'live-bot-base-wide.png');

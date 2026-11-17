@@ -24,6 +24,11 @@ module.exports = {
       const list = sources.get(u.owner);
       if (list) list.push({ x: u.x, y: u.y, r: this.unitSight(u) });
     }
+    // a Watchtower sees far round itself, for its holder
+    for (const o of this.objectives || []) {
+      const list = o.active && o.kind === 'watchtower' && sources.get(o.holder);
+      if (list) list.push({ x: o.x, y: o.y, r: C.WATCH_SIGHT });
+    }
     for (const [pid, list] of sources) {
       const p = this.players.get(pid);
       if (!p.vis) p.vis = new Uint8Array(n);

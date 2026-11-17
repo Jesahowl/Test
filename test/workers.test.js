@@ -7,7 +7,7 @@ const { Game, seeded, run, troops } = require('./helpers');
 
 // Two players, rich in gold, with buildings that need workers to go up (unlike duel()).
 function setup(seed) {
-  const g = new Game({ botTarget: 0, rand: seeded(seed), mapSeed: seed });
+  const g = new Game({ botTarget: 0, rand: seeded(seed), mapSeed: seed, objectives: false }); // (map objectives would move the bases)
   const a = g.addPlayer('A');
   const b = g.addPlayer('B');
   for (const p of [a, b]) {
