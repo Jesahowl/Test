@@ -189,3 +189,22 @@ test('objectives: a knocked-out player\'s go to whoever knocked them out', () =>
   g.killPlayer(b, a.id);
   assert.strictEqual(o.holder, a.id);
 });
+
+test('objectives: fair to every base: each new base looks for one at a fair distance', () => {
+  const Game = require('../server/game');
+  const { seeded } = require('./helpers');
+  let within = 0;
+  let farthest = 0;
+  const maps = 8;
+  for (let seed = 1; seed <= maps; seed++) {
+    const g = new Game({ botTarget: 0, rounds: true, rand: seeded(seed * 977), mapSeed: seed * 131 });
+    const ps = [];
+    for (let k = 0; k < 8; k++) ps.push(g.addPlayer('P' + k, true));
+    assert.ok(ps.every(Boolean), 'all 8 bases still find room');
+    const near = ps.map((p) => Math.min(...g.objectives.map((o) => Math.hypot(p.core.x - o.x, p.core.y - o.y))));
+    within += near.filter((d) => d <= 30).length;
+    farthest += Math.max(...near);
+  }
+  assert.ok(within / maps >= 6.5, `most bases have an objective within 30 tiles (${(within / maps).toFixed(1)} of 8)`);
+  assert.ok(farthest / maps <= 40, `and none is left far from them all (farthest ${(farthest / maps).toFixed(1)} tiles on average)`);
+});

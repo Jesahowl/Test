@@ -103,6 +103,8 @@
     OBJ_SPACING: 22, // tiles apart they try to be (closer only when the map runs out of room)
     OBJ_EDGE: 8, // tiles from the map's edge at least
     OBJ_MAX_ACTIVE: 3, // perks from at most this many objectives at once
+    OBJ_FAIR_NEAR: [16, 28], // tiles: a new base's nearest objective should be about this far (see findSpawn)
+    OBJ_FAIR_SLACK: 0.75, // ...choosing among spots at least this nearly as far from the other bases as the best
     MINE_GOLD: 2, // gold a second from a Gold Mine
     WATCH_SIGHT: 16, // tiles a Watchtower sees (no fog there: enemy squads show on the minimap)
     SHRINE_DAMAGE: 0.1, // +10% troop damage from the Shrine of War, while it's awake

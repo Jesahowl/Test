@@ -99,9 +99,58 @@ module.exports = {
     if (!cands.length) return null;
     cands.sort((a, b) => b.score - a.score);
     if (cands[0].score < C.CORE_CLAIM * 2) return null; // no room left
-    // Any of the top few that are nearly as good as the best.
-    const good = cands.filter((c, i) => i < 3 && c.score >= cands[0].score * 0.95);
-    const pick = good[Math.floor(this.rand() * good.length)];
+    const objs = this.objectives || [];
+    if (!objs.length) {
+      // Any of the top few that are nearly as good as the best.
+      const good = cands.filter((c, i) => i < 3 && c.score >= cands[0].score * 0.95);
+      const pick = good[Math.floor(this.rand() * good.length)];
+      return { x: pick.x, y: pick.y };
+    }
+    // With map objectives: among the spots nearly as far from everyone as the best, the one that's
+    // fairest about them. Its nearest objective should be neither on its doorstep nor far away
+    // (OBJ_FAIR_NEAR); it should be the nearest base to an objective nobody's nearest to yet;
+    // and it shouldn't take the only objective another base is nearest to.
+    const bases = [...this.players.values()].filter((p) => p.alive);
+    const owner = objs.map((o) => {
+      let best = null;
+      let bd = Infinity;
+      for (const p of bases) {
+        const d = dist(p.core.x, p.core.y, o.x, o.y);
+        if (d < bd) {
+          bd = d;
+          best = p;
+        }
+      }
+      return { p: best, d: bd };
+    });
+    const owns = new Map();
+    for (const w of owner) if (w.p) owns.set(w.p, (owns.get(w.p) || 0) + 1);
+    const [lo, hi] = C.OBJ_FAIR_NEAR;
+    const top = cands[0].score;
+    const fair = (c) => {
+      const ds = objs.map((o) => dist(c.x, c.y, o.x, o.y));
+      const near = Math.min(...ds);
+      let f = near < lo ? -(lo - near) * 2 : near > hi ? -(near - hi) * 3 : 0;
+      let mine = 0;
+      objs.forEach((o, k) => {
+        if (ds[k] >= owner[k].d) return; // (someone else is nearer)
+        mine++;
+        if (!owner[k].p) f += ds[k] < hi + 4 ? 10 : 4; // an objective nobody's nearest to yet
+        else if (owns.get(owner[k].p) === 1) f -= 8; // taking another base's only one
+      });
+      if (mine >= 2) f -= (mine - 1) * 6; // (nor first claim on several)
+      return f;
+    };
+    const pool = cands.filter((c) => top === Infinity || c.score >= top * C.OBJ_FAIR_SLACK);
+    let pick = pool[0];
+    let bestF = -Infinity;
+    for (const c of pool) {
+      const f = fair(c) + (top === Infinity ? 0 : (c.score / top) * 6) + this.rand() * 2;
+      if (f > bestF) {
+        bestF = f;
+        pick = c;
+      }
+    }
     return { x: pick.x, y: pick.y };
   },
 
