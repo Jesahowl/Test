@@ -1,0 +1,445 @@
+// Input: mouse, keyboard, minimap and help window.
+
+import { closePause, openPause, pauseOpen, syncSound } from './pause.js';
+import { toggleMute } from './audio.js';
+import { closePingWheel, openPingWheel, pingWheelClick, setPingMode } from './pings.js';
+import { edgeNear, pickWall, wallAtEdge, wallDown, wallMove, wallUp } from './walls.js';
+import { closeConfirm, confirmOpen, isAlly } from './diplomacy.js';
+import { expandAll, landDown, landMove, landUp } from './land.js';
+import { cycleStance, orderAt, pickSquadOf, selectAllSquads, squadKey, toggleBuild, toggleFormation } from './bar.js';
+import { sendMsg } from './net.js';
+import { clearSelection } from './overlay.js';
+import { resize } from './render.js';
+import { join, specNext, startSpectating, toast } from './screens.js';
+import { S, $, C, cam, canvas, HEX, keys, towerInHex, mini, mouse, players, scale, selUnits, terr, toWorld, clampZoom } from './state.js';
+import { endBox, jumpIdle, moveBox, startBox } from './workforce.js';
+import { orderTargetAt } from './targets.js';
+import { hideTip } from './ui.js';
+import { setDrawer } from './dock.js';
+
+// ------------------------------------------------------------------ input
+function updateMouseWorld() {
+  [mouse.wx, mouse.wy] = toWorld(mouse.sx, mouse.sy);
+}
+
+canvas.addEventListener('mousemove', (e) => {
+  mouse.sx = e.clientX;
+  mouse.sy = e.clientY;
+  if (mouse.rightDown) {
+    const dx = e.clientX - mouse.lastX;
+    const dy = e.clientY - mouse.lastY;
+    if (Math.abs(dx) + Math.abs(dy) > 3) mouse.dragged = true;
+    if (mouse.dragged) {
+      cam.x -= dx / scale();
+      cam.y -= dy / scale();
+    }
+    mouse.lastX = e.clientX;
+    mouse.lastY = e.clientY;
+  }
+  if (S.workerBox && e.buttons & 1) moveBox(e.clientX, e.clientY);
+  updateMouseWorld();
+  landMove();
+  wallMove();
+});
+
+canvas.addEventListener('mousedown', (e) => {
+  if (e.button === 2 || e.button === 1) {
+    mouse.rightDown = true;
+    mouse.dragged = false;
+    mouse.lastX = e.clientX;
+    mouse.lastY = e.clientY;
+    return;
+  }
+  if (e.button !== 0 || !S.myId) return;
+  updateMouseWorld();
+  // pings: a click picks from the open wheel; Alt+click opens one here
+  if (pingWheelClick(mouse.sx, mouse.sy)) return;
+  if (e.altKey || S.pingMode) {
+    openPingWheel(mouse.wx, mouse.wy);
+    return;
+  }
+  const tx = Math.floor(mouse.wx);
+  const ty = Math.floor(mouse.wy);
+
+  if (S.buildKind === 'land') {
+    landDown();
+    return;
+  }
+  if (S.buildKind === 'wall') {
+    wallDown();
+    return;
+  }
+  if (S.buildKind) {
+    sendMsg({ t: 'build', kind: S.buildKind, x: tx, y: ty });
+    return;
+  }
+
+  // Left-click one of my workers: pick it (right-click then sends it to work).
+  let wk = null;
+  let wkD = 0.6;
+  for (const u of S.units.values()) {
+    if (u.owner !== S.myId || u.kind !== 'worker') continue;
+    const d = Math.hypot(u.rx - mouse.wx, u.ry - mouse.wy);
+    if (d < wkD) {
+      wkD = d;
+      wk = u;
+    }
+  }
+  if (wk) {
+    // (Shift: add it to the workers picked)
+    const keep = e.shiftKey && S.selWorkers.size ? new Set(S.selWorkers) : null;
+    clearSelection();
+    if (keep) for (const id of keep) S.selWorkers.add(id);
+    if (keep && keep.has(wk.id)) S.selWorkers.delete(wk.id);
+    else S.selWorkers.add(wk.id);
+    S.selWorker = S.selWorkers.size ? (S.selWorkers.has(wk.id) ? wk.id : [...S.selWorkers][0]) : null;
+    return;
+  }
+  S.selWorker = null;
+  S.selWorkers.clear();
+
+  // Left-click a troop: pick its squad (Shift: add its squad). Otherwise select a tower or ruin.
+  let hit = null;
+  let hitD = 0.6;
+  for (const u of S.units.values()) {
+    if (u.owner !== S.myId || u.kind === 'caravan' || u.kind === 'worker') continue;
+    const d = Math.hypot(u.rx - mouse.wx, u.ry - mouse.wy);
+    if (d < hitD) {
+      hitD = d;
+      hit = u;
+    }
+  }
+  if (hit) {
+    S.selectedId = null;
+    S.selCaravan = null;
+    pickSquadOf(hit, e.shiftKey);
+    return;
+  }
+  // A caravan (mine or an ally's): select it to see its trade road.
+  let cart = null;
+  let cartD = 1.0;
+  for (const u of S.units.values()) {
+    if (u.kind !== 'caravan' || (u.owner !== S.myId && !isAlly(u.owner))) continue;
+    const d = Math.hypot(u.rx - mouse.wx, u.ry - mouse.wy);
+    if (d < cartD) {
+      cartD = d;
+      cart = u;
+    }
+  }
+  S.selCaravan = cart ? cart.id : null;
+  if (cart) {
+    selUnits.clear();
+    S.selectedId = null;
+    S.selWall = null;
+    return;
+  }
+  // A wall (click near its edge)
+  if (pickWall(mouse.wx, mouse.wy)) {
+    selUnits.clear();
+    S.selectedId = null;
+    S.buildKind = null;
+    return;
+  }
+  // (from here, a drag draws a box round workers to pick them)
+  startBox(e.clientX, e.clientY);
+  const ht = towerInHex(mouse.wx, mouse.wy);
+  const tid = ht ? ht.id : 0;
+  selUnits.clear();
+  S.buildKind = null;
+  S.selectedId = tid && S.towers.has(tid) ? tid : null;
+});
+
+window.addEventListener('mouseup', (e) => {
+  if (e.button === 0 && S.workerBox && endBox(e.shiftKey)) {
+    // a box was dragged: it picked workers (not the building the drag started on)
+    S.selectedId = null;
+    selUnits.clear();
+  }
+  if (e.button === 0 && S.landDrag) landUp();
+  if (e.button === 0 && S.wallDrag) wallUp();
+  if ((e.button === 2 || e.button === 1) && mouse.rightDown) {
+    mouse.rightDown = false;
+    if (mouse.dragged || !S.myId) return;
+    // A right-click (not a drag): order troops at whatever is under the cursor, or cancel.
+    if (S.buildKind) {
+      S.buildKind = null;
+      return;
+    }
+    updateMouseWorld();
+    if (S.selWorker) {
+      sendWorkerAt(mouse.wx, mouse.wy, e.shiftKey);
+      return;
+    }
+    const tg = orderTargetAt(mouse.wx, mouse.wy);
+    if (tg) orderAt(tg);
+    else if (mouse.wx >= 0 && mouse.wy >= 0 && mouse.wx < C.MAP_W && mouse.wy < C.MAP_H) {
+      // Empty ground: move there and hold the spot.
+      orderAt({ k: 'p', id: Math.floor(mouse.wy) * C.MAP_W + Math.floor(mouse.wx) });
+    }
+  }
+});
+
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// Right-click with a worker picked: put it to work on what's there (a building or wall of mine, my
+// core, a forest, or an open hex of my land). The server says if it can't.
+function sendWorkerAt(wx, wy, queue = false) {
+  if (wx < 0 || wy < 0 || wx >= C.MAP_W || wy >= C.MAP_H) return;
+  let target = null;
+  const t = towerInHex(wx, wy);
+  const me = players.get(S.myId);
+  const e = edgeNear(wx, wy, 0.5);
+  const w = e && wallAtEdge(e.a, e.b);
+  if (w && w.owner === S.myId) target = { k: 'w', id: w.id };
+  else if (t && t.owner === S.myId) target = { k: 't', id: t.id };
+  else if (me && HEX.tileHex[Math.floor(wy) * C.MAP_W + Math.floor(wx)] === HEX.tileHex[me.y * C.MAP_W + me.x]) target = { k: 'c', id: S.myId };
+  else target = { k: 'h', id: HEX.tileHex[Math.floor(wy) * C.MAP_W + Math.floor(wx)] };
+  const ids = S.selWorkers.size ? [...S.selWorkers] : [S.selWorker];
+  sendMsg({ t: 'work', ids, target, queue });
+  S.effects.push({ k: 'ping', x: wx, y: wy, born: performance.now() });
+  for (const id of ids) S.workerSent.set(id, { x: wx, y: wy, at: performance.now() });
+}
+
+// Double-click outside your land: expand your land outward all round (buying the border ring).
+canvas.addEventListener('dblclick', (e) => {
+  if (e.button !== 0 || !S.myId || S.spectating || (S.buildKind && S.buildKind !== 'land')) return;
+  updateMouseWorld();
+  const tx = Math.floor(mouse.wx);
+  const ty = Math.floor(mouse.wy);
+  if (tx < 0 || ty < 0 || tx >= C.MAP_W || ty >= C.MAP_H || terr[ty * C.MAP_W + tx] === S.myId) return;
+  expandAll(mouse.wx, mouse.wy);
+});
+
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const [bx, by] = toWorld(e.clientX, e.clientY);
+  cam.zoom = clampZoom(cam.zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12));
+  const [ax, ay] = toWorld(e.clientX, e.clientY);
+  cam.x += bx - ax;
+  cam.y += by - ay;
+  updateMouseWorld();
+}, { passive: false });
+
+function moveCamFromMinimap(e) {
+  S.specFollow = false;
+  const rect = mini.getBoundingClientRect();
+  cam.x = ((e.clientX - rect.left) / rect.width) * C.MAP_W;
+  cam.y = ((e.clientY - rect.top) / rect.height) * C.MAP_H;
+}
+
+mini.addEventListener('mousedown', (e) => {
+  if ((e.altKey || S.pingMode) && S.myId) {
+    // Alt+click the minimap (or click it in ping mode): a quick 'look here' ping there
+    setPingMode(false);
+    const rect = mini.getBoundingClientRect();
+    sendMsg({ t: 'ping', kind: 'look', x: ((e.clientX - rect.left) / rect.width) * C.MAP_W, y: ((e.clientY - rect.top) / rect.height) * C.MAP_H });
+    return;
+  }
+  moveCamFromMinimap(e);
+  const move = (ev) => moveCamFromMinimap(ev);
+  window.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', () => window.removeEventListener('mousemove', move), { once: true });
+});
+
+// Typing in a text box (your name, a room code): keys go there, not to the game. Sliders and
+// checkboxes (the sound settings) don't count.
+const typing = () => {
+  const el = document.activeElement;
+  return !!el && el.tagName === 'INPUT' && !['range', 'checkbox'].includes(el.type);
+};
+
+window.addEventListener('keydown', (e) => {
+  if (typing()) {
+    if (e.key === 'Enter') join();
+    return;
+  }
+  const k = e.key.toLowerCase();
+  if (confirmOpen()) {
+    // the "break alliance?" box takes the keyboard: Esc cancels (Enter presses its focused button)
+    if (k === 'escape') closeConfirm();
+    return;
+  }
+  if (pauseOpen()) {
+    // the menu takes the keyboard too: Esc closes it
+    if (k === 'escape') closePause();
+    return;
+  }
+  const helpOpen = !$('help').classList.contains('hidden');
+  if ((S.pingWheel || S.pingMode) && k === 'escape') {
+    closePingWheel();
+    setPingMode(false);
+    return;
+  }
+  keys.add(k);
+  if (S.spectating) {
+    if (k === 'escape' && !helpOpen) openPause();
+    if (k === 'tab') {
+      e.preventDefault();
+      specNext();
+    }
+    if (k === ' ') {
+      e.preventDefault();
+      S.specFollow = true;
+    }
+    return;
+  }
+  if (!S.myId) return;
+  if (k === 'b') toggleBuild('tower');
+  if (k === 'r') toggleBuild('barracks');
+  if (k === 't') toggleBuild('trade');
+  if (k === 'k') toggleBuild('workshop');
+  if (k === 'j') setDrawer('workers');
+  if (k === '.') jumpIdle(); // the next idle worker
+  if (k === 'v') toggleBuild('wall');
+  if (k === 'l') toggleBuild('land');
+  // the dock's drawers
+  if (k === 'z') setDrawer('build');
+  if (k === 'x') setDrawer('squads'); // (the old Army key: troop upgrades live in Squads now)
+  if (k === 'c') setDrawer('squads');
+  if (k === 'p') setDrawer('diplo');
+  if (k === 'escape') {
+    // Esc cancels what's going on; with nothing to cancel it closes the open drawer, then opens the menu
+    const busy = S.buildKind || S.selectedId || selUnits.size || S.selCaravan || S.selWall || S.selWorker || S.landDrag || S.wallDrag;
+    S.buildKind = null;
+    clearSelection();
+    if (!busy && S.drawer) setDrawer(null);
+    else if (!busy && !helpOpen) openPause();
+  }
+  if (k === 'q') {
+    S.buildKind = null;
+    selectAllSquads();
+  }
+  if (k === 'h') orderAt({ k: 'c', id: S.myId }, { everyone: true });
+  if (k === 'g') cycleStance();
+  if (k === 'f') toggleFormation();
+  if (k === 'y' && S.myId) {
+    updateMouseWorld();
+    openPingWheel(mouse.wx, mouse.wy); // (pick a ping for your allies)
+  }
+  if (k === 'm') {
+    const muted = toggleMute();
+    syncSound();
+    toast(muted ? 'Sound off (M to turn it back on)' : 'Sound on', true);
+  }
+  if (k === ' ') {
+    e.preventDefault();
+    const p = players.get(S.myId);
+    if (p) {
+      cam.x = p.x + 0.5;
+      cam.y = p.y + 0.5;
+    }
+  }
+  // 1-4: pick the squad with that number (Shift adds).
+  const m = /^Digit([1-4])$/.exec(e.code);
+  if (m) squadKey(Number(m[1]), e.shiftKey);
+  if (k === 'u' && S.selectedId) sendMsg({ t: 'upgrade', id: S.selectedId });
+  if ((k === 'delete' || k === 'backspace') && S.selWall && S.walls.get(S.selWall)?.owner === S.myId) sendMsg({ t: 'wall', op: 'down', id: S.selWall });
+  if ((k === 'delete' || k === 'backspace') && S.selectedId) {
+    const t = S.towers.get(S.selectedId);
+    if (t && t.owner === S.myId) sendMsg({ t: 'sell', id: S.selectedId });
+  }
+});
+
+window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+
+window.addEventListener('blur', () => keys.clear());
+
+window.addEventListener('resize', resize);
+
+// Controls / how-to-play window: ? toggles it, Esc or × closes it.
+function setHelp(show) {
+  $('help').classList.toggle('hidden', !show);
+  hideTip();
+}
+
+$('help').querySelector('.close').onclick = () => setHelp(false);
+
+$('help').addEventListener('mousedown', (e) => {
+  if (e.target === $('help')) setHelp(false);
+});
+
+$('help-toggle').onclick = () => setHelp(true);
+
+$('tips-reset').onclick = () => {
+  S.tipsDone = new Set();
+  S.tipsOff = false;
+  try {
+    localStorage.removeItem('ts-tips');
+    localStorage.removeItem('ts-tips-off');
+  } catch { /* ignore */ }
+  $('tips').dataset.key = '';
+  setHelp(false);
+};
+
+window.addEventListener('keydown', (e) => {
+  if (typing()) return;
+  if (e.key === '?') setHelp($('help').classList.contains('hidden'));
+  else if (e.key === 'Escape') setHelp(false);
+});
+
+// Menu logo: a core crystal.
+(function drawLogo() {
+  // the crystal core, in gold: a rune circle, a stone dais and a floating crystal with shards
+  const c = $('logo');
+  const g = c.getContext('2d');
+  const x = 36;
+  const glow = g.createRadialGradient(x, 28, 3, x, 28, 34);
+  glow.addColorStop(0, 'rgba(255, 213, 79, 0.5)');
+  glow.addColorStop(1, 'rgba(255, 213, 79, 0)');
+  g.fillStyle = glow;
+  g.fillRect(0, 0, 72, 72);
+  g.strokeStyle = 'rgba(255, 213, 79, 0.85)';
+  g.lineWidth = 2;
+  g.beginPath();
+  g.ellipse(x, 58, 26, 9, 0, 0, Math.PI * 2);
+  g.stroke();
+  g.setLineDash([3, 4]);
+  g.lineWidth = 1.2;
+  g.beginPath();
+  g.ellipse(x, 58, 20, 7, 0, 0, Math.PI * 2);
+  g.stroke();
+  g.setLineDash([]);
+  g.fillStyle = '#3a4048';
+  g.strokeStyle = '#22272d';
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(x - 16, 58);
+  g.lineTo(x - 11, 50);
+  g.lineTo(x + 11, 50);
+  g.lineTo(x + 16, 58);
+  g.closePath();
+  g.fill();
+  g.stroke();
+  const gem = (cx, cy, r, light, dark) => {
+    g.fillStyle = light;
+    g.beginPath();
+    g.moveTo(cx, cy - r * 1.45);
+    g.lineTo(cx + r * 0.75, cy - r * 0.1);
+    g.lineTo(cx, cy + r);
+    g.lineTo(cx - r * 0.75, cy - r * 0.1);
+    g.closePath();
+    g.fill();
+    g.fillStyle = dark;
+    g.beginPath();
+    g.moveTo(cx, cy - r * 1.45);
+    g.lineTo(cx + r * 0.75, cy - r * 0.1);
+    g.lineTo(cx, cy + r);
+    g.closePath();
+    g.fill();
+  };
+  g.shadowColor = '#ffd54f';
+  g.shadowBlur = 10;
+  gem(x, 31, 15, '#fff1b8', '#e0b23a');
+  g.shadowBlur = 0;
+  gem(x - 22, 34, 4, '#fff1b8', '#e0b23a');
+  gem(x + 22, 28, 4, '#fff1b8', '#e0b23a');
+})();
+
+$('play').onclick = join;
+
+// (a private room: leave it; a public game: on to the next lobby)
+$('again').onclick = () => sendMsg(S.room && !S.room.pub ? { t: 'leave' } : { t: 'join', name: S.lastName });
+
+$('spectate').onclick = startSpectating;
+
+export { updateMouseWorld };

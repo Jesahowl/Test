@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hex Land Preview</title>
+<style>
+  :root { --bg: #0d1117; --panel: rgba(18, 24, 33, 0.92); --line: #2a3442; --text: #e6edf3; --muted: #8b949e; --gold: #ffd54f; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, sans-serif; overflow: hidden; }
+  canvas { display: block; }
+  .panel { position: absolute; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; box-shadow: 0 6px 20px rgba(0,0,0,.35); }
+  #card { top: 12px; left: 12px; min-width: 210px; }
+  #card .gold { color: var(--gold); font-size: 26px; font-weight: 800; }
+  #card .row { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  #card b { color: var(--text); }
+  #help { bottom: 12px; left: 50%; transform: translateX(-50%); font-size: 13px; color: var(--muted); white-space: nowrap; }
+  #help kbd { background: #222b38; border: 1px solid #3a4656; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: var(--text); font-size: 11px; }
+  #title { top: 12px; right: 12px; font-size: 12px; color: var(--muted); max-width: 260px; line-height: 1.45; }
+  #title h1 { margin: 0 0 4px; font-size: 15px; color: var(--text); }
+  #toast { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); background: #1f6feb; color: #fff; padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity .25s; pointer-events: none; }
+  #toast.bad { background: #da3633; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="card" class="panel"><div style="font-weight:700">Jesse</div><div class="gold" id="gold"></div><div class="row"><b id="land"></b> hexes · next hex <b id="price"></b></div><div class="row">+<b id="income"></b>g/s</div></div>
+<div id="title" class="panel"><h1>Hex land preview</h1>A mock-up of Territory Siege on a hexagon grid. Claim hexes that touch your border; each costs a little more the more you own. Enemy land can't be bought.</div>
+<div id="help" class="panel"><kbd>Click</kbd> / <kbd>drag</kbd> along your border to claim hexes · <kbd>Double-click</kbd> outside to grow all round · <kbd>Wheel</kbd> zoom · <kbd>Right-drag</kbd> pan</div>
+<div id="toast"></div>
+<script>
+// ---------------------------------------------------------------- hex grid (pointy-top, axial q/r)
+const R = 9;               // map radius in hexes
+const SQ3 = Math.sqrt(3);
+const cv = document.getElementById('c');
+const g = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+const cam = { x: 0, y: 0, size: 22 };   // size = hex radius in screen px
+function resize() { DPR = window.devicePixelRatio || 1; W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; cv.style.width = W + 'px'; cv.style.height = H + 'px'; }
+addEventListener('resize', resize); resize();
+
+const key = (q, r) => `${q},${r}`;
+const DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+const hexes = new Map(); // key -> { q, r, owner }
+for (let q = -R; q <= R; q++) for (let r = Math.max(-R, -q - R); r <= Math.min(R, -q + R); r++) hexes.set(key(q, r), { q, r, owner: 0 });
+const HS = 2.25;           // hex radius in world units: hexes are this much bigger than the buildings and troops on them
+const toPix = (q, r) => [HS * SQ3 * (q + r / 2), HS * 1.5 * r];
+const hexDist = (a, b) => (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs(a.q + a.r - b.q - b.r)) / 2;
+function pixToHex(x, y) {
+  x /= HS; y /= HS;
+  let q = (SQ3 / 3 * x - y / 3), r = (2 / 3 * y);
+  let s = -q - r, rq = Math.round(q), rr = Math.round(r), rs = Math.round(s);
+  const dq = Math.abs(rq - q), dr = Math.abs(rr - r), ds = Math.abs(rs - s);
+  if (dq > dr && dq > ds) rq = -rr - rs; else if (dr > ds) rr = -rq - rs;
+  return hexes.get(key(rq, rr));
+}
+const neighbours = (h) => DIRS.map(([dq, dr]) => hexes.get(key(h.q + dq, h.r + dr))).filter(Boolean);
+
+// ---------------------------------------------------------------- players, buildings, camps
+const PLAYERS = {
+  1: { name: 'Jesse', hue: 45, core: { q: -2, r: 1 } },
+  2: { name: 'Barbican', hue: 15, core: { q: 4, r: -4 } },
+  3: { name: 'Warden', hue: 315, core: { q: 5, r: 2 } },
+  4: { name: 'Citadel', hue: 120, core: { q: -5, r: -1 } },
+};
+const ME = 1;
+const col = (pid, l = 55, a = 1) => `hsla(${PLAYERS[pid].hue}, 75%, ${l}%, ${a})`;
+const towers = [];
+const camps = [{ q: 1, r: -3, big: true }, { q: -2, r: 6 }, { q: 6, r: -1 }, { q: -6, r: 5 }];
+// starting land: a hex "circle" round each core, then a few rings bought for the bots
+for (const [id, p] of Object.entries(PLAYERS)) {
+  const c = hexes.get(key(p.core.q, p.core.r));
+  for (const h of hexes.values()) if (hexDist(h, c) <= 1) h.owner = +id;
+}
+let rngS = 7; const rnd = () => ((rngS = (rngS * 16807) % 2147483647) / 2147483647);
+function grow(pid, n) {
+  for (let i = 0; i < n; i++) {
+    const c = buyable(pid);
+    if (!c.length) return;
+    const core = PLAYERS[pid].core;
+    c.sort((a, b) => hexDist(a, core) + rnd() * 1.6 - hexDist(b, core) - rnd() * 1.6);
+    c[0].owner = pid;
+  }
+}
+function buyable(pid) { const out = []; for (const h of hexes.values()) if (!h.owner && !campAt(h) && neighbours(h).some((n) => n.owner === pid)) out.push(h); return out; }
+const campAt = (h) => camps.find((c) => hexDist(c, h) <= 1);
+grow(2, 9); grow(3, 7); grow(4, 11); grow(1, 3);
+towers.push({ q: 3, r: -3, o: 2, lvl: 3 }, { q: 5, r: -5, o: 2, lvl: 1 }, { q: 4, r: 2, o: 3, lvl: 2 }, { q: -5, r: 0, o: 4, lvl: 2 }, { q: -1, r: 0, o: 1, lvl: 2 }, { q: -3, r: 2, o: 1, lvl: 1 });
+const troops = [];
+for (let i = 0; i < 7; i++) troops.push({ x: toPix(-1.6, -0.3)[0] + (i % 4) * 0.62, y: toPix(-1.6, -0.3)[1] + Math.floor(i / 4) * 0.6, o: 1, k: ['soldier', 'soldier', 'archer', 'soldier', 'medic', 'archer', 'soldier'][i] });
+for (let i = 0; i < 5; i++) troops.push({ x: toPix(2, -1.5)[0] + (i % 3) * 0.62, y: toPix(2, -1.5)[1] + Math.floor(i / 3) * 0.6, o: 2, k: ['soldier', 'archer', 'soldier', 'medic', 'soldier'][i] });
+
+// ---------------------------------------------------------------- economy (same formula as the game)
+let gold = 420;
+const myLand = () => [...hexes.values()].filter((h) => h.owner === ME).length;
+const cost = (land) => Math.ceil(11 + land * 1.7); // a hex is ~11 square tiles' worth of land
+const income = (land) => 1.5 + land * 0.17;
+setInterval(() => { gold += income(myLand()) / 4; ui(); }, 250);
+function ui() {
+  const n = myLand();
+  document.getElementById('gold').textContent = `${Math.floor(gold).toLocaleString()}`;
+  document.getElementById('land').textContent = n;
+  document.getElementById('price').textContent = `${cost(n)}g`;
+  document.getElementById('income').textContent = income(n).toFixed(1);
+}
+let toastT = 0;
+function toast(t, bad) { const el = document.getElementById('toast'); el.textContent = t; el.className = bad ? 'bad' : ''; el.style.opacity = 1; clearTimeout(toastT); toastT = setTimeout(() => (el.style.opacity = 0), 1400); }
+
+// ---------------------------------------------------------------- buying
+let drag = null;  // { list: [hex], set: Set }
+let hover = null;
+const canBuy = (h, pending) => h && !h.owner && !campAt(h) && !(pending && pending.has(h)) && neighbours(h).some((n) => n.owner === ME || (pending && pending.has(n)));
+function tryAdd(h) {
+  if (!drag || !canBuy(h, drag.set)) return;
+  let total = 0; for (let i = 0; i <= drag.list.length; i++) total += cost(myLand() + i);
+  if (total > gold) return;
+  drag.list.push(h); drag.set.add(h);
+}
+function commit(list) {
+  let n = 0, spent = 0;
+  for (const h of list) { const c = cost(myLand()); if (c > gold || !canBuy(h)) break; gold -= c; spent += c; h.owner = ME; n++; claimFx(h); }
+  if (n) toast(`+${n} hex${n === 1 ? '' : 'es'} (−${spent}g)`); else if (list.length) toast('Not enough gold', true);
+  ui();
+}
+const fx = [];
+function claimFx(h) { fx.push({ h, t: performance.now() }); }
+
+// ---------------------------------------------------------------- input
+const toWorld = (sx, sy) => [(sx - W / 2) / cam.size + cam.x, (sy - H / 2) / cam.size + cam.y];
+const toScreen = (wx, wy) => [(wx - cam.x) * cam.size + W / 2, (wy - cam.y) * cam.size + H / 2];
+let pan = null;
+cv.addEventListener('contextmenu', (e) => e.preventDefault());
+cv.addEventListener('mousedown', (e) => {
+  if (e.button === 2) { pan = { x: e.clientX, y: e.clientY }; return; }
+  drag = { list: [], set: new Set() }; tryAdd(hover);
+});
+addEventListener('mousemove', (e) => {
+  if (pan) { cam.x -= (e.clientX - pan.x) / cam.size; cam.y -= (e.clientY - pan.y) / cam.size; pan = { x: e.clientX, y: e.clientY }; }
+  hover = pixToHex(...toWorld(e.clientX, e.clientY));
+  if (drag) tryAdd(hover);
+});
+addEventListener('mouseup', (e) => { if (e.button === 2) { pan = null; return; } if (drag) { commit(drag.list); drag = null; } });
+cv.addEventListener('dblclick', () => {
+  if (!hover || hover.owner === ME) return;
+  const ring = buyable(ME).sort((a, b) => hexDist(a, hover) - hexDist(b, hover));
+  commit(ring);
+});
+cv.addEventListener('wheel', (e) => { e.preventDefault(); cam.size = Math.min(60, Math.max(12, cam.size * (e.deltaY < 0 ? 1.1 : 1 / 1.1))); }, { passive: false });
+
+// ---------------------------------------------------------------- drawing
+function hexPath(cx, cy, s, inset = 0) {
+  g.beginPath();
+  for (let i = 0; i < 6; i++) { const a = Math.PI / 180 * (60 * i - 30); g.lineTo(cx + (s - inset) * Math.cos(a), cy + (s - inset) * Math.sin(a)); }
+  g.closePath();
+}
+// corner i of hex (pointy-top): angle 60i-30; edge i joins corners i and i+1 and faces neighbour EDGE_DIR[i]
+const EDGE_DIR = [[0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1], [1, 0]];
+function corner(cx, cy, s, i) { const a = Math.PI / 180 * (60 * i - 30); return [cx + s * Math.cos(a), cy + s * Math.sin(a)]; }
+// remap: with y down, angle 60i-30: i=0 -> lower-right... compute neighbour per edge from geometry instead
+function edgeNeighbour(h, i) {
+  const [x0, y0] = toPix(h.q, h.r);
+  const a = Math.PI / 180 * (60 * i);           // edge midpoint direction (between corner i and i+1)
+  return pixToHex(x0 + HS * SQ3 * Math.cos(a), y0 + HS * SQ3 * Math.sin(a));
+}
+
+function crystal(x, y, s, pid, glow) {
+  if (glow) { const gr = g.createRadialGradient(x, y, 0, x, y, s * 2.4); gr.addColorStop(0, col(pid, 65, 0.5)); gr.addColorStop(1, col(pid, 65, 0)); g.fillStyle = gr; g.beginPath(); g.arc(x, y, s * 2.4, 0, 7); g.fill(); }
+  g.fillStyle = col(pid, 82); g.beginPath(); g.moveTo(x, y - s * 1.45); g.lineTo(x + s * .75, y - s * .1); g.lineTo(x, y + s); g.lineTo(x - s * .75, y - s * .1); g.closePath(); g.fill();
+  g.fillStyle = col(pid, 52); g.beginPath(); g.moveTo(x, y - s * 1.45); g.lineTo(x + s * .75, y - s * .1); g.lineTo(x, y + s); g.closePath(); g.fill();
+}
+function rune(x, y, rx, pid) { g.strokeStyle = col(pid, 65, .75); g.lineWidth = Math.max(1.5, rx * .07); g.beginPath(); g.ellipse(x, y, rx, rx * .4, 0, 0, 7); g.stroke(); g.setLineDash([rx * .12, rx * .16]); g.beginPath(); g.ellipse(x, y, rx * .75, rx * .3, 0, 0, 7); g.stroke(); g.setLineDash([]); }
+function core(p, pid, s, t) {
+  const [x, y] = p; const by = y + s * .35;
+  rune(x, by, s * 1.0, pid);
+  g.fillStyle = '#3a4048'; g.strokeStyle = '#22272d'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x - s * .62, by); g.lineTo(x - s * .45, by - s * .26); g.lineTo(x + s * .45, by - s * .26); g.lineTo(x + s * .62, by); g.closePath(); g.fill(); g.stroke();
+  const bob = Math.sin(t / 500 + pid) * s * .05;
+  crystal(x, y - s * .45 + bob, s * .38, pid, true);
+}
+function tower(p, pid, lvl, s, t) {
+  const [x, y] = p; const by = y + s * .4;
+  const gr = g.createRadialGradient(x, by, 0, x, by, s * 1.1); gr.addColorStop(0, col(pid, 60, .3)); gr.addColorStop(1, col(pid, 60, 0)); g.fillStyle = gr; g.beginPath(); g.ellipse(x, by, s * 1.1, s * .55, 0, 0, 7); g.fill();
+  rune(x, by, s * .62, pid);
+  g.fillStyle = '#4c535c'; g.strokeStyle = '#22272d'; g.lineWidth = 1.2;
+  g.beginPath(); g.moveTo(x - s * .26, by); g.lineTo(x - s * .24, by - s * .55); g.lineTo(x - s * .1, by - s * .62); g.lineTo(x + s * .05, by - s * .55); g.lineTo(x + s * .24, by - s * .6); g.lineTo(x + s * .26, by); g.closePath(); g.fill(); g.stroke();
+  g.fillStyle = col(pid, 70, .9); g.fillRect(x - s * .05, by - s * .38, s * .1, s * .14);
+  const fy = by - s * 1.05 + Math.sin(t / 520 + p[0]) * s * .05;
+  crystal(x, fy, s * .2, pid, true);
+  g.fillStyle = '#353b42'; g.beginPath(); g.moveTo(x - s * .3, fy - s * .32); g.quadraticCurveTo(x, fy - s * .7, x, fy - s * .78); g.quadraticCurveTo(x, fy - s * .7, x + s * .3, fy - s * .32); g.closePath(); g.fill();
+  for (let i = 0; i < lvl; i++) { g.fillStyle = '#ffd54f'; g.beginPath(); g.arc(x + (i - (lvl - 1) / 2) * s * .2, by + s * .3, s * .055, 0, 7); g.fill(); }
+}
+function camp(c, s) {
+  const [x, y] = toScreen(...toPix(c.q, c.r));
+  g.fillStyle = 'rgba(110,84,56,.35)'; g.beginPath(); g.ellipse(x, y + s * .3, s * 1.5, s * 1.1, 0, 0, 7); g.fill();
+  const tents = c.big ? [[-.9, -.4], [.9, -.4], [-.4, -.95], [.5, -.95], [0, -.2]] : [[-.7, -.3], [.7, -.3], [0, -.8]];
+  for (const [dx, dy] of tents) { const tx = x + dx * s, ty = y + dy * s, w = s * .42; g.fillStyle = c.big ? '#8a5444' : '#b08d5f'; g.beginPath(); g.moveTo(tx - w, ty + w * .55); g.lineTo(tx, ty - w * .75); g.lineTo(tx + w, ty + w * .55); g.closePath(); g.fill(); g.fillStyle = '#3b2418'; g.beginPath(); g.moveTo(tx - w * .22, ty + w * .55); g.lineTo(tx, ty); g.lineTo(tx + w * .22, ty + w * .55); g.closePath(); g.fill(); }
+  for (const [dx, dy] of [[-.3, .55], [.35, .6]]) { g.fillStyle = '#3a1d16'; g.strokeStyle = '#e5534b'; g.lineWidth = 2; g.beginPath(); g.arc(x + dx * s, y + dy * s, s * .2, 0, 7); g.fill(); g.stroke(); g.fillStyle = '#efe6d2'; g.beginPath(); g.arc(x + dx * s, y + dy * s - s * .05, s * .08, 0, 7); g.fill(); }
+  if (c.big) { g.fillStyle = '#ff7043'; g.beginPath(); g.arc(x + s * 1.2, y - s * 1.1, s * .15, 0, 7); g.fill(); g.fillStyle = '#ffab40'; g.font = `700 ${Math.round(s * .38)}px system-ui`; g.textAlign = 'left'; g.fillText('buff', x + s * 1.38, y - s * 1.0); }
+}
+function troop(u, s) {
+  const [x, y] = toScreen(u.x, u.y); const r = s * .3;
+  g.fillStyle = col(u.o, 30, .9); g.strokeStyle = col(u.o, 60); g.lineWidth = Math.max(1.5, s * .06);
+  g.beginPath();
+  if (u.k === 'soldier') g.roundRect(x - r, y - r, r * 2, r * 2, r * .35);
+  else if (u.k === 'archer') { for (let i = 0; i < 3; i++) { const a = -Math.PI / 2 + i * 2 * Math.PI / 3; g.lineTo(x + Math.cos(a) * r * 1.5, y + r * .2 + Math.sin(a) * r * 1.5); } g.closePath(); }
+  else g.arc(x, y, r * 1.05, 0, 7);
+  g.fill(); g.stroke();
+  g.fillStyle = u.k === 'medic' ? '#f48fb1' : u.k === 'archer' ? '#4fc3f7' : '#a5d6a7';
+  if (u.k === 'medic') { g.fillRect(x - r * .5, y - r * .15, r, r * .3); g.fillRect(x - r * .15, y - r * .5, r * .3, r); }
+  else { g.beginPath(); g.arc(x, y, r * .35, 0, 7); g.fill(); }
+}
+
+function frame(t) {
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  g.fillStyle = '#10151c'; g.fillRect(0, 0, W, H);
+  const s = cam.size;
+  // 1. every hex: a faint outline (the board)
+  for (const h of hexes.values()) {
+    const [x, y] = toScreen(...toPix(h.q, h.r));
+    if (x < -s * 2 || y < -s * 2 || x > W + s * 2 || y > H + s * 2) continue;
+    hexPath(x, y, s * HS, 1);
+    if (h.owner) { g.fillStyle = col(h.owner, 50, h.owner === ME ? 0.2 : 0.15); g.fill(); }
+    g.strokeStyle = h.owner ? col(h.owner, 60, 0.18) : 'rgba(255,255,255,0.05)';
+    g.lineWidth = 1; g.stroke();
+  }
+  // 2. borders: each hex edge facing a different owner, drawn just inside the land
+  for (const h of hexes.values()) {
+    if (!h.owner) continue;
+    const [x, y] = toScreen(...toPix(h.q, h.r));
+    for (let i = 0; i < 6; i++) {
+      const n = edgeNeighbour(h, i);
+      if (n && n.owner === h.owner) continue;
+      const inset = h.owner === ME ? 2.2 : 1.9;
+      const [ax, ay] = corner(x, y, s * HS - inset, i), [bx, by] = corner(x, y, s * HS - inset, i + 1);
+      g.strokeStyle = col(h.owner, 65, h.owner === ME ? 1 : 0.9); g.lineWidth = h.owner === ME ? 3 : 2.5; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke();
+    }
+  }
+  // 3. buyable hexes near the cursor, the drag, the hovered hex
+  const pending = drag ? drag.set : null;
+  if (hover) for (const h of hexes.values()) {
+    const d = hexDist(h, hover); if (d > 4 || !canBuy(h, pending)) continue;
+    const [x, y] = toScreen(...toPix(h.q, h.r));
+    hexPath(x, y, s * HS, 4); g.strokeStyle = `rgba(126,231,135,${0.75 * (1 - d / 5)})`; g.lineWidth = 2; g.setLineDash([5, 4]); g.stroke(); g.setLineDash([]);
+  }
+  if (drag) for (const h of drag.list) { const [x, y] = toScreen(...toPix(h.q, h.r)); hexPath(x, y, s * HS, 2); g.fillStyle = 'rgba(255,213,79,0.45)'; g.fill(); }
+  if (hover && canBuy(hover, pending)) { const [x, y] = toScreen(...toPix(hover.q, hover.r)); hexPath(x, y, s * HS, 2); g.fillStyle = cost(myLand()) > gold ? 'rgba(248,81,73,.3)' : 'rgba(126,231,135,.35)'; g.fill(); }
+  // claim pop
+  for (let i = fx.length - 1; i >= 0; i--) { const f = fx[i], p = (t - f.t) / 500; if (p > 1) { fx.splice(i, 1); continue; } const [x, y] = toScreen(...toPix(f.h.q, f.h.r)); hexPath(x, y, s * HS * (1 + .25 * (1 - p)), 0); g.strokeStyle = `rgba(255,255,255,${.8 * (1 - p)})`; g.lineWidth = 2; g.stroke(); }
+  // 4. names across land, camps, buildings, troops
+  for (const [id, p] of Object.entries(PLAYERS)) {
+    if (+id === ME) continue;
+    const [x, y] = toScreen(...toPix(p.core.q, p.core.r + 1.1));
+    g.font = `800 ${Math.round(s * .75)}px system-ui`; g.textAlign = 'center'; g.letterSpacing = `${s * .1}px`;
+    g.fillStyle = col(+id, 72, .4); g.fillText(p.name.toUpperCase(), x, y); g.letterSpacing = '0px';
+  }
+  for (const c of camps) camp(c, s);
+  const things = [...towers.map((tw) => ({ y: toPix(tw.q, tw.r)[1], d: () => tower(toScreen(...toPix(tw.q, tw.r)), tw.o, tw.lvl, s, t) })),
+    ...Object.entries(PLAYERS).map(([id, p]) => ({ y: toPix(p.core.q, p.core.r)[1], d: () => core(toScreen(...toPix(p.core.q, p.core.r)), +id, s * 1.25, t) }))];
+  things.sort((a, b) => a.y - b.y).forEach((o) => o.d());
+  for (const u of troops) troop(u, s);
+  for (const [id, p] of Object.entries(PLAYERS)) { const [x, y] = toScreen(...toPix(p.core.q, p.core.r)); g.font = `700 ${Math.round(Math.max(11, s * .45))}px system-ui`; g.textAlign = 'center'; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.8)'; const n = +id === ME ? `${p.name} (you)` : p.name; g.strokeText(n, x, y - s * 1.35); g.fillStyle = '#fff'; g.fillText(n, x, y - s * 1.35); }
+  // price tag by the cursor
+  if (hover && canBuy(hover, pending) && !drag) { const [x, y] = toScreen(...toPix(hover.q, hover.r)); const c = cost(myLand()); g.font = '700 12px system-ui'; g.textAlign = 'left'; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.85)'; g.strokeText(`Claim: ${c}g`, x + s * HS * .9, y + 4); g.fillStyle = c > gold ? '#ffa198' : '#7ee787'; g.fillText(`Claim: ${c}g`, x + s * HS * .9, y + 4); }
+  if (drag && drag.list.length) { const h = drag.list[drag.list.length - 1]; const [x, y] = toScreen(...toPix(h.q, h.r)); let tot = 0; for (let i = 0; i < drag.list.length; i++) tot += cost(myLand() + i); g.font = '700 12px system-ui'; g.textAlign = 'left'; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.85)'; const tx = `+${drag.list.length} hexes: ${tot}g`; g.strokeText(tx, x + s * HS * .9, y + 4); g.fillStyle = '#ffd54f'; g.fillText(tx, x + s * HS * .9, y + 4); }
+  requestAnimationFrame(frame);
+}
+// start centred between my base and the rivals
+cam.x = toPix(0, 0)[0]; cam.y = toPix(0, 0)[1];
+ui();
+requestAnimationFrame(frame);
+window.HEX = { hexes, toScreen, toPix, key, cam, buyable, commit, ME, get gold() { return gold; }, set gold(v) { gold = v; } };
+</script>
+</body>
+</html>

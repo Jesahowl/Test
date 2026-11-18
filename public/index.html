@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Territory Siege</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <!-- top: one bar with you, the round and the players -->
+    <div id="topbar">
+      <div id="stats"></div>
+      <div id="round" class="hidden"></div>
+      <div id="leaderboard"></div>
+      <button id="help-toggle" class="round-btn" data-tip="Controls and how to play <kbd>?</kbd>">?</button>
+      <button id="menu-toggle" class="round-btn" data-tip="Menu <kbd>Esc</kbd>" aria-label="Menu">☰</button>
+    </div>
+    <div id="feed"></div>
+    <div id="spec-bar" class="panel"></div>
+
+    <!-- what you clicked (bottom right), and first-game tips (bottom left, above the map) -->
+    <div id="selection" class="panel hidden"></div>
+    <div id="tips" class="panel hidden"></div>
+    <div id="tutorial" class="panel hidden"></div>
+
+    <!-- bottom centre: the dock, and the drawer it opens -->
+    <div id="bottom">
+      <div id="toast"></div>
+      <div id="order-info" class="pill"></div>
+      <div id="drawer" class="panel hidden">
+        <section class="dr" data-dr="build">
+          <div class="dr-head"><b>Build</b><span class="muted">Pick one, then click your land · <kbd>Esc</kbd> cancels</span></div>
+          <div class="tiles">
+            <button id="tower-button" class="tile"></button>
+            <button id="barracks-button" class="tile"></button>
+            <button id="trade-button" class="tile"></button>
+            <button id="workshop-button" class="tile"></button>
+            <button id="wall-button" class="tile"></button>
+            <button id="land-button" class="tile"></button>
+          </div>
+        </section>
+        <section class="dr" data-dr="squads">
+          <div class="dr-head"><b>Squads</b><span id="squad-hint" class="muted"></span></div>
+          <div id="army" class="upgrades"><span class="h" data-tip="Troop upgrades: more HP and damage for that troop type in every squad. They cost gold and iron, and apply to troops as they respawn.">Upgrades</span></div>
+          <div id="squads"></div>
+          <div class="squad-foot">
+            <span id="alive"></span>
+            <div class="squad-btns">
+              <button id="squad-all" data-tip="Orders go to every squad <kbd>Q</kbd>">All squads <kbd>Q</kbd></button>
+              <button id="defend-home" data-tip="Every squad goes home to guard your core <kbd>H</kbd>">🛡 All home <kbd>H</kbd></button>
+            </div>
+          </div>
+        </section>
+        <section class="dr" data-dr="workers">
+          <div class="dr-head"><b>Workers</b><span class="muted" id="workers-hint"></span></div>
+          <div id="jobs"></div>
+        </section>
+        <section class="dr" data-dr="diplo">
+          <div class="dr-head"><b>Diplomacy</b><span class="muted" id="diplo-hint"></span></div>
+          <div id="diplo"></div>
+        </section>
+      </div>
+      <div id="dock">
+        <button class="dock-btn" data-dr="build" data-tip="Build towers, barracks, trade posts, walls and land <kbd>Z</kbd>"><i class="di">🔨</i>Build<kbd>Z</kbd></button>
+        <button id="squad-timer" data-dr="squads" data-tip="Your squads at a glance"></button>
+        <button class="dock-btn" data-dr="squads" data-tip="Your squads: their troops, stance and orders, and troop upgrades <kbd>C</kbd>"><i class="di">🚩</i>Squads<kbd>C</kbd><span class="badge hot" id="squads-badge" data-tip="Free troop slots: add troops to a squad"></span></button>
+        <button class="dock-btn" data-dr="workers" data-tip="Workers: what they build, repair, chop and farm <kbd>J</kbd>"><i class="di">⛏</i>Workers<kbd>J</kbd><span class="badge" id="workers-badge"></span></button>
+        <button class="dock-btn" data-dr="diplo" data-tip="Alliances: offer, accept or break <kbd>P</kbd>"><i class="di">🤝</i>Diplomacy<kbd>P</kbd><span class="badge hot" id="diplo-badge"></span></button>
+      </div>
+    </div>
+
+    <!-- bottom left: map -->
+    <div id="reconnect" class="hidden">⚠ Connection lost: reconnecting… <span class="muted">(your base carries on meanwhile)</span></div>
+    <div id="minimap-wrap"><canvas id="minimap" width="280" height="140"></canvas>
+      <button id="ping-btn" data-tip="<span class='t'>Ping <kbd>Y</kbd></span>Click here, then click the map: pick ⚔ attack, 🛡 defend, ⚠ danger or 👁 look for your allies (they see it on the map and minimap). Also Alt+click.">📍 Ping</button></div>
+  </div>
+
+  <!-- controls window (? key) -->
+  <div id="pause" class="overlay hidden">
+    <div class="card pause-card" role="dialog" aria-labelledby="pause-title">
+      <h2 id="pause-title">Menu</h2>
+      <p class="tag">The game keeps running while this is open.</p>
+      <div id="room-info" class="room-info"></div>
+      <div class="sound-set">
+        <div class="sound-head"><b>Sound</b><label class="mute"><input type="checkbox" id="snd-mute"> Mute all <kbd>M</kbd></label></div>
+        <label class="sl"><span>Master</span><input type="range" id="snd-master" min="0" max="100"><i id="snd-master-v"></i></label>
+        <label class="sl"><span>Music</span><input type="range" id="snd-music" min="0" max="100"><i id="snd-music-v"></i></label>
+        <label class="sl"><span>Effects</span><input type="range" id="snd-sfx" min="0" max="100"><i id="snd-sfx-v"></i></label>
+      </div>
+      <div class="pause-btns">
+        <button id="pause-resume">Resume <kbd>Esc</kbd></button>
+        <button id="pause-help" class="secondary">How to play</button>
+        <button id="pause-leave" class="danger">Leave game</button>
+      </div>
+    </div>
+  </div>
+  <div id="help" class="overlay hidden">
+    <div class="card wide help-card">
+      <button class="close" data-tip="Close <kbd>Esc</kbd>">×</button>
+      <h2>How to play</h2>
+      <div class="how-grid">
+        <div><b>🏰 Army</b>Your core raises squad 1. Each <b>barracks</b> raises another squad (up to 4); upgrade it for more troops.</div>
+        <div><b>🎯 Orders</b>Pick a squad, then <b>right-click</b> a tower, core or camp. Fallen troops rejoin; a squad wiped out takes a while.</div>
+        <div><b>🗺 Land</b>Buy hexes at your border with gold. More land, more gold. <b>Towers</b> guard it.</div>
+        <div><b>⛳ Objectives</b>Landmarks between the bases (Gold Mine, Watchtower, Shrine of War, Healing Spring, Barracks Ruins). Stand troops in one's hex to take it; it works while you hold it (3 at most).</div>
+        <div><b>🏆 Win</b>Break enemy cores. The <b>last core standing</b> wins (or the most land when time runs out).</div>
+      </div>
+      <h3 class="touch-only">Touch</h3>
+      <div class="keys touch-only">
+        <div><kbd>Tap</kbd><span>Pick a troop's squad, a worker or a building; place what you're building</span></div>
+        <div><kbd>Press &amp; hold</kbd><span>Send what you picked there (the right-click): a ring fills, then it's sent</span></div>
+        <div><kbd>Drag</kbd><span>Move the map (placing land or walls: drag along your border)</span></div>
+        <div><kbd>Pinch</kbd><span>Zoom in and out</span></div>
+        <div><kbd>Double tap</kbd><span>Outside your land: grow it all round</span></div>
+        <div><kbd>Dock</kbd><span>Build, Squads (with upgrades, All squads, All home), Workers, Allies: everything has a button</span></div>
+      </div>
+      <h3 class="mouse-only">Controls</h3>
+      <div class="key-groups mouse-only">
+        <div><h4>Squads</h4>
+          <div><kbd>1</kbd>–<kbd>4</kbd><span>pick a squad (twice: find it)</span></div>
+          <div><kbd>Click</kbd> a troop<span>pick its squad (<kbd>Shift</kbd>: add)</span></div>
+          <div><kbd>Q</kbd><span>all squads</span></div>
+          <div><kbd>Right-click</kbd><span>send them / hold a spot</span></div>
+          <div><kbd>G</kbd><span>change stance</span></div>
+          <div><kbd>F</kbd><span>formation</span></div>
+          <div><kbd>H</kbd><span>everyone home</span></div>
+          <div><kbd>C</kbd><span>Squads &amp; upgrades</span></div>
+        </div>
+        <div><h4>Building</h4>
+          <div><kbd>Z</kbd><span>Build menu</span></div>
+          <div><kbd>B</kbd><span>tower</span></div>
+          <div><kbd>R</kbd><span>barracks (a squad)</span></div>
+          <div><kbd>K</kbd><span>workshop (+2 workers)</span></div>
+          <div><kbd>L</kbd><span>buy land</span></div>
+          <div><kbd>Double-click</kbd><span>grow land all round</span></div>
+          <div><kbd>U</kbd> / <kbd>Del</kbd><span>upgrade / sell</span></div>
+        </div>
+        <div><h4>Workers</h4>
+          <div><kbd>J</kbd><span>Workers: plans and counts</span></div>
+          <div><kbd>Click</kbd><span>pick a worker</span></div>
+          <div><kbd>Drag</kbd><span>box-pick several</span></div>
+          <div><kbd>Right-click</kbd><span>send to a site, forest or ore</span></div>
+          <div><kbd>.</kbd><span>next idle worker</span></div>
+        </div>
+        <div><h4>Map &amp; more</h4>
+          <div><kbd>WASD</kbd><span>move (or right-drag)</span></div>
+          <div><kbd>Wheel</kbd><span>zoom</span></div>
+          <div><kbd>Space</kbd><span>your base</span></div>
+          <div><kbd>Y</kbd> / <kbd>Alt</kbd>+click<span>ping your allies</span></div>
+          <div><kbd>P</kbd><span>Diplomacy</span></div>
+          <div><kbd>M</kbd><span>mute</span></div>
+          <div><kbd>Esc</kbd><span>cancel / menu</span></div>
+          <div><kbd>?</kbd><span>this window</span></div>
+        </div>
+      </div>
+      <button id="tips-reset" class="link">Show the first-game tips again</button>
+    </div>
+  </div>
+
+  <div id="tip"></div>
+
+  <div id="menu" class="overlay">
+    <div class="card menu-card">
+      <div class="logo"><canvas id="logo" width="72" height="72"></canvas></div>
+      <h1>Territory <span>Siege</span></h1>
+      <p class="tag">Raise your squads. Take their towers. Break their core.</p>
+      <div id="invite" class="invite hidden"></div>
+      <div class="join">
+        <input id="name" maxlength="16" placeholder="Your name" autocomplete="off">
+        <button id="play" data-tip="Join the public lobby: the game starts once players have gathered (bots fill the empty seats)">Play</button>
+      </div>
+      <button id="tutorial-game" class="secondary" data-tip="A guided first game against one easy opponent: learn the game a step at a time">🎓 New here? <b>Play the tutorial</b></button>
+      <div class="pub-list">
+        <div class="pub-head"><b>🌐 Public games</b><span id="pub-online" class="muted"></span></div>
+        <div id="pub-rows"><div class="muted pub-empty">Looking for games…</div></div>
+      </div>
+      <div class="private-row">
+        <button id="create" class="secondary" data-tip="Make a room only people with the code can join. You choose the bots and start when ready.">🔒 Create private room</button>
+        <div class="code-join">
+          <input id="code" maxlength="5" placeholder="Room code" autocomplete="off" spellcheck="false">
+          <button id="join-code" class="secondary">Join</button>
+        </div>
+      </div>
+      <button id="test-game" class="secondary hidden" data-tip="Start a private game in test mode straight away: infinite gold and wood, two bots">🛠 Test game <span class="muted">(infinite gold &amp; wood)</span></button>
+      <div id="conn"></div>
+      <div class="how-grid">
+        <div><b>🏰 Squads</b>Each <b>barracks</b> raises a squad (up to 4). Fallen troops <b>rejoin one by one</b>; a squad wiped out comes back after a cooldown.</div>
+        <div><b>🎯 Orders</b>Click a squad, then <b>right-click</b> a target. Set its <b>stance</b>.</div>
+        <div><b>🗺 Land</b>Claim <b>hexes</b> of land with gold. Land means more gold. <b>Towers</b> defend it.</div>
+        <div><b>🏆 Win</b>Be the <b>last core standing</b>. Rounds last about 20–25 minutes.</div>
+      </div>
+      <p class="foot">Bots fill the server, so you can play alone. Press <kbd>?</kbd> in game for controls.</p>
+    </div>
+  </div>
+
+  <div id="lobby" class="overlay hidden">
+    <div class="card lobby-card">
+      <div class="lobby-tag" id="lobby-tag">🔒 Private room</div>
+      <div class="priv-only">
+        <div id="lobby-code" class="room-code" data-tip="Friends type this code on the menu to join"></div>
+        <button id="copy-link" class="secondary small">🔗 Copy invite link</button>
+      </div>
+      <div class="pub-only">
+        <h2 class="lobby-title">Gathering players</h2>
+        <div id="lobby-timer" class="lobby-timer"></div>
+        <div id="lobby-bar" class="lobby-bar"><i></i></div>
+      </div>
+      <p id="lobby-last" class="muted"></p>
+      <h3>Players <span id="lobby-count"></span></h3>
+      <div id="lobby-members"></div>
+      <h3 class="priv-only">Bots</h3>
+      <div id="lobby-bots" class="priv-only"></div>
+      <h3 class="priv-only">Game settings</h3>
+      <div id="lobby-rules" class="priv-only"></div>
+      <p id="lobby-hint" class="muted"></p>
+      <div class="choices">
+        <button id="lobby-leave" class="secondary">Leave room</button>
+        <button id="lobby-start" class="priv-only">▶ Start round</button>
+        <button id="lobby-ready" class="pub-only">✓ Ready</button>
+      </div>
+      <div id="lobby-err" class="form-err"></div>
+    </div>
+  </div>
+
+  <div id="death" class="overlay hidden">
+    <div class="card">
+      <div class="death-icon">💥</div>
+      <h2>Your core has fallen</h2>
+      <p id="death-by"></p>
+      <p id="death-spoils"></p>
+      <div id="death-stats"></div>
+      <div id="death-gold"></div>
+      <p class="out">You're out of this round. The last core standing wins.</p>
+      <div class="choices">
+        <button id="spectate" class="secondary">👁 Spectate</button>
+        <button id="again">Join next round</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="roundover" class="overlay hidden">
+    <div class="card wide">
+      <div class="trophy">🏆</div>
+      <h2 id="ro-title"></h2>
+      <p id="ro-sub"></p>
+      <table id="ro-table"></table>
+      <p id="ro-next"></p>
+    </div>
+  </div>
+
+  <script src="shared/config.js"></script>
+  <script src="shared/vision.js"></script>
+  <script src="shared/hex.js"></script>
+  <script src="shared/terrain.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

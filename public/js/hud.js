@@ -1,0 +1,392 @@
+// HUD panels: player card, wave info, leaderboard, feed and selection panel.
+
+import { wallPanel } from './walls.js';
+import { orderAt, squadsLabel, updateSquadsUi } from './bar.js';
+import { allyButton, isAlly, offersHtml } from './diplomacy.js';
+import { bindTradePanel, tradeInfo } from './trade.js';
+import { sendMsg } from './net.js';
+import { escapeHtml, updateRound } from './screens.js';
+import { S, $, C, colorOf, feed, players, selUnits, terr, UNIT_KEYS } from './state.js';
+import { targetName } from './targets.js';
+import { tipDone, updateTips } from './tips.js';
+import { iconURL, refreshTip } from './ui.js';
+import { updateDock } from './dock.js';
+import { allSquads } from './squads.js';
+import { updateWorkersPanel } from './workforce.js';
+import { updateTutorial } from './tutorial.js';
+import { touchOnly } from './touch.js';
+
+S.hudTimer = 0;
+
+// The dock's squads at a glance: a little ring per squad. Green: full strength. Blue: reinforcing
+// (the ring is how full it is). Red: wiped out (the seconds left, the ring filling as it comes back).
+// Gold: newly raised, mustering. Dim: no barracks for it yet.
+function drawSquadTimer(squads) {
+  const el = $('squad-timer');
+  const R = 10.5;
+  const LEN = 2 * Math.PI * R;
+  const ring = (frac, colour) => `<svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="${R}" fill="none" stroke="#273041" stroke-width="2.6"/>`
+    + `<circle cx="13" cy="13" r="${R}" fill="none" stroke="${colour}" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="${(LEN * Math.max(0, Math.min(1, frac))).toFixed(1)} ${LEN.toFixed(1)}"/></svg>`;
+  const lines = [];
+  let html = '';
+  for (const q of squads) {
+    const alive = q.units.length;
+    let cls;
+    let inner = q.num;
+    let frac;
+    let colour;
+    if (!q.cap || !q.size) {
+      cls = 'none';
+      frac = 0;
+      colour = '#273041';
+      lines.push(`Squad ${q.num}: no barracks yet`);
+    } else if (q.respawnIn > 0) {
+      const muster = q.respawnFor === C.SQUAD_RAISE_DELAY;
+      cls = muster ? 'muster' : 'wiped';
+      inner = Math.ceil(q.respawnIn);
+      frac = 1 - q.respawnIn / (q.respawnFor || 1);
+      colour = muster ? '#ffd54f' : '#f85149';
+      lines.push(muster ? `Squad ${q.num}: mustering, out in ${inner}s` : `Squad ${q.num}: <b style="color:#ffa198">wiped out</b>, back in ${inner}s`);
+    } else if (alive < q.size) {
+      cls = 'trickle';
+      frac = alive / q.size;
+      colour = '#58a6ff';
+      lines.push(`Squad ${q.num}: ${alive}/${q.size}, reinforcing (next in ${Math.ceil(q.trickleIn) || C.SQUAD_TRICKLE}s)`);
+    } else {
+      cls = 'full';
+      frac = 1;
+      colour = '#3fb950';
+      lines.push(`Squad ${q.num}: full strength (${q.size})`);
+    }
+    html += `<span class="sr ${cls}">${ring(frac, colour)}<b>${inner}</b></span>`;
+  }
+  if (el.dataset.html !== html) {
+    el.dataset.html = html;
+    el.innerHTML = html;
+  }
+  el.dataset.tip = `<span class="t">Squads <kbd>C</kbd></span>${lines.join('<br>')}<br><span class="m">Fallen troops rejoin one every ${C.SQUAD_TRICKLE}s. A squad wiped out comes back all at once after ${C.SQUAD_WIPE_BASE}s + ${C.SQUAD_WIPE_PER_TROOP}s per troop.</span>`;
+}
+
+function updateHud() {
+  if (S.spectating) {
+    updateBoards();
+    const t = players.get(S.specTarget);
+    const bar = $('spec-bar');
+    const humans = [...players.values()].some((q) => !q.isBot);
+    const priv = S.room && !S.room.pub;
+    const pub = S.watchingGame || (S.room && S.room.pub);
+    const btn = priv ? 'Leave room' : pub ? 'Find a game' : S.queued ? '✓ Joining next round' : humans ? 'Join next round' : 'New round';
+    const key = `${t ? t.name : ''}:${S.specFollow}:${btn}`;
+    if (bar.dataset.key !== key) {
+      bar.dataset.key = key;
+      bar.innerHTML = `<span>👁 Spectating${t ? ` <b>${escapeHtml(t.name)}</b>` : ''}${t && !S.specFollow ? ' <span class="muted">(free camera)</span>' : ''}</span>
+        <span class="muted">Tab: next player · Space: follow · WASD: move</span>
+        <button id="spec-new"${S.queued && !S.room && !pub ? ' disabled' : ''}>${btn}</button>`;
+      // (a private room: leave it; a public game: on to the open lobby)
+      $('spec-new').onclick = () => sendMsg(priv ? { t: 'leave' } : { t: 'join', name: S.lastName || 'Player' });
+    }
+    updateRound();
+    return;
+  }
+  if (!S.myId) return;
+  const p = players.get(S.myId);
+  if (!p || !S.me) return;
+  const gold = S.me.gold;
+  const sorted = [...players.values()].sort((a, b) => b.territory - a.territory);
+  const rank = sorted.findIndex((q) => q.id === S.myId) + 1;
+  const myTroops = [...S.units.values()].filter((u) => u.owner === S.myId && u.kind !== 'caravan' && u.kind !== 'worker').reduce((n, u) => n + C.slotsOf(u.kind), 0);
+  const armySize = S.me.armySize;
+  updateRound();
+  updateStats(p, gold, rank, sorted.length);
+
+  // respawns: the dock's squad rings (each squad's card shows its own)
+  const squads = allSquads();
+  const used = squads.reduce((n, q) => n + UNIT_KEYS.reduce((m, k) => m + q.mix[k] * C.slotsOf(k), 0), 0); // army slots taken
+  drawSquadTimer(squads);
+  $('alive').innerHTML = `Troops alive <b>${myTroops}</b> / ${armySize}`;
+
+  const who = selUnits.size ? `${selUnits.size} picked troop${selUnits.size === 1 ? '' : 's'}` : squadsLabel();
+  const orderHtml = selUnits.size
+    ? `<span class="def">${who}</span><span class="hint">a number moves them to that squad · N makes a new squad · right-click sends them</span>`
+    : `<span class="def">🎯 ${who}</span><span class="hint">${touchOnly ? 'press &amp; hold' : 'right-click'} a target to send ${!S.allSquads && S.selSquads.size === 1 ? 'it' : 'them'}${S.allSquads ? ` · ${touchOnly ? 'tap' : 'click'} a troop to pick its squad` : touchOnly ? '' : ' · Q for all squads'}</span>`;
+  if ($('order-info').dataset.html !== orderHtml) {
+    $('order-info').dataset.html = orderHtml;
+    $('order-info').innerHTML = orderHtml;
+  }
+  // (the hint only while it helps: with troops or a squad picked, and for your first few orders)
+  $('order-info').classList.toggle('hidden', !selUnits.size && S.allSquads && (S.ordersSent || 0) >= 3);
+
+  updateBoards();
+  updateDock(Math.max(0, armySize - used), (S.me.offersIn || []).length);
+  updateTowerAndArmy(gold);
+  updateSelectionPanel(gold);
+  updateTips();
+  updateTutorial();
+  refreshTip();
+}
+
+// The player card (built once; numbers updated in place so tooltips keep working).
+function buildStats() {
+  $('stats').innerHTML = `
+    <span class="wood-row" data-tip="<span class='t'>Wood</span>Your workers chop it from forests next to your land and carry it to the core or a workshop. Towers, barracks, trade posts, workshops and walls need it."><i class="ico-wood"></i><span class="wood"></span></span>
+    <span class="iron-row" data-tip="<span class='t'>Iron</span>Your workers mine it from iron ore deposits (rust-red rocks) and carry it home. Troop upgrades need it, as well as gold."><i class="ico-iron"></i><span class="iron"></span></span>
+    <span class="gold-row" data-tip="<span class='t'>Gold</span>Earned from land (a trickle) and mostly from fighting: troop kills, jungle camps, towers and cores. Spend it on buildings, land and troop upgrades.">
+      <span class="coin"></span><span class="gold"></span><span class="income"></span></span>
+    <span class="meter" data-tip="Your core. If it falls, you're out of the round and whoever broke it takes your gold and troops."><i></i><span></span></span>
+    <span class="chip shield hidden" data-tip="Spawn protection: your core and buildings can't be damaged yet">🛡 <b></b></span>
+    <span class="chip buff hidden" data-tip="Buff from defeating a barbarian Warlord: your troops deal +${Math.round(C.JUNGLE_BUFF_DAMAGE * 100)}% damage and take ${Math.round(C.JUNGLE_BUFF_ARMOR * 100)}% less">🔥 <b></b></span>`;
+}
+
+// (your land, rank and kills live in the standings on the right: the left is what you spend)
+function updateStats(p, gold, rank, n) {
+  const el = $('stats');
+  const test = !!(S.round && S.round.test); // test mode: gold and wood never run out
+  el.querySelector('.gold').textContent = test ? '∞' : gold.toLocaleString();
+  el.querySelector('.wood').textContent = test ? '∞' : (S.me.wood || 0).toLocaleString();
+  el.querySelector('.iron').textContent = test ? '∞' : (S.me.iron || 0).toLocaleString();
+  el.classList.toggle('test-mode', test);
+  el.querySelector('.income').textContent = `+${C.income(p.territory).toFixed(1)}/s`;
+  const sh = el.querySelector('.chip.shield');
+  sh.classList.toggle('hidden', !p.shield);
+  sh.querySelector('b').textContent = `${p.shield}s`;
+  const bf = el.querySelector('.chip.buff');
+  bf.classList.toggle('hidden', !p.buff);
+  bf.querySelector('b').textContent = `${p.buff}s`;
+  const frac = p.hp / p.maxHp;
+  const bar = el.querySelector('.meter i');
+  bar.style.width = `${100 * frac}%`;
+  bar.className = frac > 0.5 ? '' : frac > 0.25 ? 'mid' : 'low';
+  el.querySelector('.meter span').textContent = `Core ${Math.round(100 * frac)}%`;
+  el.querySelector('.meter').dataset.tip = `<span class='t'>Core ${p.hp.toLocaleString()} / ${p.maxHp.toLocaleString()}</span>If it falls, you're out of the round and whoever broke it takes your gold and troops.`;
+}
+
+// Who q is allied with, in words (everyone can see alliances).
+function allyMarks(q) {
+  if (!q.allies || !q.allies.length) return '';
+  const names = q.allies.map((id) => (id === S.myId ? 'you' : escapeHtml(players.get(id)?.name || '?'))).join(' and ');
+  return ` <span class="allied">· allied with ${names}</span>`;
+}
+
+// Player list (in the top bar), the Diplomacy drawer and the kill feed (shown to players and spectators).
+const TOP_PLAYERS = 8;
+function updateBoards() {
+  const sorted = [...players.values()].sort((a, b) => b.territory - a.territory);
+  const focus = S.spectating ? S.specTarget : S.myId;
+  const shown = sorted.slice(0, TOP_PLAYERS);
+  if (focus && !shown.some((q) => q.id === focus)) {
+    const f = sorted.find((q) => q.id === focus);
+    if (f) shown[shown.length - 1] = f;
+  }
+  const lb = shown.map((q) => {
+    const pos = sorted.indexOf(q) + 1;
+    const tip = `<span class='t'>#${pos} ${escapeHtml(q.name)}${q.isBot ? ' (bot)' : ''}${q.id === S.myId ? ' (you)' : ''}</span>${q.territory} land · ${q.kills} kills${q.allies && q.allies.length ? ` · allied with ${escapeHtml(q.allies.map((id) => players.get(id)?.name || '?').join(', '))}` : ''}${q.buff ? ' · 🔥 empowered' : ''}${q.shield ? ' · 🛡 protected' : ''}`;
+    return `<span class="pl${q.id === focus ? ' me' : ''}${isAlly(q.id) ? ' ally' : ''}" data-tip="${tip}"><span class="dot" style="background:${colorOf(q.id, 55)}"></span>`
+      + `<span class="n">${q.id === S.myId ? 'You' : escapeHtml(q.name)}</span>${isAlly(q.id) ? '<span class="hs">🤝</span>' : ''}${q.buff ? '🔥' : ''}<span class="v">${q.territory}</span></span>`;
+  }).join('') + (sorted.length > shown.length ? `<span class="pl more">+${sorted.length - shown.length}</span>` : '');
+  const lbEl = $('leaderboard');
+  if (lbEl.dataset.html !== lb) {
+    lbEl.dataset.html = lb;
+    lbEl.innerHTML = lb;
+  }
+  if (S.drawer === 'diplo') updateDiplomacy(sorted);
+  const now = performance.now();
+  $('feed').innerHTML = feed.filter((f) => now - f.born < 9000).map((f) =>
+    `<div style="opacity:${Math.min(1, (9000 - (now - f.born)) / 1500)}">${escapeHtml(f.text)}</div>`).join('');
+}
+
+// The Diplomacy drawer: every player with their alliance button, and offers waiting for an answer.
+function updateDiplomacy(sorted) {
+  const top = Math.max(1, ...sorted.map((q) => q.territory));
+  const mine = (players.get(S.myId)?.allies || []).length;
+  $('diplo-hint').textContent = `${mine} of ${C.MAX_ALLIES} allies · allies don't fight and see each other's bases`;
+  const html = offersHtml() + '<div class="rows">' + sorted.map((q, i) =>
+    `<div class="row${q.id === S.myId ? ' me' : ''}"><span class="bg" style="width:${(100 * q.territory) / top}%;background:${colorOf(q.id, 55)}"></span>`
+    + `<span class="pos">${i + 1}</span><span class="dot" style="background:${colorOf(q.id, 55)}"></span>`
+    + `<span class="n">${escapeHtml(q.name)}${q.isBot ? ' <span class="muted">· bot</span>' : ''}${q.buff ? ' 🔥' : ''}${q.shield ? ' 🛡' : ''}${allyMarks(q)}</span>${allyButton(q)}<span class="v">${q.territory}</span></div>`).join('') + '</div>';
+  const el = $('diplo');
+  if (el.dataset.html !== html) {
+    el.dataset.html = html;
+    el.innerHTML = html;
+  }
+}
+
+// Build buttons (tower, barracks, land), squads and the army panel.
+function updateTowerAndArmy(gold) {
+  updateSquadsUi();
+  const wood = S.me.wood || 0;
+  // a building tile: lit while placing it, dimmed when you can't afford it (or have the most)
+  const tile = (id, kind, goldCost, woodCost, count, max) => {
+    const el = $(id);
+    const maxed = max !== undefined && count >= max;
+    el.classList.toggle('active', S.buildKind === kind);
+    el.classList.toggle('poor', maxed || gold < goldCost || wood < woodCost);
+    const html = maxed ? 'max' : `${goldCost}g${woodCost ? ` <span class="wd${wood < woodCost ? ' short' : ''}">🪵${woodCost}</span>` : ''}`;
+    const c = el.querySelector('.cost');
+    if (c.innerHTML !== html) c.innerHTML = html;
+    c.classList.toggle('max', maxed);
+    if (max !== undefined) el.querySelector('.count').textContent = `${count}/${max}`;
+  };
+  const mine = (kind) => [...S.towers.values()].filter((t) => t.owner === S.myId && t.kind === kind).length;
+  tile('tower-button', 'tower', C.TOWERS.tower.cost, C.TOWERS.tower.wood);
+  const barracks = mine('barracks');
+  tile('barracks-button', 'barracks', C.buildCost('barracks', barracks), C.TOWERS.barracks.wood, barracks, C.MAX_BARRACKS);
+  tile('trade-button', 'trade', C.TOWERS.trade.cost, C.TOWERS.trade.wood, mine('trade'), C.MAX_TRADE_POSTS);
+  tile('workshop-button', 'workshop', C.TOWERS.workshop.cost, C.TOWERS.workshop.wood, mine('workshop'), C.MAX_WORKSHOPS);
+  tile('wall-button', 'wall', C.WALL_COST, 0);
+  const lb = $('land-button');
+  const hexCost = C.hexPrice(Math.round(2.598 * C.HEX_R * C.HEX_R), (players.get(S.myId) || { territory: 0 }).territory, (S.me && S.me.bought) || 0);
+  lb.classList.toggle('active', S.buildKind === 'land');
+  lb.classList.toggle('poor', gold < hexCost);
+  lb.querySelector('.cost').textContent = `~${hexCost}g/hex`;
+  updateWorkersUi();
+  // Troop upgrades (the row atop the Squads drawer): level and the next level's price.
+  const inSquads = {};
+  for (const q of allSquads()) for (const k of UNIT_KEYS) inSquads[k] = (inSquads[k] || 0) + q.mix[k];
+  for (const card of document.querySelectorAll('#army .troop')) {
+    const kind = card.dataset.kind;
+    const n = inSquads[kind] || 0;
+    const lvl = S.me.levels[kind];
+    const upCost = lvl < C.MAX_LEVEL ? C.armyLevelCost(kind, lvl) : 0;
+    const upIron = lvl < C.MAX_LEVEL ? C.armyLevelIron(kind, lvl) : 0;
+    const iron = S.me.iron || 0;
+    card.classList.toggle('off', n === 0);
+    card.classList.toggle('in', n > 0);
+    card.style.setProperty('--c', C.UNITS[kind].color);
+    card.querySelector('.lvl').textContent = `Lv ${lvl}`;
+    const up = card.querySelector('.up');
+    const upHtml = lvl < C.MAX_LEVEL ? `▲ ${upCost}g · ${upIron}<i class="ico-iron sm"></i>` : 'MAX';
+    if (up.innerHTML !== upHtml) up.innerHTML = upHtml;
+    up.disabled = lvl >= C.MAX_LEVEL || gold < upCost || iron < upIron;
+    const s1 = C.towerStats(kind, lvl);
+    const s2 = lvl < C.MAX_LEVEL ? C.towerStats(kind, lvl + 1) : null;
+    up.dataset.tip = s2
+      ? `<span class="t">Level ${C.UNITS[kind].name}s up to ${lvl + 1}: ${upCost}g + ${upIron} iron</span>${iron < upIron ? `<span class="m">Not enough iron: set workers to ⛏ mine it (Workers drawer).</span><br>` : ''}HP ${s1.hp} → <b>${s2.hp}</b>${s1.damage ? ` · damage ${Math.round(s1.damage)} → <b>${Math.round(s2.damage)}</b>` : ''}${s1.heal ? ` · healing ${Math.round(s1.heal)} → <b>${Math.round(s2.heal)}</b>` : ''}<br><span class="m">Applies to troops that respawn after.</span>`
+      : 'Max level';
+  }
+}
+
+// (the Workers drawer: see workforce.js)
+const updateWorkersUi = updateWorkersPanel;
+
+function updateSelectionPanel(gold) {
+  const panel = $('selection');
+  if (selUnits.size) {
+    panel.classList.remove('hidden');
+    const list = [...selUnits].map((id) => S.units.get(id)).filter(Boolean);
+    const key = `u:${list.map((u) => u.id).join(',')}`;
+    if (panel.dataset.key !== key) {
+      panel.dataset.key = key;
+      const counts = {};
+      for (const u of list) counts[u.kind] = (counts[u.kind] || 0) + 1;
+      const first = list[0] ? list[0].kind : 'soldier';
+      panel.innerHTML = `<h4><img src="${iconURL(first)}" alt="">${list.length} troop${list.length === 1 ? "" : "s"} picked</h4>
+        <div class="muted">${Object.entries(counts).map(([k, c]) => `${c}× ${C.UNITS[k].name}`).join(' · ')}</div>
+        <div id="sel-info" class="stats"></div>
+        <div class="muted">Press a squad's number (or click its chip) to move them into it, <kbd>N</kbd> to make them a new squad, or right-click to send just these as a new squad. <kbd>Esc</kbd> to cancel.</div>`;
+    }
+    if (list.length === 1) {
+      const u = list[0];
+      const st = C.towerStats(u.kind, u.level);
+      const d = C.UNITS[u.kind];
+      $('sel-info').innerHTML = `<div>Level <b>${u.level}</b></div><div>HP <b>${u.hp}/${u.maxHp}</b></div>
+        <div>${d.heal ? `Heals <b>${st.heal.toFixed(0)}/s</b>` : d.scout ? `Sight <b>${d.sight}</b>` : `Damage <b>${st.damage.toFixed(0)}</b>`}</div>
+        <div>${u.attack ? `⚔ ${escapeHtml(targetName(u.attack))}` : '🛡 defending'}</div>`;
+    } else {
+      $('sel-info').innerHTML = '';
+    }
+    return;
+  }
+  if (S.selWorker && S.units.has(S.selWorker)) {
+    const list = [...S.selWorkers].map((id) => S.units.get(id)).filter(Boolean);
+    const u = S.units.get(S.selWorker);
+    panel.classList.remove('hidden');
+    const NAMES = ['Idle', 'Building', 'Repairing', 'Chopping wood', 'Farming', 'Scouting', 'Mining iron'];
+    const what = (w) => (w.flee ? 'Running from raiders' : NAMES[w.job] + (w.carry ? (w.job === 6 ? ' (carrying iron home)' : ' (carrying wood home)') : ''));
+    let job = what(u);
+    if (list.length > 1) {
+      const by = new Map();
+      for (const w of list) by.set(what(w), (by.get(what(w)) || 0) + 1);
+      job = [...by].map(([k, n]) => `${n} ${k.toLowerCase()}`).join(' · ');
+    }
+    const key = `wk:${list.map((w) => w.id).join(',')}:${job}`;
+    if (panel.dataset.key !== key) {
+      panel.dataset.key = key;
+      panel.innerHTML = `<h4><img src="${iconURL('worker')}" alt="">${list.length > 1 ? `${list.length} workers` : 'Your worker'}</h4><div class="stats"><div style="grid-column:span 2">${job}</div></div>
+        <div class="muted">Right-click a building site, a damaged building or wall, a forest, an ore deposit or an open hex of your land to send ${list.length > 1 ? 'them' : 'it'} there (<kbd>Shift</kbd>: after what ${list.length > 1 ? 'they\'re' : 'it\'s'} doing). <kbd>Esc</kbd> to let ${list.length > 1 ? 'them' : 'it'} choose.</div>`;
+    }
+    return;
+  }
+  if (S.selWall && wallPanel(panel, gold)) return;
+  const t = S.selectedId && S.towers.get(S.selectedId);
+  if (!t) {
+    panel.classList.add('hidden');
+    panel.dataset.key = '';
+    return;
+  }
+  panel.classList.remove('hidden');
+  const d = C.TOWERS[t.kind];
+  const ruined = t.ruin || !t.owner;
+  const key = `${t.id}:${t.level}:${t.owner}:${t.partner || 0}:${t.squad || 0}:${t.progress < 1 ? 0 : 1}`;
+  const img = `<img src="${iconURL(t.kind)}" alt="">`;
+  if (panel.dataset.key !== key) {
+    panel.dataset.key = key;
+    if (ruined) {
+      panel.innerHTML = `<h4>${img}Ruined ${d.name}</h4>
+        <div class="muted">Once owned by ${escapeHtml(t.ruinOf || 'someone')} · level ${t.level}</div>
+        <div id="sel-info" class="muted"></div>
+        <div class="btns"><button id="sel-capture" class="primary">Rebuild for ${C.RUIN_CAPTURE_COST}g</button></div>`;
+      $('sel-capture').onclick = () => sendMsg({ t: 'capture', id: t.id });
+    } else if (t.owner === S.myId) {
+      const st = C.towerStats(t.kind, t.level);
+      const maxed = t.level >= C.maxLevel(t.kind) || (t.kind === 'barracks' && t.squad && t.level >= C.barracksTop(t.squad));
+      const capAt = (lv) => C.squadCapFor(t.squad, lv); // (squad 1 also has the core's troops)
+      const isB = t.kind === 'barracks';
+      const isT = t.kind === 'trade';
+      const next = !maxed ? C.towerStats(t.kind, t.level + 1) : null;
+      const upTip = !next ? 'Max level' : isT
+        ? `Level ${t.level + 1}: +${Math.round(C.CARAVAN_LEVEL_CARGO * 100)}% cargo, tougher caravans and guards, ${next.hp} HP <kbd>U</kbd>`
+        : `Level ${t.level + 1}: damage ${Math.round(next.damage)}, range ${next.range}, ${next.hp} HP <kbd>U</kbd>`;
+      const upB = maxed ? 'Max level' : `Level ${t.level + 1}: squad ${t.squad || '?'} gets ${capAt(t.level + 1)} troops (+${capAt(t.level + 1) - capAt(t.level)}) <kbd>U</kbd>`;
+      panel.innerHTML = `<h4>${img}Your ${d.name} · Lv ${t.level}</h4>
+        <div id="sel-info" class="stats"></div>
+        <div class="stats" id="sel-kind">${isB
+          ? `<div style="grid-column:span 2">${t.squad ? `Raises <b>squad ${t.squad}</b>: <b>${capAt(t.level)}</b> of ${C.SQUAD_MAX_TROOPS} troops${t.squad === 1 ? ` (${C.CORE_SQUAD_TROOPS} from your core)` : ''}` : 'Raises no squad (you have one for every squad already)'}</div>`
+          : isT ? tradeInfo(t)
+            : `<div>Damage <b>${st.damage.toFixed(0)}/s</b></div><div>Range <b>${st.range}</b></div>`}<div>Sight <b>${C.structSight(t.kind, t.level)}</b></div></div>
+        <div class="btns">
+          <button id="sel-up" class="primary" data-tip="${isB ? upB : upTip}">${maxed ? 'Max level' : `▲ ${isB ? `+${capAt(t.level + 1) - capAt(t.level)} troops` : 'Upgrade'} ${C.upgradeCost(t.kind, t.level)}g`}</button>
+          <button id="sel-sell">Sell</button>
+        </div>
+        <div class="btns"><button id="sel-defend">🛡 Defend here</button></div>`;
+      $('sel-up').onclick = () => sendMsg({ t: 'upgrade', id: t.id });
+      if (isT) bindTradePanel(t);
+      $('sel-sell').onclick = () => sendMsg({ t: 'sell', id: t.id });
+      $('sel-defend').onclick = () => orderAt({ k: 't', id: t.id });
+    } else {
+      panel.innerHTML = `<h4>${img}${escapeHtml((players.get(t.owner) || { name: '?' }).name)}'s ${d.name} · Lv ${t.level}</h4>
+        <div id="sel-info" class="stats"></div>${t.kind === 'trade' && isAlly(t.owner) ? `<div class="stats">${tradeInfo(t)}</div>` : ''}<div class="muted">Right-click it to attack. Destroying it knocks it down for +${C.TOWER_BOUNTY}g; the land stays theirs.</div>`;
+    }
+  }
+  if (ruined) {
+    const inLand = terr[t.y * C.MAP_W + t.x] === S.myId;
+    $('sel-info').textContent = inLand ? 'Inside your land: rebuild it!' : 'Grow your land over it to rebuild it.';
+    $('sel-capture').disabled = !inLand || gold < C.RUIN_CAPTURE_COST;
+  } else {
+    const garrison = [...S.units.values()].filter((u) => u.owner === t.owner && u.anchor === t.id && !u.attack).length;
+    $('sel-info').innerHTML = t.progress < 1
+      ? `<div style="grid-column:span 2">🔨 Being built: <b>${Math.round(t.progress * 100)}%</b>${t.owner === S.myId ? ' · your workers put it up' : ''}</div>`
+      : `<div>HP <b>${t.hp}/${t.maxHp}</b></div><div>Guards <b>${garrison}</b></div>`;
+    if (t.owner === S.myId) {
+      // the sell price follows the building's health
+      const now = C.sellNow(t);
+      const full = C.sellValue(t.kind, t.level);
+      const sb = $('sel-sell');
+      const txt = `Sell +${now}g`;
+      if (sb.textContent !== txt) sb.textContent = txt;
+      sb.dataset.tip = `Sell for <b>${now}g</b>${now < full ? ` (${full}g undamaged: the more damaged it is, the less it's worth)` : ''}. <kbd>Del</kbd>`;
+    }
+    if (t.owner === S.myId) $('sel-up').disabled = t.level >= C.maxLevel(t.kind) || gold < C.upgradeCost(t.kind, t.level);
+  }
+}
+
+export { buildStats, updateHud };
