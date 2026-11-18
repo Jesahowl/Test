@@ -73,7 +73,8 @@
     ENEMY_BUILD_GAP: 6.4, // no building in a hex next to an enemy building
     CORE_KILL_BOUNTY: 250, // plus all of the victim's gold
     SPAWN_MARGIN: 12, // cores spawn at least this far from the map edge
-    SPAWN_CANDIDATES: 300, // random spots tried per spawn; the one furthest from other bases wins
+    SPAWN_GAP: 32, // tiles: a new base goes at least this far from every other one whenever the map has room
+    SPAWN_CANDIDATES: 1500, // random spots tried per spawn (plenty, so the last bases of a full map still find room)
     SPAWN_SHIELD: 120, // seconds after spawning during which your core and towers can't be damaged
 
     MAX_LEVEL: 5, // troops and towers
@@ -104,7 +105,7 @@
     OBJ_EDGE: 8, // tiles from the map's edge at least
     OBJ_MAX_ACTIVE: 3, // perks from at most this many objectives at once
     OBJ_FAIR_NEAR: [16, 28], // tiles: a new base's nearest objective should be about this far (see findSpawn)
-    OBJ_FAIR_SLACK: 0.75, // ...choosing among spots at least this nearly as far from the other bases as the best
+    OBJ_FAIR_SLACK: 6, // ...choosing among spots at most this many tiles nearer the other bases than the best
     MINE_GOLD: 2, // gold a second from a Gold Mine
     WATCH_SIGHT: 16, // tiles a Watchtower sees (no fog there: enemy squads show on the minimap)
     SHRINE_DAMAGE: 0.1, // +10% troop damage from the Shrine of War, while it's awake

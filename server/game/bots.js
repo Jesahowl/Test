@@ -14,12 +14,16 @@ module.exports = {
       else humans++;
     }
     const desired = Math.max(0, this.botTarget - humans);
-    if (bots < desired && this.time >= this.botSpawnAt && this.canJoin()) {
+    // (the round's bots all take their places together at the start, before anyone's land grows,
+    // so every base gets room; later ones, filling a seat, come one at a time)
+    const atStart = this.time < 2;
+    for (let n = bots; n < desired && (atStart || this.time >= this.botSpawnAt) && this.canJoin(); n++) {
       const used = new Set([...this.players.values()].map((p) => p.name));
-      const free = BOT_NAMES.filter((n) => !used.has(n));
+      const free = BOT_NAMES.filter((nm) => !used.has(nm));
       const name = free.length ? free[Math.floor(this.rand() * free.length)] : 'Bot';
-      this.addPlayer(name, true);
+      if (!this.addPlayer(name, true)) break;
       this.botSpawnAt = this.time + 4;
+      if (!atStart) break;
     }
 
     for (const p of this.players.values()) {

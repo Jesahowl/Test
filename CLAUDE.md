@@ -13,6 +13,7 @@ canvas client (no build step), and code shared by both. Rounds of up to 8 player
 | One test file | `node --test test/walls.test.js` (`--test-name-pattern="worker counts"` for one test) |
 | Bot rounds (balance, errors, slow ticks) | `npm run sim -- --seeds=4` |
 | Map generation stats over 60 seeds | `npm run mapstats` |
+| Base spacing in 40 real 8-player rooms (closest two bases) | `node tools/roomgap.js` |
 | Objective fairness over 40 maps (distance from each base, nearest-base counts, base spacing) | `node tools/objfair.js` |
 | Invariant checks over bot rounds (NaN, troops on blocked hexes, caps, owners, territory counts) | `node tools/invariants.js --seeds=2` |
 | Contact sheet of screenshots | `node tools/sheet.js out.png a.png b.png ... [--cols=3]` |

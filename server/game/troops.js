@@ -464,6 +464,7 @@ module.exports = {
         if (!this.inBounds(nx, ny) || Math.abs(nx - sx) > R || Math.abs(ny - sy) > R) continue;
         const n = this.idx(nx, ny);
         if (stamp[n] === gen || blocked(k, n)) continue;
+        if (this.grid[n] !== 0 && n !== goal) continue; // (round buildings and cores, not through them)
         if (dx && dy && (blocked(k, this.idx(x + dx, y)) || blocked(k, this.idx(x, y + dy))
           || blocked(this.idx(x + dx, y), n) || blocked(this.idx(x, y + dy), n))) continue;
         stamp[n] = gen;

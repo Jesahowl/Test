@@ -141,7 +141,8 @@ module.exports = {
       if (mine >= 2) f -= (mine - 1) * 6; // (nor first claim on several)
       return f;
     };
-    const pool = cands.filter((c) => top === Infinity || c.score >= top * C.OBJ_FAIR_SLACK);
+    // (never giving up much room from the other bases: at least SPAWN_GAP when the map has it)
+    const pool = cands.filter((c) => top === Infinity || c.score >= Math.max(top - C.OBJ_FAIR_SLACK, Math.min(top, C.SPAWN_GAP)));
     let pick = pool[0];
     let bestF = -Infinity;
     for (const c of pool) {

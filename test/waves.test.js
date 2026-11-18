@@ -538,7 +538,7 @@ test('stances: aggressive squads fight on the way, hold marches past and never c
 });
 
 test('hold: troops at home never chase intruders, defensive ones do', () => {
-  const { g, a, b } = duel(38);
+  const { g, a, b } = duel(40); // (a base with room round it: one in a corner has its far hexes within reach)
   setMix(g, a, 0, { soldier: 4 });
   respawn(g, a);
   run(g, 12);
@@ -648,6 +648,7 @@ test('standing troops fill their hex in an even formation', () => {
 test("a tower's lightning chains on to nearby enemies, weaker each jump", () => {
   const { g, a, b } = duel(33);
   const t = outpost(g, b);
+  b.core.cd = 1e9; // (only the tower fires here: b's core may stand close by)
   // three of a's soldiers in a tight line, the first in the tower's range
   const near = troops(g, a, 'soldier', 3, t.x + 0.5 - 3, t.y + 0.5);
   near.forEach((u, i) => { u.x = t.x + 0.5 - 3 - i * 1.0; u.y = t.y + 0.5; u.hp = u.maxHp = 1e6; u.attack = { k: 'p', id: g.idx(Math.floor(u.x), Math.floor(u.y)) }; });
