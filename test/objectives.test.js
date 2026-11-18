@@ -94,27 +94,22 @@ test('objectives: capturing takes troops standing in the hex; more troops are fa
   assert.ok(part > 0.2 && c.progress === 0 && c.holder === 0, 'drains when nobody stands there');
 });
 
-test('objectives: perks work while linked to your land, for at most 3 at once, and not in sudden death', () => {
+test('objectives: perks work while held, wherever they are (no land needed), for at most 3 at once, and not in sudden death', () => {
   const { g, a } = duel(7, { terrain: true });
   const mine = ofKind(g, 'mine');
   mine.holder = a.id;
   mine.heldSince = g.time;
   g.updateObjectiveLinks();
-  assert.strictEqual(mine.linked, false, 'far from a\'s land: not linked');
-  let gold = a.gold;
-  run(g, 2);
-  const income = C.income(a.territory) * 2;
-  assert.ok(a.gold - gold < income + 0.5, 'no mine gold while not linked');
-  linkTo(g, a, mine);
-  assert.ok(mine.linked && mine.active, 'linked by a chain of land: working');
-  gold = a.gold;
+  assert.ok(!g.hex.hexes[mine.hex].n.some((j) => g.hexOwner[j] === a.id), 'far from a\'s land');
+  assert.ok(mine.active, 'working all the same');
+  const gold = a.gold;
   const land = a.territory;
   run(g, 2);
   assert.ok(a.gold - gold > C.income(land) * 2 + C.MINE_GOLD * 1.8, 'the mine pays');
   // a 4th objective gives nothing while 3 others work
   const all = g.objectives.slice(0, 4);
   all.forEach((o, k) => { o.holder = a.id; o.heldSince = g.time + k; });
-  for (const o of all) linkTo(g, a, o);
+  g.updateObjectiveLinks();
   assert.strictEqual(all.filter((o) => o.active).length, C.OBJ_MAX_ACTIVE, 'only 3 at once');
   assert.ok(!all[3].active, 'the one held most recently waits');
   // sudden death (rounds only): all off

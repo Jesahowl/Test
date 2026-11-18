@@ -231,7 +231,6 @@ function statusText(o) {
   if (o.capturer && o.progress > 0) return `${o.capturer === S.myId ? 'Capturing' : `${(players.get(o.capturer) || { name: '?' }).name} capturing`} ${Math.round(o.progress * 100)}%`;
   if (!o.holder) return o.kind === 'shrine' ? shrineLine() : 'Free';
   const who = holderName(o.holder);
-  if (!o.linked) return `${who} · not linked`;
   if (!o.active) return `${who} · resting (3 at most)`;
   if (o.kind === 'shrine') return `${who} · ${shrineLine()}`;
   return who;
@@ -323,7 +322,7 @@ function drawObjectiveHover() {
     [o.holder ? `Held by ${o.holder === S.myId ? 'you' : (players.get(o.holder) || { name: '?' }).name}` : 'Free: nobody holds it', o.holder === S.myId ? '#7ee787' : '#8b949e', '12px'],
     [`Gives ${perkText(o.kind)}${o.kind === 'shrine' ? ` (${shrineLine()})` : ''}`, '#e6edf3', '12px'],
   ];
-  if (o.holder === S.myId) lines.push(o.active ? ['✓ Working: linked to your land', '#7ee787', '12px'] : o.linked ? [`Resting: at most ${C.OBJ_MAX_ACTIVE} work at once`, '#d29922', '12px'] : ['✗ Not linked: claim land up to it', '#ffa198', '12px']);
+  if (o.holder === S.myId) lines.push(o.active ? ['✓ Working for you', '#7ee787', '12px'] : [`Resting: at most ${C.OBJ_MAX_ACTIVE} work at once`, '#d29922', '12px']);
   lines.push(['Take it: stand troops in its hex (no enemies there)', '#8b949e', '11.5px']);
   const s = scale();
   const [cx, cy] = toScreen(o.x, o.y);

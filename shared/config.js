@@ -87,7 +87,7 @@
 
     // ---- Map objectives: neutral landmarks in their own hexes, spread between the bases. Stand
     // troops in one's hex (no enemies there) and a ring fills: it's yours until someone else takes
-    // it. Its perk works while a chain of your land reaches it, for at most OBJ_MAX_ACTIVE at once
+    // it. Its perk works while you hold it (your land needn't reach it), for at most OBJ_MAX_ACTIVE at once
     // (the ones held longest), and none in sudden death (the end of a round is about cores).
     OBJECTIVES: { mine: 2, watchtower: 2, shrine: 1, spring: 1, ruins: 1 }, // how many of each a map
     OBJ_KINDS: {

@@ -50,13 +50,10 @@ module.exports = {
   // randomness so bots don't all grow the same way.
   botBuyLand(p, n) {
     const cands = [];
-    // (map objectives it holds but hasn't linked yet: land toward them comes first, to link them)
-    const reach = (this.objectives || []).filter((o) => o.holder === p.id && !o.linked);
     for (const h of this.hex.hexes) {
       if (!this.canBuyHex(p.id, h.i)) continue;
       // (a gold vein on the border is worth reaching for)
       let score = Math.hypot(h.cx - p.core.x, h.cy - p.core.y) + this.rand() * 4 - (this.veins.has(h.i) ? 25 : 0);
-      for (const o of reach) score -= Math.max(0, 40 - Math.hypot(h.cx - o.x, h.cy - o.y));
       cands.push([h.i, score]);
     }
     cands.sort((a, b) => a[1] - b[1]);

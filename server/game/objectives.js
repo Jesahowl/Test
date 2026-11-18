@@ -4,7 +4,7 @@
 // OBJECTIVES in config). Stand troops in one's hex with no enemies there and a capture ring fills
 // (faster with more troops; an enemy in the hex pauses it; left alone it drains). Once taken it
 // stays yours until someone else takes it, with no need to leave troops there.
-// Its perk works while a chain of your land reaches its hex ("linked"), for at most
+// Its perk works as long as you hold it (wherever it is: your land needn't reach it), for at most
 // OBJ_MAX_ACTIVE objectives at once (the ones held longest), and never in sudden death:
 //   mine        +MINE_GOLD gold a second
 //   watchtower  no fog within WATCH_SIGHT tiles (enemy squads there show on the minimap)
@@ -156,48 +156,31 @@ module.exports = {
     o.capturer = 0;
     this.fx.push({ k: 'objCap', id: o.id, o: pid, x: o.x, y: o.y });
     this.pushFeed(`${def.icon} ${p ? p.name : '?'} ${was ? `took the ${def.name} from ${was.name}` : `captured the ${def.name}`}`);
-    this.objLinkAt = 0; // (its perk starts as soon as it's linked)
+    this.objLinkAt = 0; // (its perk starts at once)
   },
 
-  // Which objectives are linked to their holder's land (a chain of the holder's hexes from their
-  // core to a hex next to it), and which of those give their perk (the OBJ_MAX_ACTIVE held longest;
-  // none in sudden death). Fills p.perks: kind -> how many are working. About once a second.
+  // Which objectives give their perk: every one a player holds, wherever it is (no need for their
+  // land to reach it), up to OBJ_MAX_ACTIVE (the ones held longest), and none in sudden death.
+  // Fills p.perks: kind -> how many are working. About once a second.
   updateObjectiveLinks() {
-    const reach = new Map(); // player id -> Set of hexes reachable over their land from their core
-    const reached = (p) => {
-      if (reach.has(p.id)) return reach.get(p.id);
-      const seen = new Set();
-      const start = this.hexAt(p.core.x, p.core.y);
-      if (this.hexOwner[start] === p.id) {
-        const stack = [start];
-        seen.add(start);
-        while (stack.length) {
-          const i = stack.pop();
-          for (const j of this.hex.hexes[i].n) if (!seen.has(j) && this.hexOwner[j] === p.id) { seen.add(j); stack.push(j); }
-        }
-      }
-      reach.set(p.id, seen);
-      return seen;
-    };
     const sd = this.suddenDeath();
     for (const p of this.players.values()) p.perks = {};
     const held = new Map();
     for (const o of this.objectives) {
       const p = this.players.get(o.holder);
+      o.active = false;
       if (!p || !p.alive) {
         if (o.holder) o.holder = 0;
-        o.linked = o.active = false;
+        o.linked = false;
         continue;
       }
-      const r = reached(p);
-      o.linked = this.hex.hexes[o.hex].n.some((j) => r.has(j));
-      o.active = false;
+      o.linked = true; // (held: that's all it takes)
       if (!held.has(p.id)) held.set(p.id, []);
       held.get(p.id).push(o);
     }
     for (const [pid, list] of held) {
       const p = this.players.get(pid);
-      list.filter((o) => o.linked).sort((a, b) => a.heldSince - b.heldSince).slice(0, C.OBJ_MAX_ACTIVE).forEach((o) => {
+      list.sort((a, b) => a.heldSince - b.heldSince).slice(0, C.OBJ_MAX_ACTIVE).forEach((o) => {
         if (sd) return;
         o.active = true;
         p.perks[o.kind] = (p.perks[o.kind] || 0) + 1;
