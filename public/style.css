@@ -623,3 +623,8 @@ body.touch #hud kbd { display: none; }
 .key-groups > div > div span { margin-left: 4px; }
 .help-card .how-grid { grid-template-columns: repeat(5, 1fr); } /* (the help screen is wide; the menu card keeps 2 a row) */
 @media (max-width: 900px) { .help-card .how-grid, .key-groups { grid-template-columns: 1fr 1fr; } }
+
+/* the menu fits the window: no scroll bar (fitMenu scales it down a little, or drops the how-to cards, when the window is short) */
+.menu-card { scrollbar-width: none; }
+.menu-card::-webkit-scrollbar { display: none; }
+.menu-card.short .how-grid { display: none; }

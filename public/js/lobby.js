@@ -20,6 +20,13 @@ function inviteUrl(code) {
 // Keep the address bar in step, so a refresh (or sharing the URL) leads back to the room.
 function setUrlRoom(code) {
   const url = code ? `${location.pathname}?room=${code}` : location.pathname;
+  // (remember rooms I've been in: arriving back at one isn't an invitation)
+  if (code) {
+    try {
+      const mine = JSON.parse(localStorage.getItem('ts-my-rooms') || '[]').filter((c) => c !== code);
+      localStorage.setItem('ts-my-rooms', JSON.stringify([code, ...mine].slice(0, 10)));
+    } catch { /* ignore */ }
+  }
   try { history.replaceState(null, '', url); } catch { /* ignore */ }
 }
 
@@ -220,11 +227,32 @@ $('copy-link').onclick = async () => {
 
 // ---- arriving through an invite link (?room=CODE)
 const invited = cleanCode(new URLSearchParams(location.search).get('room'));
-if (invited.length === 5) {
+let myRoom = false;
+try { myRoom = JSON.parse(localStorage.getItem('ts-my-rooms') || '[]').includes(invited); } catch { /* ignore */ }
+if (invited.length === 5 && myRoom) {
+  $('code').value = invited; // (back at a room of my own, e.g. after a refresh: just the code, no invitation)
+} else if (invited.length === 5) {
   $('code').value = invited;
   $('invite').innerHTML = `You're invited to private room <b>${invited}</b>. Enter your name and press Join.`;
   $('invite').classList.remove('hidden');
   $('join-code').classList.remove('secondary');
 }
+
+// ---- the menu card fits the window with no scroll bar: when it's taller than the window, it
+// first drops the how-to cards (they're in the ? window too), then scales down a little.
+function fitMenu() {
+  const card = document.querySelector('.menu-card');
+  if (!card) return;
+  card.style.zoom = '';
+  card.classList.remove('short');
+  const room = window.innerHeight * 0.94;
+  if (card.scrollHeight <= room) return;
+  card.classList.add('short');
+  if (card.scrollHeight <= room) return;
+  card.style.zoom = String(Math.max(0.7, room / card.scrollHeight));
+}
+window.addEventListener('resize', fitMenu);
+if (window.ResizeObserver) new ResizeObserver(() => requestAnimationFrame(fitMenu)).observe(document.querySelector('.menu-card'));
+fitMenu();
 
 export { formError, leaveRoom, onLeft, onPublicList, onRoom, playerName };
